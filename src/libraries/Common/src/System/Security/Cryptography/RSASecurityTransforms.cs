@@ -99,53 +99,106 @@ namespace System.Security.Cryptography
                     throw new CryptographicException(SR.Cryptography_OpenInvalidHandle);
                 }
 
-                byte[] keyBlob = Interop.AppleCrypto.SecKeyExport(
-                    includePrivateParameters ? keys.PrivateKey : keys.PublicKey,
-                    exportPrivate: includePrivateParameters,
-                    password: ExportPassword);
+                byte[] keyBlob = Interop.AppleCrypto.TrySecKeyCopyExternalRepresentation(
+                    includePrivateParameters ? keys.PrivateKey! : keys.PublicKey,
+                    out bool retryWithPassword);
 
-                try
+                if (!retryWithPassword)
                 {
-                    if (!includePrivateParameters)
+                    try
                     {
-                        // When exporting a key handle opened from a certificate, it seems to
-                        // export as a PKCS#1 blob instead of an X509 SubjectPublicKeyInfo blob.
-                        // So, check for that.
-                        // NOTE: It doesn't affect macOS Mojave when SecCertificateCopyKey API
-                        // is used.
-                        RSAParameters key;
-
-                        AsnReader reader = new AsnReader(keyBlob, AsnEncodingRules.BER);
-                        AsnReader sequenceReader = reader.ReadSequence();
-
-                        if (sequenceReader.PeekTag().Equals(Asn1Tag.Integer))
+                        if (!includePrivateParameters)
                         {
-                            AlgorithmIdentifierAsn ignored = default;
-                            RSAKeyFormatHelper.ReadRsaPublicKey(keyBlob, ignored, out key);
+                            // When exporting a key handle opened from a certificate, it seems to
+                            // export as a PKCS#1 blob instead of an X509 SubjectPublicKeyInfo blob.
+                            // So, check for that.
+                            // NOTE: It doesn't affect macOS Mojave when SecCertificateCopyKey API
+                            // is used.
+                            RSAParameters key;
+
+                            AsnReader reader = new AsnReader(keyBlob, AsnEncodingRules.BER);
+                            AsnReader sequenceReader = reader.ReadSequence();
+
+                            if (sequenceReader.PeekTag().Equals(Asn1Tag.Integer))
+                            {
+                                AlgorithmIdentifierAsn ignored = default;
+                                RSAKeyFormatHelper.ReadRsaPublicKey(keyBlob, ignored, out key);
+                            }
+                            else
+                            {
+                                RSAKeyFormatHelper.ReadSubjectPublicKeyInfo(
+                                    keyBlob,
+                                    out int localRead,
+                                    out key);
+                                Debug.Assert(localRead == keyBlob.Length);
+                            }
+                            return key;
                         }
                         else
                         {
-                            RSAKeyFormatHelper.ReadSubjectPublicKeyInfo(
+                            AlgorithmIdentifierAsn ignored = default;
+                            RSAKeyFormatHelper.FromPkcs1PrivateKey(
                                 keyBlob,
-                                out int localRead,
-                                out key);
-                            Debug.Assert(localRead == keyBlob.Length);
+                                ignored,
+                                out RSAParameters key);
+                            return key;
                         }
-                        return key;
                     }
-                    else
+                    finally
                     {
-                        RSAKeyFormatHelper.ReadEncryptedPkcs8(
-                            keyBlob,
-                            ExportPassword,
-                            out int localRead,
-                            out RSAParameters key);
-                        return key;
+                        CryptographicOperations.ZeroMemory(keyBlob);
                     }
                 }
-                finally
+                else
                 {
-                    CryptographicOperations.ZeroMemory(keyBlob);
+                    keyBlob = Interop.AppleCrypto.SecKeyExport(
+                        includePrivateParameters ? keys.PrivateKey : keys.PublicKey,
+                        exportPrivate: includePrivateParameters,
+                        password: ExportPassword);
+
+                    try
+                    {
+                        if (!includePrivateParameters)
+                        {
+                            // When exporting a key handle opened from a certificate, it seems to
+                            // export as a PKCS#1 blob instead of an X509 SubjectPublicKeyInfo blob.
+                            // So, check for that.
+                            // NOTE: It doesn't affect macOS Mojave when SecCertificateCopyKey API
+                            // is used.
+                            RSAParameters key;
+
+                            AsnReader reader = new AsnReader(keyBlob, AsnEncodingRules.BER);
+                            AsnReader sequenceReader = reader.ReadSequence();
+
+                            if (sequenceReader.PeekTag().Equals(Asn1Tag.Integer))
+                            {
+                                AlgorithmIdentifierAsn ignored = default;
+                                RSAKeyFormatHelper.ReadRsaPublicKey(keyBlob, ignored, out key);
+                            }
+                            else
+                            {
+                                RSAKeyFormatHelper.ReadSubjectPublicKeyInfo(
+                                    keyBlob,
+                                    out int localRead,
+                                    out key);
+                                Debug.Assert(localRead == keyBlob.Length);
+                            }
+                            return key;
+                        }
+                        else
+                        {
+                            RSAKeyFormatHelper.ReadEncryptedPkcs8(
+                                keyBlob,
+                                ExportPassword,
+                                out int localRead,
+                                out RSAParameters key);
+                            return key;
+                        }
+                    }
+                    finally
+                    {
+                        CryptographicOperations.ZeroMemory(keyBlob);
+                    }
                 }
             }
 

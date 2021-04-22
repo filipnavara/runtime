@@ -139,34 +139,64 @@ namespace System.Security.Cryptography
                 throw new CryptographicException(SR.Cryptography_OpenInvalidHandle);
             }
 
-            byte[] keyBlob = Interop.AppleCrypto.SecKeyExport(
-                includePrivateParameters ? keys.PrivateKey : keys.PublicKey,
-                exportPrivate: includePrivateParameters,
-                password: ExportPassword);
+            byte[] keyBlob = Interop.AppleCrypto.TrySecKeyCopyExternalRepresentation(
+                includePrivateParameters ? keys.PrivateKey! : keys.PublicKey,
+                out bool retryWithPassword);
 
-            try
+            if (!retryWithPassword)
             {
-                if (!includePrivateParameters)
+                try
                 {
-                    EccKeyFormatHelper.ReadSubjectPublicKeyInfo(
+                    AsymmetricAlgorithmHelpers.DecodeFromUncompressedAnsiX963Key(
                         keyBlob,
-                        out int localRead,
+                        includePrivateParameters,
                         out ECParameters key);
+
+                    switch (GetKeySize(keys))
+                    {
+                        case 256: key.Curve = ECCurve.NamedCurves.nistP256; break;
+                        case 384: key.Curve = ECCurve.NamedCurves.nistP384; break;
+                        case 521: key.Curve = ECCurve.NamedCurves.nistP521; break;
+                    }
+
                     return key;
                 }
-                else
+                finally
                 {
-                    EccKeyFormatHelper.ReadEncryptedPkcs8(
-                        keyBlob,
-                        ExportPassword,
-                        out int localRead,
-                        out ECParameters key);
-                    return key;
+                    CryptographicOperations.ZeroMemory(keyBlob);
                 }
             }
-            finally
+            else
             {
-                CryptographicOperations.ZeroMemory(keyBlob);
+                keyBlob = Interop.AppleCrypto.SecKeyExport(
+                    includePrivateParameters ? keys.PrivateKey : keys.PublicKey,
+                    exportPrivate: includePrivateParameters,
+                    password: ExportPassword);
+
+                try
+                {
+                    if (!includePrivateParameters)
+                    {
+                        EccKeyFormatHelper.ReadSubjectPublicKeyInfo(
+                            keyBlob,
+                            out int localRead,
+                            out ECParameters key);
+                        return key;
+                    }
+                    else
+                    {
+                        EccKeyFormatHelper.ReadEncryptedPkcs8(
+                            keyBlob,
+                            ExportPassword,
+                            out int localRead,
+                            out ECParameters key);
+                        return key;
+                    }
+                }
+                finally
+                {
+                    CryptographicOperations.ZeroMemory(keyBlob);
+                }
             }
         }
 
@@ -233,7 +263,23 @@ namespace System.Security.Cryptography
 
         private static SafeSecKeyRefHandle ImportKey(ECParameters parameters)
         {
-            if (parameters.Q.X == null || parameters.Q.Y == null || true)
+            if (!parameters.Curve.IsNamed)
+            {
+                throw new PlatformNotSupportedException(SR.Cryptography_ECC_NamedCurvesOnly);
+            }
+
+            switch (parameters.Curve.Oid.Value)
+            {
+                case Oids.secp256r1:
+                case Oids.secp384r1:
+                case Oids.secp521r1:
+                    break;
+                default:
+                    throw new PlatformNotSupportedException(
+                        SR.Format(SR.Cryptography_CurveNotSupported, parameters.Curve.Oid.Value ?? parameters.Curve.Oid.FriendlyName));
+            }
+
+            if (parameters.Q.X == null || parameters.Q.Y == null)
             {
                 AsnWriter keyWriter;
                 bool hasPrivateKey;

@@ -209,3 +209,21 @@ int32_t AppleCryptoNative_SecKeyVerifySignature(SecKeyRef publicKey,
 
     return ret;
 }
+
+int32_t AppleCryptoNative_SecKeyCopyExternalRepresentation(SecKeyRef pKey,
+                                                           CFDataRef* ppDataOut,
+                                                           CFErrorRef* pErrorOut)
+{
+    if (ppDataOut != NULL)
+        *ppDataOut = NULL;
+    if (pErrorOut != NULL)
+        *pErrorOut = NULL;
+
+    if (pKey == NULL || ppDataOut == NULL || pErrorOut == NULL)
+    {
+        return kErrorBadInput;
+    }
+
+    *ppDataOut = SecKeyCopyExternalRepresentation(pKey, pErrorOut);
+    return *ppDataOut == NULL ? kErrorSeeError : 1;
+}

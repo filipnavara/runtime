@@ -52,3 +52,7 @@ PALEXPORT int32_t AppleCryptoNative_SecKeyVerifySignature(SecKeyRef publicKey,
                                                           PAL_SignatureAlgorithm signatureAlgorithm,
                                                           int digest,
                                                           CFErrorRef* pErrorOut);
+
+PALEXPORT int32_t AppleCryptoNative_SecKeyCopyExternalRepresentation(SecKeyRef pKey,
+                                                                     CFDataRef* ppDataOut,
+                                                                     CFErrorRef* pErrorOut);

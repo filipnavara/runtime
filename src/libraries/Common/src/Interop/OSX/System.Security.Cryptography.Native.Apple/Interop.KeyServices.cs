@@ -56,6 +56,57 @@ internal static partial class Interop
             }
         }
 
+        internal static byte[] TrySecKeyCopyExternalRepresentation(
+            SafeSecKeyRefHandle key,
+            out bool retryWithPassword)
+        {
+            int result = AppleCryptoNative_SecKeyCopyExternalRepresentation(
+                key,
+                out SafeCFDataHandle data,
+                out SafeCFErrorHandle errorHandle);
+
+            using (errorHandle)
+            using (data)
+            {
+                const int errSecPassphraseRequired = -25260;
+
+                if (result == kErrorSeeError && Interop.CoreFoundation.GetErrorCode(errorHandle) == errSecPassphraseRequired)
+                {
+                    retryWithPassword = true;
+                    return Array.Empty<byte>();
+                }
+
+                retryWithPassword = false;
+
+                return result switch
+                {
+                    kSuccess => CoreFoundation.CFGetData(data),
+                    kErrorSeeError => throw CreateExceptionForCFError(errorHandle),
+                    _ => throw new CryptographicException { HResult = result }
+                };
+            }
+        }
+
+        internal static byte[] SecKeyCopyExternalRepresentation(
+            SafeSecKeyRefHandle key)
+        {
+            int result = AppleCryptoNative_SecKeyCopyExternalRepresentation(
+                key,
+                out SafeCFDataHandle data,
+                out SafeCFErrorHandle errorHandle);
+
+            using (errorHandle)
+            using (data)
+            {
+                return result switch
+                {
+                    kSuccess => CoreFoundation.CFGetData(data),
+                    kErrorSeeError => throw CreateExceptionForCFError(errorHandle),
+                    _ => throw new CryptographicException { HResult = result }
+                };
+            }
+        }
+
         internal static bool KeyServicesVerifySignature(
             SafeSecKeyRefHandle publicKey,
             ReadOnlySpan<byte> dataHash,
@@ -66,7 +117,6 @@ internal static partial class Interop
         {
             const int Valid = 1;
             const int Invalid = 0;
-            const int kErrorSeeError = -2;
 
             int result = AppleCryptoNative_SecKeyVerifySignature(
                 publicKey,
@@ -225,6 +275,12 @@ internal static partial class Interop
             PAL_SignatureAlgorithm signatureAlgorithm,
             int digest,
             out SafeCFDataHandle pSignatureOut,
+            out SafeCFErrorHandle pErrorOut);
+
+        [DllImport(Libraries.AppleCryptoNative)]
+        private static unsafe extern int AppleCryptoNative_SecKeyCopyExternalRepresentation(
+            SafeSecKeyRefHandle key,
+            out SafeCFDataHandle pDataOut,
             out SafeCFErrorHandle pErrorOut);
     }
 }

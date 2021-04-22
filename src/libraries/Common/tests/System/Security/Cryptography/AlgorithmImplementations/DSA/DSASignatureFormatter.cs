@@ -6,7 +6,7 @@ using Xunit;
 
 namespace System.Security.Cryptography.Dsa.Tests
 {
-    [SkipOnPlatform(TestPlatforms.Browser, "Not supported on Browser")]
+    [SkipOnPlatform(TestPlatforms.Browser | TestPlatforms.iOS | TestPlatforms.tvOS, "Not supported on Browser/iOS/tvOS")]
     public partial class DSASignatureFormatterTests : AsymmetricSignatureFormatterTests
     {
         [Fact]

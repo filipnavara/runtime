@@ -48,5 +48,33 @@ namespace Internal.Cryptography
 
             return (publicKey, privateKey);
         }
+
+        public static void DecodeFromUncompressedAnsiX963Key(
+            ReadOnlySpan<byte> ansiKey,
+            bool hasPrivateKey,
+            out ECParameters ret)
+        {
+            ret = default;
+
+            const byte UncompressedKeyPrefix = 0x04;
+            if (ansiKey.Length < 1 || ansiKey[0] != UncompressedKeyPrefix)
+                throw new CryptographicException(SR.Cryptography_NotValidPublicOrPrivateKey);
+
+            int fieldCount = hasPrivateKey ? 3 : 2;
+            int fieldSize = (ansiKey.Length - 1) / fieldCount;
+
+            if (ansiKey.Length != 1 + fieldSize * fieldCount)
+                throw new CryptographicException(SR.Cryptography_NotValidPublicOrPrivateKey);
+
+            ret.Q = new ECPoint {
+                X = ansiKey.Slice(1, fieldSize).ToArray(),
+                Y = ansiKey.Slice(1 + fieldSize, fieldSize).ToArray()
+            };
+
+            if (hasPrivateKey)
+            {
+                ret.D = ansiKey.Slice(1 + fieldSize + fieldSize, fieldSize).ToArray();
+            }
+        }
     }
 }

@@ -298,7 +298,7 @@ namespace System.Security.Cryptography.Apple
 
         protected override bool ReleaseHandle()
         {
-            SafeTemporaryKeychainHandle.UntrackItem(handle);
+            //SafeTemporaryKeychainHandle.UntrackItem(handle);
             Interop.CoreFoundation.CFRelease(handle);
             SetHandle(IntPtr.Zero);
             return true;

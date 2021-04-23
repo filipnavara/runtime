@@ -61,8 +61,6 @@ static const Entry s_cryptoAppleNative[] =
     DllImportEntry(AppleCryptoNative_SecKeyImportEphemeral)
     DllImportEntry(AppleCryptoNative_SecKeyGetSimpleKeySizeInBytes)
     DllImportEntry(AppleCryptoNative_GenerateSignature)
-    DllImportEntry(AppleCryptoNative_GenerateSignatureWithHashAlgorithm)
-    DllImportEntry(AppleCryptoNative_VerifySignatureWithHashAlgorithm)
     DllImportEntry(AppleCryptoNative_VerifySignature)
     DllImportEntry(AppleCryptoNative_SslCreateContext)
     DllImportEntry(AppleCryptoNative_SslSetAcceptClientCert)

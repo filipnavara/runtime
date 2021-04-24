@@ -26,7 +26,7 @@ internal static partial class Interop
         {
             fixed (byte* pKey = keyData)
             {
-                int result = AppleCryptoNative_CreateDataKey(
+                int result = AppleCryptoNative_SecKeyCreateWithData(
                     pKey,
                     keyData.Length,
                     keyAlgorithm,
@@ -67,7 +67,7 @@ internal static partial class Interop
         }
 
         [DllImport(Libraries.AppleCryptoNative)]
-        private static unsafe extern int AppleCryptoNative_CreateDataKey(
+        private static unsafe extern int AppleCryptoNative_SecKeyCreateWithData(
             byte* pKey,
             int cbKey,
             PAL_KeyAlgorithm keyAlgorithm,

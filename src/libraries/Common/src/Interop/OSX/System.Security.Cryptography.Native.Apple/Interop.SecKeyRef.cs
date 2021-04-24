@@ -15,26 +15,6 @@ internal static partial class Interop
         private const int kSuccess = 1;
         private const int kErrorSeeError = -2;
 
-        private static int AppleCryptoNative_SecKeyImportEphemeral(
-            ReadOnlySpan<byte> pbKeyBlob,
-            int isPrivateKey,
-            out SafeSecKeyRefHandle ppKeyOut,
-            out int pOSStatus) =>
-            AppleCryptoNative_SecKeyImportEphemeral(
-                ref MemoryMarshal.GetReference(pbKeyBlob),
-                pbKeyBlob.Length,
-                isPrivateKey,
-                out ppKeyOut,
-                out pOSStatus);
-
-        [DllImport(Libraries.AppleCryptoNative)]
-        private static extern int AppleCryptoNative_SecKeyImportEphemeral(
-            ref byte pbKeyBlob,
-            int cbKeyBlob,
-            int isPrivateKey,
-            out SafeSecKeyRefHandle ppKeyOut,
-            out int pOSStatus);
-
         [DllImport(Libraries.AppleCryptoNative)]
         private static extern ulong AppleCryptoNative_SecKeyGetSimpleKeySizeInBytes(SafeSecKeyRefHandle publicKey);
 
@@ -100,33 +80,6 @@ internal static partial class Interop
             {
                 return (int)(keySizeInBytes * 8);
             }
-        }
-
-        internal static SafeSecKeyRefHandle ImportEphemeralKey(ReadOnlySpan<byte> keyBlob, bool hasPrivateKey)
-        {
-            Debug.Assert(keyBlob != null);
-
-            SafeSecKeyRefHandle keyHandle;
-            int osStatus;
-
-            int ret = AppleCryptoNative_SecKeyImportEphemeral(
-                keyBlob,
-                hasPrivateKey ? 1 : 0,
-                out keyHandle,
-                out osStatus);
-
-            if (ret == 1 && !keyHandle.IsInvalid)
-            {
-                return keyHandle;
-            }
-
-            if (ret == 0)
-            {
-                throw CreateExceptionForOSStatus(osStatus);
-            }
-
-            Debug.Fail($"SecKeyImportEphemeral returned {ret}");
-            throw new CryptographicException();
         }
     }
 }

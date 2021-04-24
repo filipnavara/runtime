@@ -140,6 +140,7 @@ uint64_t AppleCryptoNative_SecKeyGetSimpleKeySizeInBytes(SecKeyRef publicKey)
     return SecKeyGetBlockSize(publicKey);
 }
 
+#if defined(TARGET_MACCATALYST) || defined(TARGET_IOS) || defined(TARGET_TVOS)
 static CFStringRef GetKeyAlgorithmIdentifier(PAL_KeyAlgorithm keyAlgorithm)
 {
     if (keyAlgorithm == PAL_KeyAlgorithm_EC)
@@ -216,3 +217,4 @@ SecKeyRef AppleCryptoNative_SecKeyCopyPublicKey(SecKeyRef privateKey)
 {
     return SecKeyCopyPublicKey(privateKey);
 }
+#endif

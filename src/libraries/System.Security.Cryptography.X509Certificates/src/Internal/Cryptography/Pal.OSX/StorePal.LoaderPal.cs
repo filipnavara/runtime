@@ -100,7 +100,7 @@ namespace Internal.Cryptography.Pal
 
                     using (safeSecKeyRefHandle)
                     {
-                        ICertificatePal newPal;
+                        AppleCertificatePal newPal;
 
                         // SecItemImport doesn't seem to respect non-exportable import for PKCS#8,
                         // only PKCS#12.

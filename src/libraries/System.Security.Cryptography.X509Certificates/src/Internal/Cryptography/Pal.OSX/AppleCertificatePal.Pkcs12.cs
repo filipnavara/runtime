@@ -40,15 +40,17 @@ namespace Internal.Cryptography.Pal
                     {
                         using (pal)
                         {
-                            return ImportPkcs12NonExportable(pal, safeSecKeyRefHandle, password, keychain);
+                            newPal = ImportPkcs12NonExportable(pal, safeSecKeyRefHandle, password, keychain);
                         }
                     }
-
-                    newPal = pal.MoveToKeychain(keychain, safeSecKeyRefHandle);
-
-                    if (newPal != null)
+                    else
                     {
-                        pal.Dispose();
+                        newPal = pal.MoveToKeychain(keychain, safeSecKeyRefHandle);
+
+                        if (newPal != null)
+                        {
+                            pal.Dispose();
+                        }
                     }
                 }
 
@@ -87,7 +89,7 @@ namespace Internal.Cryptography.Pal
             }
 
             certHandle.Dispose();
-            return new AppleCertificatePal(identityHandle);
+            return new AppleCertificatePal(identityHandle, keychain as SafeTemporaryKeychainHandle);
         }
 
         private sealed class Pkcs12SmallExport : UnixExportProvider

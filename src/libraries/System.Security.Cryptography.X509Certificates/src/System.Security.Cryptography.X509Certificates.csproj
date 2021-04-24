@@ -113,8 +113,6 @@
     </Compile>
     <Compile Include="$(CommonPath)Internal\Cryptography\AsymmetricAlgorithmHelpers.Der.cs"
              Link="Common\Internal\Cryptography\AsymmetricAlgorithmHelpers.Der.cs" />
-    <Compile Include="$(CommonPath)Internal\Cryptography\AsymmetricAlgorithmHelpers.Ansi.cs"
-             Link="Common\Internal\Cryptography\AsymmetricAlgorithmHelpers.Ansi.cs" />
     <Compile Include="$(CommonPath)Internal\Cryptography\Helpers.cs"
              Link="Internal\Cryptography\Helpers.cs" />
     <Compile Include="$(CommonPath)System\HexConverter.cs"
@@ -456,6 +454,8 @@
              Link="Common\System\Security\Cryptography\RsaPaddingProcessor.cs" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseAppleCrypto)' == 'true' and '$(IsPartialFacadeAssembly)' != 'true'">
+    <Compile Include="$(CommonPath)Internal\Cryptography\AsymmetricAlgorithmHelpers.Ansi.cs"
+             Link="Common\Internal\Cryptography\AsymmetricAlgorithmHelpers.Ansi.cs" Condition="'$(TargetsOSX)' != 'true'" />
     <Compile Include="$(CommonPath)Internal\Cryptography\AsymmetricAlgorithmHelpers.Hash.cs"
              Link="Common\Internal\Cryptography\AsymmetricAlgorithmHelpers.Hash.cs" />
     <Compile Include="$(CommonPath)Interop\OSX\Interop.CoreFoundation.cs"

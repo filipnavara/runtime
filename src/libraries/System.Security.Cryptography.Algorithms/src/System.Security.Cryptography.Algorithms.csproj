@@ -98,8 +98,6 @@
     <Compile Include="System\Security\Cryptography\XmlKeyHelper.cs" />
     <Compile Include="$(CommonPath)Internal\Cryptography\AsymmetricAlgorithmHelpers.Der.cs"
              Link="Common\Internal\Cryptography\AsymmetricAlgorithmHelpers.Der.cs" />
-    <Compile Include="$(CommonPath)Internal\Cryptography\AsymmetricAlgorithmHelpers.Ansi.cs"
-             Link="Common\Internal\Cryptography\AsymmetricAlgorithmHelpers.Ansi.cs" />
     <Compile Include="$(CommonPath)Internal\Cryptography\BasicSymmetricCipher.cs"
              Link="Internal\Cryptography\BasicSymmetricCipher.cs" />
     <Compile Include="$(CommonPath)Internal\Cryptography\Helpers.cs"
@@ -560,6 +558,8 @@
     <Compile Include="Internal\Cryptography\Pbkdf2Implementation.OSX.cs" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseAppleCrypto)' == 'true' AND '$(TargetsOSX)' != 'true'">
+    <Compile Include="$(CommonPath)Internal\Cryptography\AsymmetricAlgorithmHelpers.Ansi.cs"
+             Link="Common\Internal\Cryptography\AsymmetricAlgorithmHelpers.Ansi.cs" />
     <Compile Include="$(CommonPath)Interop\OSX\System.Security.Cryptography.Native.Apple\Interop.SecKeyRef.iOS.cs"
              Link="Common\Interop\OSX\System.Security.Cryptography.Native.Apple\Interop.SecKeyRef.iOS.cs" />
     <Compile Include="$(CommonPath)System\Security\Cryptography\EccSecurityTransforms.iOS.cs"

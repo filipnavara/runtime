@@ -7,12 +7,12 @@ append_extra_cryptography_apple_libs(NATIVE_LIBS_EXTRA)
 
 set(NATIVECRYPTO_SOURCES
     pal_digest.c
+    pal_dsa.c
     pal_ecc.c
     pal_hmac.c
     pal_keyagree.c
     pal_keyderivation.c
     pal_keychain.c
-    pal_keyservices.c
     pal_random.c
     pal_rsa.c
     pal_sec.c
@@ -45,7 +45,7 @@ if (GEN_SHARED_LIB)
     )
 endif()
 
-if (NOT GEN_SHARED_LIB AND NOT CLR_CMAKE_TARGET_MACCATALYST AND NOT CLR_CMAKE_TARGET_IOS AND NOT CLR_CMAKE_TARGET_TVOS AND NOT CLR_CMAKE_TARGET_ANDROID AND NOT CLR_CMAKE_TARGET_BROWSER)
+if (NOT GEN_SHARED_LIB AND NOT CLR_CMAKE_TARGET_MACCATALYST AND NOT CLR_CMAKE_TARGET_IOS AND NOT CLR_CMAKE_TARGET_TVOS)
     set(NATIVECRYPTO_SOURCES ${NATIVECRYPTO_SOURCES} entrypoints.c)
 endif()
 

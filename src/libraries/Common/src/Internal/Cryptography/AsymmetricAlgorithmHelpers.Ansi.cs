@@ -12,7 +12,7 @@ namespace Internal.Cryptography
         // Encodes a EC key as an uncompressed set of concatenated scalars,
         // optionally including the private key. To omit the private parameter,
         // "d" must have a length of zero.
-        public static (Range PublicKey, Range? PrivateKey) EncodeToUncompressedAnsiX963Key(
+        public static void EncodeToUncompressedAnsiX963Key(
             ReadOnlySpan<byte> x,
             ReadOnlySpan<byte> y,
             ReadOnlySpan<byte> d,
@@ -33,20 +33,7 @@ namespace Internal.Cryptography
             destination[0] = UncompressedKeyPrefix;
             x.CopyTo(destination.Slice(1));
             y.CopyTo(destination.Slice(1 + x.Length));
-            Range publicKey = 0..(1 + x.Length + y.Length);
-            Range? privateKey;
-
-            if (d.Length > 0)
-            {
-                d.CopyTo(destination[publicKey.End..]);
-                privateKey = 0..size;
-            }
-            else
-            {
-                privateKey = null;
-            }
-
-            return (publicKey, privateKey);
+            d.CopyTo(destination.Slice(1 + x.Length + y.Length));
         }
 
         public static void DecodeFromUncompressedAnsiX963Key(

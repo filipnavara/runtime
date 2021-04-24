@@ -7,6 +7,7 @@
 
 // Include System.Security.Cryptography.Native.Apple headers
 #include "pal_digest.h"
+#include "pal_dsa.h"
 #include "pal_ecc.h"
 #include "pal_hmac.h"
 #include "pal_keychain.h"
@@ -60,8 +61,13 @@ static const Entry s_cryptoAppleNative[] =
     DllImportEntry(AppleCryptoNative_SecKeyExport)
     DllImportEntry(AppleCryptoNative_SecKeyImportEphemeral)
     DllImportEntry(AppleCryptoNative_SecKeyGetSimpleKeySizeInBytes)
-    DllImportEntry(AppleCryptoNative_GenerateSignature)
-    DllImportEntry(AppleCryptoNative_VerifySignature)
+    DllImportEntry(AppleCryptoNative_SecKeyCreateWithData)
+    DllImportEntry(AppleCryptoNative_SecKeyCopyExternalRepresentation)
+    DllImportEntry(AppleCryptoNative_SecKeyCopyPublicKey)
+    DllImportEntry(AppleCryptoNative_SecKeyCreateSignature)
+    DllImportEntry(AppleCryptoNative_SecKeyVerifySignature)
+    DllImportEntry(AppleCryptoNative_GenerateDsaSignature)
+    DllImportEntry(AppleCryptoNative_VerifyDsaSignature)
     DllImportEntry(AppleCryptoNative_SslCreateContext)
     DllImportEntry(AppleCryptoNative_SslSetAcceptClientCert)
     DllImportEntry(AppleCryptoNative_SslSetMinProtocolVersion)

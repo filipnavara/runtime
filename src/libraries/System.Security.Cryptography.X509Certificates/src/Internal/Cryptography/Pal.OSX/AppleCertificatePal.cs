@@ -508,7 +508,7 @@ namespace Internal.Cryptography.Pal
 
             if (typedKey != null)
             {
-                return CopyWithPrivateKey(typedKey.GetKeys());
+                return CopyWithPrivateKey(typedKey.GetKeys().PrivateKey);
             }
 
             DSAParameters dsaParameters = privateKey.ExportParameters(true);
@@ -517,7 +517,7 @@ namespace Internal.Cryptography.Pal
             using (typedKey = new DSAImplementation.DSASecurityTransforms())
             {
                 typedKey.ImportParameters(dsaParameters);
-                return CopyWithPrivateKey(typedKey.GetKeys());
+                return CopyWithPrivateKey(typedKey.GetKeys().PrivateKey);
             }
         }
 
@@ -527,16 +527,14 @@ namespace Internal.Cryptography.Pal
 
             if (typedKey != null)
             {
-                return CopyWithPrivateKey(typedKey.GetKeys());
+                return CopyWithPrivateKey(typedKey.GetKeys().PrivateKey);
             }
 
             ECParameters ecParameters = privateKey.ExportParameters(true);
 
             using (PinAndClear.Track(ecParameters.D!))
-            using (typedKey = new ECDsaImplementation.ECDsaSecurityTransforms())
             {
-                typedKey.ImportParameters(ecParameters);
-                return CopyWithPrivateKey(typedKey.GetKeys());
+                return CopyWithPrivateKey(ref ecParameters);
             }
         }
 
@@ -546,16 +544,14 @@ namespace Internal.Cryptography.Pal
 
             if (typedKey != null)
             {
-                return CopyWithPrivateKey(typedKey.GetKeys());
+                return CopyWithPrivateKey(typedKey.GetKeys().PrivateKey);
             }
 
             ECParameters ecParameters = privateKey.ExportParameters(true);
 
             using (PinAndClear.Track(ecParameters.D!))
-            using (typedKey = new ECDiffieHellmanImplementation.ECDiffieHellmanSecurityTransforms())
             {
-                typedKey.ImportParameters(ecParameters);
-                return CopyWithPrivateKey(typedKey.GetKeys());
+                return CopyWithPrivateKey(ref ecParameters);
             }
         }
 
@@ -565,7 +561,7 @@ namespace Internal.Cryptography.Pal
 
             if (typedKey != null)
             {
-                return CopyWithPrivateKey(typedKey.GetKeys());
+                return CopyWithPrivateKey(typedKey.GetKeys().PrivateKey);
             }
 
             RSAParameters rsaParameters = privateKey.ExportParameters(true);
@@ -576,10 +572,28 @@ namespace Internal.Cryptography.Pal
             using (PinAndClear.Track(rsaParameters.DP!))
             using (PinAndClear.Track(rsaParameters.DQ!))
             using (PinAndClear.Track(rsaParameters.InverseQ!))
-            using (typedKey = new RSAImplementation.RSASecurityTransforms())
             {
-                typedKey.ImportParameters(rsaParameters);
-                return CopyWithPrivateKey(typedKey.GetKeys());
+                AsnWriter keyWriter = RSAKeyFormatHelper.WritePkcs1PrivateKey(rsaParameters);
+                byte[] rented = CryptoPool.Rent(keyWriter.GetEncodedLength());
+                if (!keyWriter.TryEncode(rented, out int written))
+                {
+                    Debug.Fail("TryEncode failed with a pre-allocated buffer");
+                    throw new InvalidOperationException();
+                }
+                // Explicitly clear the inner buffer
+                keyWriter.Reset();
+
+                try
+                {
+                    using (var privateSecKey = Interop.AppleCrypto.ImportEphemeralKey(rented.AsSpan(0, written), true))
+                    {
+                        return CopyWithPrivateKey(privateSecKey);
+                    }
+                }
+                finally
+                {
+                    CryptoPool.Return(rented, written);
+                }
             }
         }
 
@@ -598,16 +612,44 @@ namespace Internal.Cryptography.Pal
             return null;
         }
 
-        private ICertificatePal CopyWithPrivateKey(SecKeyPair keyPair)
+        private ICertificatePal CopyWithPrivateKey(ref ECParameters ecParameters)
         {
-            if (keyPair.PrivateKey == null)
+            AsnWriter keyWriter = EccKeyFormatHelper.WriteECPrivateKey(ecParameters);
+
+            byte[] rented = CryptoPool.Rent(keyWriter.GetEncodedLength());
+
+            if (!keyWriter.TryEncode(rented, out int written))
+            {
+                Debug.Fail("TryEncode failed with a pre-allocated buffer");
+                throw new InvalidOperationException();
+            }
+
+            // Explicitly clear the inner buffer
+            keyWriter.Reset();
+
+            try
+            {
+                using (var privateSecKey = Interop.AppleCrypto.ImportEphemeralKey(rented.AsSpan(0, written), true))
+                {
+                    return CopyWithPrivateKey(privateSecKey);
+                }
+            }
+            finally
+            {
+                CryptoPool.Return(rented, written);
+            }
+        }
+
+        private ICertificatePal CopyWithPrivateKey(SafeSecKeyRefHandle? privateKey)
+        {
+            if (privateKey == null)
             {
                 // Both Windows and Linux/OpenSSL are unaware if they bound a public or private key.
                 // Here, we do know.  So throw if we can't do what they asked.
                 throw new CryptographicException(SR.Cryptography_CSP_NoPrivateKey);
             }
 
-            SafeKeychainHandle keychain = Interop.AppleCrypto.SecKeychainItemCopyKeychain(keyPair.PrivateKey);
+            SafeKeychainHandle keychain = Interop.AppleCrypto.SecKeychainItemCopyKeychain(privateKey);
 
             // If we're using a key already in a keychain don't add the certificate to that keychain here,
             // do it in the temporary add/remove in the shim.
@@ -656,7 +698,7 @@ namespace Internal.Cryptography.Pal
             {
                 SafeSecIdentityHandle identityHandle = Interop.AppleCrypto.X509CopyWithPrivateKey(
                     tempHandle,
-                    keyPair.PrivateKey,
+                    privateKey,
                     keychain);
 
                 AppleCertificatePal newPal = new AppleCertificatePal(identityHandle);

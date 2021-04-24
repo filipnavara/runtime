@@ -528,98 +528,46 @@ int32_t AppleCryptoNative_X509ExportData(CFArrayRef data,
 
 static OSStatus AddKeyToKeychain(SecKeyRef privateKey, SecKeychainRef targetKeychain, SecKeyRef* importedKey)
 {
-    CFDataRef privateKeyData;
-    CFErrorRef error;
-    OSStatus status;
+    SecExternalFormat dataFormat = kSecFormatWrappedPKCS8;
+    CFDataRef exportData = NULL;
 
-    privateKeyData = SecKeyCopyExternalRepresentation(privateKey, &error);
-    if (privateKeyData != NULL)
+    SecItemImportExportKeyParameters keyParams;
+    memset(&keyParams, 0, sizeof(SecItemImportExportKeyParameters));
+
+    keyParams.version = SEC_KEY_IMPORT_EXPORT_PARAMS_VERSION;
+    keyParams.passphrase = CFSTR("ExportImportPassphrase");
+
+    OSStatus status = SecItemExport(privateKey, dataFormat, 0, &keyParams, &exportData);
+
+    SecExternalFormat actualFormat = dataFormat;
+    SecExternalItemType actualType = kSecItemTypePrivateKey;
+    CFArrayRef outItems = NULL;
+
+    if (status == noErr)
     {
-        CFDictionaryRef attrs = SecKeyCopyAttributes(privateKey);
-        CFShow(attrs);
-
-        CFMutableDictionaryRef attributes = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-
-        CFDictionaryAddValue(attributes, kSecClass, kSecClassKey);
-	    CFDictionaryAddValue(attributes, kSecAttrKeyClass, kSecAttrKeyClassPrivate);
-        CFDictionaryAddValue(attributes, kSecAttrKeyType, CFDictionaryGetValue(attrs, kSecAttrKeyType));
-        CFDictionaryAddValue(attributes, kSecAttrKeySizeInBits, CFDictionaryGetValue(attrs, kSecAttrKeySizeInBits));        
-        CFDictionaryAddValue(attributes, kSecValueData, privateKeyData);
-        //CFDictionaryAddValue(attributes, kSecValueRef, privateKey);
-        CFDictionaryAddValue(attributes, kSecUseKeychain, targetKeychain);        
-        /*CFDictionaryAddValue(attributes, kSecAttrIsPermanent, kCFBooleanTrue);        
-        CFDictionaryAddValue(attributes, kSecAttrCanWrap, kCFBooleanTrue);        
-        CFDictionaryAddValue(attributes, kSecAttrCanUnwrap, kCFBooleanTrue);        
-        CFDictionaryAddValue(attributes, kSecAttrCanEncrypt, kCFBooleanTrue);        
-        CFDictionaryAddValue(attributes, kSecAttrCanDecrypt, kCFBooleanTrue);        
-        CFDictionaryAddValue(attributes, kSecAttrCanDerive, kCFBooleanTrue);        
-        CFDictionaryAddValue(attributes, kSecAttrCanSign, kCFBooleanTrue);        
-        CFDictionaryAddValue(attributes, kSecAttrCanVerify, kCFBooleanTrue);        
-        CFDictionaryAddValue(attributes, kSecAttrCanUnwrap, kCFBooleanTrue); */       
-        //CFDictionaryAddValue(attributes, kSecAttrNoLegacy, kCFBooleanFalse);        
-        //CFDictionaryAddValue(attributes, kSecReturnRef, kCFBooleanTrue);
-        //CFDictionaryAddValue(attributes, kSecAttrLabel, CFSTR("a modified label"));        
-        CFShow(attributes);
-
-        status = SecItemAdd(attributes, (CFTypeRef *)importedKey);
-        printf("status: %d\n", status);
-        assert(status == noErr);
-    
-        CFRelease(attributes);
-        CFRelease(privateKeyData);
+        status =
+            SecItemImport(exportData, NULL, &actualFormat, &actualType, 0, &keyParams, targetKeychain, &outItems);
     }
-    else if (CFErrorGetCode(error) == errSecPassphraseRequired)
+
+    if (status == noErr && importedKey != NULL && outItems != NULL && CFArrayGetCount(outItems) == 1)
     {
-        CFRelease(error);
+        CFTypeRef outItem = CFArrayGetValueAtIndex(outItems, 0);
 
-        SecExternalFormat dataFormat = kSecFormatWrappedPKCS8;
-        CFDataRef exportData = NULL;
-
-        SecItemImportExportKeyParameters keyParams;
-        memset(&keyParams, 0, sizeof(SecItemImportExportKeyParameters));
-
-        keyParams.version = SEC_KEY_IMPORT_EXPORT_PARAMS_VERSION;
-        keyParams.passphrase = CFSTR("ExportImportPassphrase");
-
-        OSStatus status = SecItemExport(privateKey, dataFormat, 0, &keyParams, &exportData);
-
-        SecExternalFormat actualFormat = dataFormat;
-        SecExternalItemType actualType = kSecItemTypePrivateKey;
-        CFArrayRef outItems = NULL;
-
-        if (status == noErr)
+        if (CFGetTypeID(outItem) == SecKeyGetTypeID())
         {
-            status =
-                SecItemImport(exportData, NULL, &actualFormat, &actualType, 0, &keyParams, targetKeychain, &outItems);
+            CFRetain(outItem);
+            *importedKey = (SecKeyRef)CONST_CAST(void*, outItem);
         }
-
-        if (status == noErr && importedKey != NULL && outItems != NULL && CFArrayGetCount(outItems) == 1)
-        {
-            CFTypeRef outItem = CFArrayGetValueAtIndex(outItems, 0);
-
-            if (CFGetTypeID(outItem) == SecKeyGetTypeID())
-            {
-                CFRetain(outItem);
-                *importedKey = (SecKeyRef)CONST_CAST(void*, outItem);
-            }
-        }
-
-        if (exportData != NULL)
-            CFRelease(exportData);
-
-        CFRelease(keyParams.passphrase);
-        keyParams.passphrase = NULL;
-
-        if (outItems != NULL)
-            CFRelease(outItems);
-
-        return status;
     }
-    else
-    {
-        status = CFErrorGetCode(error);
-        CFRelease(error);
-    }
+
+    if (exportData != NULL)
+        CFRelease(exportData);
+
+    CFRelease(keyParams.passphrase);
+    keyParams.passphrase = NULL;
+
+    if (outItems != NULL)
+        CFRelease(outItems);
 
     return status;
 }

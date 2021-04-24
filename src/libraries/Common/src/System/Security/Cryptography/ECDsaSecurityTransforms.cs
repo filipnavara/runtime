@@ -106,7 +106,7 @@ namespace System.Security.Cryptography
                         throw new CryptographicException(SR.Cryptography_CSP_NoPrivateKey);
                     }
 
-                    byte[] derFormatSignature = Interop.AppleCrypto.KeyServicesCreateSignature(
+                    byte[] derFormatSignature = Interop.AppleCrypto.CreateSignature(
                         keys.PrivateKey,
                         hash,
                         Interop.AppleCrypto.PAL_HashAlgorithm.Unknown,
@@ -127,7 +127,7 @@ namespace System.Security.Cryptography
                         throw new CryptographicException(SR.Cryptography_CSP_NoPrivateKey);
                     }
 
-                    byte[] derFormatSignature = Interop.AppleCrypto.KeyServicesCreateSignature(
+                    byte[] derFormatSignature = Interop.AppleCrypto.CreateSignature(
                         keys.PrivateKey,
                         source,
                         Interop.AppleCrypto.PAL_HashAlgorithm.Unknown,
@@ -174,7 +174,7 @@ namespace System.Security.Cryptography
                         return false;
                     }
 
-                    return Interop.AppleCrypto.KeyServicesVerifySignature(
+                    return Interop.AppleCrypto.VerifySignature(
                         GetKeys().PublicKey,
                         hash,
                         AsymmetricAlgorithmHelpers.ConvertIeee1363ToDer(signature),

@@ -35,48 +35,6 @@ internal static partial class Interop
             out SafeSecKeyRefHandle ppKeyOut,
             out int pOSStatus);
 
-        private static int AppleCryptoNative_GenerateSignature(
-            SafeSecKeyRefHandle privateKey,
-            ReadOnlySpan<byte> pbDataHash,
-            out SafeCFDataHandle pSignatureOut,
-            out SafeCFErrorHandle pErrorOut) =>
-            AppleCryptoNative_GenerateSignature(
-                privateKey,
-                ref MemoryMarshal.GetReference(pbDataHash),
-                pbDataHash.Length,
-                out pSignatureOut,
-                out pErrorOut);
-
-        [DllImport(Libraries.AppleCryptoNative)]
-        private static extern int AppleCryptoNative_GenerateSignature(
-            SafeSecKeyRefHandle privateKey,
-            ref byte pbDataHash,
-            int cbDataHash,
-            out SafeCFDataHandle pSignatureOut,
-            out SafeCFErrorHandle pErrorOut);
-
-        private static int AppleCryptoNative_VerifySignature(
-            SafeSecKeyRefHandle publicKey,
-            ReadOnlySpan<byte> pbDataHash,
-            ReadOnlySpan<byte> pbSignature,
-            out SafeCFErrorHandle pErrorOut) =>
-            AppleCryptoNative_VerifySignature(
-                publicKey,
-                ref MemoryMarshal.GetReference(pbDataHash),
-                pbDataHash.Length,
-                ref MemoryMarshal.GetReference(pbSignature),
-                pbSignature.Length,
-                out pErrorOut);
-
-        [DllImport(Libraries.AppleCryptoNative)]
-        private static extern int AppleCryptoNative_VerifySignature(
-            SafeSecKeyRefHandle publicKey,
-            ref byte pbDataHash,
-            int cbDataHash,
-            ref byte pbSignature,
-            int cbSignature,
-            out SafeCFErrorHandle pErrorOut);
-
         [DllImport(Libraries.AppleCryptoNative)]
         private static extern ulong AppleCryptoNative_SecKeyGetSimpleKeySizeInBytes(SafeSecKeyRefHandle publicKey);
 
@@ -169,55 +127,6 @@ internal static partial class Interop
 
             Debug.Fail($"SecKeyImportEphemeral returned {ret}");
             throw new CryptographicException();
-        }
-
-        internal static byte[] GenerateSignature(SafeSecKeyRefHandle privateKey, ReadOnlySpan<byte> dataHash)
-        {
-            Debug.Assert(privateKey != null, "privateKey != null");
-
-            return ExecuteTransform(
-                dataHash,
-                (ReadOnlySpan<byte> source, out SafeCFDataHandle signature, out SafeCFErrorHandle error) =>
-                    AppleCryptoNative_GenerateSignature(
-                        privateKey,
-                        source,
-                        out signature,
-                        out error));
-        }
-
-        internal static bool VerifySignature(
-            SafeSecKeyRefHandle publicKey,
-            ReadOnlySpan<byte> dataHash,
-            ReadOnlySpan<byte> signature)
-        {
-            Debug.Assert(publicKey != null, "publicKey != null");
-
-            SafeCFErrorHandle error;
-
-            int ret = AppleCryptoNative_VerifySignature(
-                publicKey,
-                dataHash,
-                signature,
-                out error);
-
-            const int True = 1;
-            const int False = 0;
-
-            using (error)
-            {
-                switch (ret)
-                {
-                    case True:
-                        return true;
-                    case False:
-                        return false;
-                    case kErrorSeeError:
-                        throw CreateExceptionForCFError(error);
-                    default:
-                        Debug.Fail($"VerifySignature returned {ret}");
-                        throw new CryptographicException();
-                }
-            }
         }
     }
 }

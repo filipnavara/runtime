@@ -181,8 +181,12 @@ namespace System.Security.Cryptography
                 ht.Add("System.Security.Cryptography.RSA", RSACryptoServiceProviderType);
                 ht.Add("System.Security.Cryptography.AsymmetricAlgorithm", RSACryptoServiceProviderType);
 
-                ht.Add("DSA", DSACryptoServiceProviderType);
-                ht.Add("System.Security.Cryptography.DSA", DSACryptoServiceProviderType);
+                // iOS-like platforms lack DSA support
+                if (!OperatingSystem.IsIOS() && !OperatingSystem.IsTvOS() && !OperatingSystem.IsMacCatalyst())
+                {
+                    ht.Add("DSA", DSACryptoServiceProviderType);
+                    ht.Add("System.Security.Cryptography.DSA", DSACryptoServiceProviderType);
+                }
 
                 // Windows will register the public ECDsaCng type.  Non-Windows gets a special handler.
                 if (OperatingSystem.IsWindows())

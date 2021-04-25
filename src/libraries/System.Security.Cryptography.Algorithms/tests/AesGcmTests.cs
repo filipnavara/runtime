@@ -8,7 +8,7 @@ using Xunit;
 
 namespace System.Security.Cryptography.Algorithms.Tests
 {
-    [SkipOnPlatform(TestPlatforms.Browser | TestPlatforms.iOS | TestPlatforms.tvOS, "Not supported on Browser/iOS/tvOS")]
+    [SkipOnPlatform(TestPlatforms.Browser | TestPlatforms.iOS | TestPlatforms.tvOS | TestPlatforms.MacCatalyst, "Not supported on Browser/iOS/tvOS/MacCatalyst")]
     public class AesGcmTests : AesAEADTests
     {
         [Theory]

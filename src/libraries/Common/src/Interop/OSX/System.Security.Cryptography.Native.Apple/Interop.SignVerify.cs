@@ -120,6 +120,7 @@ internal static partial class Interop
                     Valid => true,
                     Invalid => false,
                     kErrorSeeError => throw CreateExceptionForCFError(errorHandle),
+                    kPlatformNotSupported => throw new PlatformNotSupportedException(),
                     _ => throw new CryptographicException { HResult = result }
                 };
             }
@@ -148,6 +149,7 @@ internal static partial class Interop
                 {
                     kSuccess => CoreFoundation.CFGetData(signature),
                     kErrorSeeError => throw CreateExceptionForCFError(errorHandle),
+                    kPlatformNotSupported => throw new PlatformNotSupportedException(),
                     _ => throw new CryptographicException { HResult = result }
                 };
             }
@@ -178,6 +180,7 @@ internal static partial class Interop
                 {
                     kSuccess => CoreFoundation.TryCFWriteData(signature, destination, out bytesWritten),
                     kErrorSeeError => throw CreateExceptionForCFError(errorHandle),
+                    kPlatformNotSupported => throw new PlatformNotSupportedException(),
                     _ => throw new CryptographicException { HResult = result }
                 };
             }

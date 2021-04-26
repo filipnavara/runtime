@@ -14,6 +14,7 @@ internal static partial class Interop
     {
         private const int kSuccess = 1;
         private const int kErrorSeeError = -2;
+        private const int kPlatformNotSupported = -5;
 
         [DllImport(Libraries.AppleCryptoNative)]
         private static extern ulong AppleCryptoNative_SecKeyGetSimpleKeySizeInBytes(SafeSecKeyRefHandle publicKey);
@@ -86,8 +87,22 @@ internal static partial class Interop
 
 namespace System.Security.Cryptography.Apple
 {
-    internal sealed class SafeSecKeyRefHandle : SafeKeychainItemHandle
+    internal sealed class SafeSecKeyRefHandle : SafeHandle
     {
+        public SafeSecKeyRefHandle()
+            : base(IntPtr.Zero, ownsHandle: true)
+        {
+        }
+
+        protected override bool ReleaseHandle()
+        {
+            Interop.CoreFoundation.CFRelease(handle);
+            SetHandle(IntPtr.Zero);
+            return true;
+        }
+
+        public override bool IsInvalid => handle == IntPtr.Zero;
+
         protected override void Dispose(bool disposing)
         {
             if (disposing && SafeHandleCache<SafeSecKeyRefHandle>.IsCachedInvalidHandle(this))

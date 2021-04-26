@@ -371,8 +371,7 @@ namespace System.Security.Cryptography
                         keys.PrivateKey,
                         hash,
                         palAlgId,
-                        Interop.AppleCrypto.PAL_SignatureAlgorithm.RsaPkcs1,
-                        digest: true);
+                        Interop.AppleCrypto.PAL_SignatureAlgorithm.RsaPkcs1);
                 }
 
                 // A signature will always be the keysize (in ceiling-bytes) in length.
@@ -452,7 +451,6 @@ namespace System.Security.Cryptography
                         destination,
                         palAlgId,
                         Interop.AppleCrypto.PAL_SignatureAlgorithm.RsaPkcs1,
-                        digest: true,
                         out bytesWritten);
                 }
 
@@ -519,8 +517,7 @@ namespace System.Security.Cryptography
                         hash,
                         signature,
                         palAlgId,
-                        Interop.AppleCrypto.PAL_SignatureAlgorithm.RsaPkcs1,
-                        digest: true);
+                        Interop.AppleCrypto.PAL_SignatureAlgorithm.RsaPkcs1);
                 }
                 else if (padding.Mode == RSASignaturePaddingMode.Pss)
                 {

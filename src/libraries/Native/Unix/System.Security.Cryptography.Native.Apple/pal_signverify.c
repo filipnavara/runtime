@@ -200,40 +200,39 @@ static int32_t ConfigureSignVerifyTransform(SecTransformRef xform,
 extern const SecKeyAlgorithm kSecKeyAlgorithmRSASignatureDigestPKCS1v15MD5;// = CFSTR("algid:sign:RSA:digest-PKCS1v15:MD5");
 extern const SecKeyAlgorithm kSecKeyAlgorithmRSASignatureMessagePKCS1v15MD5;// = CFSTR("algid:sign:RSA:message-PKCS1v15:MD5");
 
-static CFStringRef GetSignatureAlgorithmIdentifier(PAL_HashAlgorithm hashAlgorithm, PAL_SignatureAlgorithm signatureAlgorithm, bool digest)
+static CFStringRef GetSignatureAlgorithmIdentifier(PAL_HashAlgorithm hashAlgorithm, PAL_SignatureAlgorithm signatureAlgorithm)
 {
     if (signatureAlgorithm == PAL_SignatureAlgorithm_EC)
     {
         // ECDSA signatures are always based on digests. The managed implementation
         // will always pre-hash data before getting here.
-        assert(digest);
         return kSecKeyAlgorithmECDSASignatureDigestX962;
     }
     if (signatureAlgorithm == PAL_SignatureAlgorithm_RSA_Pkcs1)
     {
-        if (digest)
+        switch (hashAlgorithm)
         {
-            switch (hashAlgorithm)
-            {
-                case PAL_MD5: return kSecKeyAlgorithmRSASignatureDigestPKCS1v15MD5;
-                case PAL_SHA1: return kSecKeyAlgorithmRSASignatureDigestPKCS1v15SHA1;
-                case PAL_SHA256: return kSecKeyAlgorithmRSASignatureDigestPKCS1v15SHA256;
-                case PAL_SHA384: return kSecKeyAlgorithmRSASignatureDigestPKCS1v15SHA384;
-                case PAL_SHA512: return kSecKeyAlgorithmRSASignatureDigestPKCS1v15SHA512;
-            }
-
+            case PAL_MD5: return kSecKeyAlgorithmRSASignatureDigestPKCS1v15MD5;
+            case PAL_SHA1: return kSecKeyAlgorithmRSASignatureDigestPKCS1v15SHA1;
+            case PAL_SHA256: return kSecKeyAlgorithmRSASignatureDigestPKCS1v15SHA256;
+            case PAL_SHA384: return kSecKeyAlgorithmRSASignatureDigestPKCS1v15SHA384;
+            case PAL_SHA512: return kSecKeyAlgorithmRSASignatureDigestPKCS1v15SHA512;
         }
-        else
+    }
+    // Requires macOS 10.13+ or iOS 11+
+    /*if (signatureAlgorithm == PAL_SignatureAlgorithm_RSA_Pss)
+    {
+        switch (hashAlgorithm)
         {
-            switch (hashAlgorithm)
-            {
-                case PAL_MD5: return kSecKeyAlgorithmRSASignatureMessagePKCS1v15MD5;
-                case PAL_SHA1: return kSecKeyAlgorithmRSASignatureMessagePKCS1v15SHA1;
-                case PAL_SHA256: return kSecKeyAlgorithmRSASignatureMessagePKCS1v15SHA256;
-                case PAL_SHA384: return kSecKeyAlgorithmRSASignatureMessagePKCS1v15SHA384;
-                case PAL_SHA512: return kSecKeyAlgorithmRSASignatureMessagePKCS1v15SHA512;
-            }
+            case PAL_SHA1: return kSecKeyAlgorithmRSASignatureDigestPSSSHA1;
+            case PAL_SHA256: return kSecKeyAlgorithmRSASignatureDigestPSSSHA256;
+            case PAL_SHA384: return kSecKeyAlgorithmRSASignatureDigestPSSSHA384;
+            case PAL_SHA512: return kSecKeyAlgorithmRSASignatureDigestPSSSHA512;
         }
+    }*/
+    if (signatureAlgorithm == PAL_SignatureAlgorithm_RSA_Raw)
+    {
+        return kSecKeyAlgorithmRSASignatureRaw;
     }
 
     return NULL;
@@ -244,7 +243,6 @@ int32_t AppleCryptoNative_SecKeyCreateSignature(SecKeyRef privateKey,
                                                 int32_t cbDataHash,
                                                 PAL_HashAlgorithm hashAlgorithm,
                                                 PAL_SignatureAlgorithm signatureAlgorithm,
-                                                int32_t digest,
                                                 CFDataRef* pSignatureOut,
                                                 CFErrorRef* pErrorOut)
 {
@@ -259,7 +257,6 @@ int32_t AppleCryptoNative_SecKeyCreateSignature(SecKeyRef privateKey,
 
     if (signatureAlgorithm == PAL_SignatureAlgorithm_DSA)
     {
-        assert(digest);
 #if !defined(TARGET_MACCATALYST) && !defined(TARGET_IOS) && !defined(TARGET_TVOS)
         return DsaGenerateSignature(privateKey, pbDataHash, cbDataHash, pSignatureOut, pErrorOut);
 #else
@@ -267,26 +264,19 @@ int32_t AppleCryptoNative_SecKeyCreateSignature(SecKeyRef privateKey,
 #endif
     }
 
-    bool useDigest = digest != 0;
-    CFStringRef algorithm = GetSignatureAlgorithmIdentifier(hashAlgorithm, signatureAlgorithm, useDigest);
-
+    CFStringRef algorithm = GetSignatureAlgorithmIdentifier(hashAlgorithm, signatureAlgorithm);
     if (algorithm == NULL)
         return kErrorUnknownAlgorithm;
 
     CFDataRef dataHash = CFDataCreateWithBytesNoCopy(NULL, pbDataHash, cbDataHash, kCFAllocatorNull);
-
     if (dataHash == NULL)
-    {
         return kErrorUnknownState;
-    }
 
     int32_t ret = kErrorSeeError;
-
     CFDataRef sig = SecKeyCreateSignature(privateKey, algorithm, dataHash, pErrorOut);
 
     if (sig != NULL)
     {
-        CFRetain(sig);
         *pSignatureOut = sig;
         ret = 1;
     }
@@ -302,7 +292,6 @@ int32_t AppleCryptoNative_SecKeyVerifySignature(SecKeyRef publicKey,
                                                 int32_t cbSignature,
                                                 PAL_HashAlgorithm hashAlgorithm,
                                                 PAL_SignatureAlgorithm signatureAlgorithm,
-                                                int digest,
                                                 CFErrorRef* pErrorOut)
 {
     if (pErrorOut != NULL)
@@ -316,7 +305,6 @@ int32_t AppleCryptoNative_SecKeyVerifySignature(SecKeyRef publicKey,
 
     if (signatureAlgorithm == PAL_SignatureAlgorithm_DSA)
     {
-        assert(digest);
 #if !defined(TARGET_MACCATALYST) && !defined(TARGET_IOS) && !defined(TARGET_TVOS)
         return DsaVerifySignature(publicKey, pbDataHash, cbDataHash, pbSignature, cbSignature, pErrorOut);
 #else
@@ -324,19 +312,15 @@ int32_t AppleCryptoNative_SecKeyVerifySignature(SecKeyRef publicKey,
 #endif
     }
 
-    bool useDigest = digest != 0;
-    CFStringRef algorithm = GetSignatureAlgorithmIdentifier(hashAlgorithm, signatureAlgorithm, useDigest);
-
+    CFStringRef algorithm = GetSignatureAlgorithmIdentifier(hashAlgorithm, signatureAlgorithm);
     if (algorithm == NULL)
         return kErrorBadInput;
 
     CFDataRef dataHash = CFDataCreateWithBytesNoCopy(NULL, pbDataHash, cbDataHash, kCFAllocatorNull);
-
     if (dataHash == NULL)
         return kErrorUnknownState;
 
     CFDataRef signature = CFDataCreateWithBytesNoCopy(NULL, pbSignature, cbSignature, kCFAllocatorNull);
-
     if (signature == NULL)
     {
         CFRelease(dataHash);

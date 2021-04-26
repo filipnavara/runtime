@@ -17,9 +17,11 @@ internal static partial class Interop
         internal enum PAL_SignatureAlgorithm : uint
         {
             Unknown = 0,
-            RsaPkcs1 = 1,
-            EC = 2,
-            DSA = 3
+            DSA = 1,
+            RsaPkcs1 = 2,
+            RsaPss = 3,
+            RsaRaw = 4,
+            EC = 5,
         }
 
         private static unsafe int AppleCryptoNative_SecKeyVerifySignature(
@@ -28,7 +30,6 @@ internal static partial class Interop
             ReadOnlySpan<byte> signature,
             PAL_HashAlgorithm hashAlgorithm,
             PAL_SignatureAlgorithm signatureAlgorithm,
-            bool digest,
             out SafeCFErrorHandle pErrorOut)
         {
             fixed (byte* pDataHash = dataHash)
@@ -42,7 +43,6 @@ internal static partial class Interop
                     signature.Length,
                     hashAlgorithm,
                     signatureAlgorithm,
-                    digest ? 1 : 0,
                     out pErrorOut);
             }
         }
@@ -56,7 +56,6 @@ internal static partial class Interop
             int cbSignature,
             PAL_HashAlgorithm hashAlgorithm,
             PAL_SignatureAlgorithm signatureAlgorithm,
-            int digest,
             out SafeCFErrorHandle pErrorOut);
 
         private static unsafe int AppleCryptoNative_SecKeyCreateSignature(
@@ -64,7 +63,6 @@ internal static partial class Interop
             ReadOnlySpan<byte> dataHash,
             PAL_HashAlgorithm hashAlgorithm,
             PAL_SignatureAlgorithm signatureAlgorithm,
-            bool digest,
             out SafeCFDataHandle pSignatureOut,
             out SafeCFErrorHandle pErrorOut)
         {
@@ -76,7 +74,6 @@ internal static partial class Interop
                     dataHash.Length,
                     hashAlgorithm,
                     signatureAlgorithm,
-                    digest ? 1 : 0,
                     out pSignatureOut,
                     out pErrorOut);
             }
@@ -89,7 +86,6 @@ internal static partial class Interop
             int cbDataHash,
             PAL_HashAlgorithm hashAlgorithm,
             PAL_SignatureAlgorithm signatureAlgorithm,
-            int digest,
             out SafeCFDataHandle pSignatureOut,
             out SafeCFErrorHandle pErrorOut);
 
@@ -98,8 +94,7 @@ internal static partial class Interop
             ReadOnlySpan<byte> dataHash,
             ReadOnlySpan<byte> signature,
             PAL_HashAlgorithm hashAlgorithm,
-            PAL_SignatureAlgorithm signatureAlgorithm,
-            bool digest)
+            PAL_SignatureAlgorithm signatureAlgorithm)
         {
             const int Valid = 1;
             const int Invalid = 0;
@@ -110,7 +105,6 @@ internal static partial class Interop
                 signature,
                 hashAlgorithm,
                 signatureAlgorithm,
-                digest,
                 out SafeCFErrorHandle errorHandle);
 
             using (errorHandle)
@@ -130,15 +124,13 @@ internal static partial class Interop
             SafeSecKeyRefHandle privateKey,
             ReadOnlySpan<byte> dataHash,
             PAL_HashAlgorithm hashAlgorithm,
-            PAL_SignatureAlgorithm signatureAlgorithm,
-            bool digest)
+            PAL_SignatureAlgorithm signatureAlgorithm)
         {
             int result = AppleCryptoNative_SecKeyCreateSignature(
                 privateKey,
                 dataHash,
                 hashAlgorithm,
                 signatureAlgorithm,
-                digest,
                 out SafeCFDataHandle signature,
                 out SafeCFErrorHandle errorHandle);
 
@@ -161,7 +153,6 @@ internal static partial class Interop
             Span<byte> destination,
             PAL_HashAlgorithm hashAlgorithm,
             PAL_SignatureAlgorithm signatureAlgorithm,
-            bool digest,
             out int bytesWritten)
         {
             int result = AppleCryptoNative_SecKeyCreateSignature(
@@ -169,7 +160,6 @@ internal static partial class Interop
                 dataHash,
                 hashAlgorithm,
                 signatureAlgorithm,
-                digest,
                 out SafeCFDataHandle signature,
                 out SafeCFErrorHandle errorHandle);
 

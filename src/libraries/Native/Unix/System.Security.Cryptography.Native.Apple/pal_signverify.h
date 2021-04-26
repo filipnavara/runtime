@@ -12,9 +12,11 @@
 enum
 {
     PAL_SignatureAlgorithm_Unknown = 0,
-    PAL_SignatureAlgorithm_RSA_Pkcs1 = 1,
-    PAL_SignatureAlgorithm_EC = 2,
-    PAL_SignatureAlgorithm_DSA = 3,
+    PAL_SignatureAlgorithm_DSA = 1,
+    PAL_SignatureAlgorithm_RSA_Pkcs1 = 2,
+    PAL_SignatureAlgorithm_RSA_Pss = 3,
+    PAL_SignatureAlgorithm_RSA_Raw = 4,
+    PAL_SignatureAlgorithm_EC = 5,
 };
 typedef uint32_t PAL_SignatureAlgorithm;
 
@@ -28,7 +30,6 @@ PALEXPORT int32_t AppleCryptoNative_SecKeyCreateSignature(SecKeyRef privateKey,
                                                           int32_t cbDataHash,
                                                           PAL_HashAlgorithm hashAlgorithm,
                                                           PAL_SignatureAlgorithm signatureAlgorithm,
-                                                          int32_t digest,
                                                           CFDataRef* pSignatureOut,
                                                           CFErrorRef* pErrorOut);
 
@@ -44,6 +45,4 @@ PALEXPORT int32_t AppleCryptoNative_SecKeyVerifySignature(SecKeyRef publicKey,
                                                           int32_t cbSignature,
                                                           PAL_HashAlgorithm hashAlgorithm,
                                                           PAL_SignatureAlgorithm signatureAlgorithm,
-                                                          int digest,
                                                           CFErrorRef* pErrorOut);
-

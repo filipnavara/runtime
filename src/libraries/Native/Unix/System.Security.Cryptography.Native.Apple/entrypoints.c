@@ -4,6 +4,7 @@
 #include "../../AnyOS/entrypoints.h"
 
 // Include System.Security.Cryptography.Native.Apple headers
+#include "pal_aead.h"
 #include "pal_digest.h"
 #include "pal_ecc.h"
 #include "pal_hmac.h"
@@ -24,6 +25,10 @@
 
 static const Entry s_cryptoAppleNative[] =
 {
+    DllImportEntry(AppleCryptoNative_AesGcmEncrypt)
+    DllImportEntry(AppleCryptoNative_AesGcmDecrypt)
+    DllImportEntry(AppleCryptoNative_ChaChaPolyEncrypt)
+    DllImportEntry(AppleCryptoNative_ChaChaPolyDecrypt)
     DllImportEntry(AppleCryptoNative_DigestFree)
     DllImportEntry(AppleCryptoNative_DigestCreate)
     DllImportEntry(AppleCryptoNative_DigestUpdate)

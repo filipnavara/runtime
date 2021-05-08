@@ -19,6 +19,7 @@ set(NATIVECRYPTO_SOURCES
     pal_symmetric.c
     pal_x509.c
     pal_x509chain.c
+    pal_aead.o
 )
 
 if (NOT CLR_CMAKE_TARGET_MACCATALYST AND NOT CLR_CMAKE_TARGET_IOS AND NOT CLR_CMAKE_TARGET_TVOS)
@@ -31,6 +32,62 @@ if (NOT CLR_CMAKE_TARGET_MACCATALYST AND NOT CLR_CMAKE_TARGET_IOS AND NOT CLR_CM
         pal_x509_macos.c
     )
 endif()
+
+# As of CMake 3.20.2 support for Swift only works with the Ninja and XCode
+# generators so we cannot rely on it. Even with the Ninja generator it doesn't
+# work in combination with other languages within the same library.
+#
+# We need to compile the Swift file in a slightly special way to target
+# only the Swift-in-OS runtime and fallback to weak linking on downlevel
+# platforms where Swift runtime is not available.
+
+if(NOT SWIFT_COMPILER_TARGET)
+  if(CMAKE_OSX_SYSROOT MATCHES "/iPhoneOS")
+    set(SWIFT_PLATFORM "ios")
+    set(SWIFT_PLATFORM_SUFFIX "")
+    set(SWIFT_DEFAULT_DEPLOYMENT_TARGET "10.0")
+  elseif(CMAKE_OSX_SYSROOT MATCHES "/iPhoneSimulator")
+    set(SWIFT_PLATFORM "ios")
+    set(SWIFT_PLATFORM_SUFFIX "-simulator")
+    set(SWIFT_DEFAULT_DEPLOYMENT_TARGET "10.0")
+  elseif(CMAKE_OSX_SYSROOT MATCHES "/AppleTVOS")
+    set(SWIFT_PLATFORM "tvos")
+    set(SWIFT_PLATFORM_SUFFIX "")
+    set(SWIFT_DEFAULT_DEPLOYMENT_TARGET "10.0")
+  elseif(CMAKE_OSX_SYSROOT MATCHES "/AppleTVSimulator")
+    set(SWIFT_PLATFORM "tvos")
+    set(SWIFT_PLATFORM_SUFFIX "-simulator")
+    set(SWIFT_DEFAULT_DEPLOYMENT_TARGET "10.0")
+  elseif(CMAKE_OSX_SYSROOT MATCHES "/WatchOS")
+    set(SWIFT_PLATFORM "watchos")
+    set(SWIFT_PLATFORM_SUFFIX "")
+    set(SWIFT_DEFAULT_DEPLOYMENT_TARGET "3.0")
+  elseif(CMAKE_OSX_SYSROOT MATCHES "/WatchSimulator")
+    set(SWIFT_PLATFORM "watchos")
+    set(SWIFT_PLATFORM_SUFFIX "-simulator")
+    set(SWIFT_DEFAULT_DEPLOYMENT_TARGET "3.0")
+  else()
+    set(SWIFT_PLATFORM "macosx")
+    set(SWIFT_PLATFORM_SUFFIX "")
+    set(SWIFT_DEFAULT_DEPLOYMENT_TARGET "10.13")
+  endif()
+
+  if(CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(SWIFT_DEPLOYMENT_TARGET ${CMAKE_OSX_DEPLOYMENT_TARGET})
+  else()
+    set(SWIFT_DEPLOYMENT_TARGET ${SWIFT_DEFAULT_DEPLOYMENT_TARGET})
+  endif()
+
+  set(SWIFT_COMPILER_TARGET "${CMAKE_OSX_ARCHITECTURES}-apple-${SWIFT_PLATFORM}${SWIFT_DEPLOYMENT_TARGET}${SWIFT_PLATFORM_SUFFIX}")
+endif()
+
+add_custom_command(
+    OUTPUT pal_aead.o
+    COMMAND xcrun swiftc -emit-object -static -parse-as-library -runtime-compatibility-version none -sdk ${CMAKE_OSX_SYSROOT} -target ${SWIFT_COMPILER_TARGET} ${CMAKE_CURRENT_SOURCE_DIR}/pal_aead.swift -o pal_aead.o
+    MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/pal_aead.swift
+    COMMENT "Compiling Swift file pal_aead.swift"
+)
+set_source_files_properties(pal_aead.o PROPERTIES EXTERNAL_OBJECT true GENERATED true)
 
 if (CLR_CMAKE_TARGET_MACCATALYST)
     add_definitions(-DTARGET_MACCATALYST)

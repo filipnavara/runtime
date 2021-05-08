@@ -124,7 +124,7 @@ elif [[ "$__TargetOS" == iOS ]]; then
     if [[ "$__BuildArch" == arm64 ]]; then
         __CMakeArgs="-DCMAKE_OSX_ARCHITECTURES=\"arm64\" $__CMakeArgs"
     elif [[ "$__BuildArch" == arm ]]; then
-        __CMakeArgs="-DCMAKE_OSX_ARCHITECTURES=\"armv7;armv7s\" $__CMakeArgs"
+        __CMakeArgs="-DCMAKE_OSX_ARCHITECTURES=\"armv7s\" $__CMakeArgs"
     else
         echo "Error: Unknown iOS architecture $__BuildArch."
         exit 1

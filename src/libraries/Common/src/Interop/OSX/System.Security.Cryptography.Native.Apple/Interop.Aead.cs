@@ -14,6 +14,8 @@ internal static partial class Interop
 {
     internal static partial class AppleCrypto
     {
+        private static bool UseCryptoKit => false;
+
         internal static unsafe void AesGcmEncrypt(
             ReadOnlySpan<byte> key,
             ReadOnlySpan<byte> nonce,
@@ -29,18 +31,40 @@ internal static partial class Interop
             fixed (byte* tagPtr = tag)
             fixed (byte* aadPtr = aad)
             {
-                int result = AppleCryptoNative_AesGcmEncrypt(
-                    keyPtr, key.Length,
-                    noncePtr, nonce.Length,
-                    plaintextPtr, plaintext.Length,
-                    ciphertextPtr, ciphertext.Length,
-                    tagPtr, tag.Length,
-                    aadPtr, aad.Length);
-                if (result != 1)
+                if (UseCryptoKit)
                 {
-                    CryptographicOperations.ZeroMemory(ciphertext);
-                    CryptographicOperations.ZeroMemory(tag);
-                    throw new CryptographicException();
+                    int result = AppleCryptoNative_AesGcmEncrypt(
+                        keyPtr, key.Length,
+                        noncePtr, nonce.Length,
+                        plaintextPtr, plaintext.Length,
+                        ciphertextPtr, ciphertext.Length,
+                        tagPtr, tag.Length,
+                        aadPtr, aad.Length);
+
+                    if (result != 1)
+                    {
+                        CryptographicOperations.ZeroMemory(ciphertext);
+                        CryptographicOperations.ZeroMemory(tag);
+                        throw new CryptographicException();
+                    }
+                }
+                else
+                {
+                    int result = CCCryptorGCMOneshotEncrypt(
+                        0,
+                        keyPtr, key.Length,
+                        noncePtr, nonce.Length,
+                        aadPtr, aad.Length,
+                        plaintextPtr == null ? (byte*)0x42 : plaintextPtr, plaintext.Length,
+                        ciphertextPtr == null ? (byte*)0x42 : ciphertextPtr,
+                        tagPtr, tag.Length);
+
+                    if (result != 0)
+                    {
+                        CryptographicOperations.ZeroMemory(ciphertext);
+                        CryptographicOperations.ZeroMemory(tag);
+                        throw new CryptographicException();
+                    }
                 }
             }
         }
@@ -60,17 +84,38 @@ internal static partial class Interop
             fixed (byte* plaintextPtr = plaintext)
             fixed (byte* aadPtr = aad)
             {
-                int result = AppleCryptoNative_AesGcmDecrypt(
-                    keyPtr, key.Length,
-                    noncePtr, nonce.Length,
-                    ciphertextPtr, ciphertext.Length,
-                    tagPtr, tag.Length,
-                    plaintextPtr, plaintext.Length,
-                    aadPtr, aad.Length);
-                if (result != 1)
+                if (UseCryptoKit)
                 {
-                    CryptographicOperations.ZeroMemory(plaintext);
-                    throw new CryptographicException();
+                    int result = AppleCryptoNative_AesGcmDecrypt(
+                        keyPtr, key.Length,
+                        noncePtr, nonce.Length,
+                        ciphertextPtr, ciphertext.Length,
+                        tagPtr, tag.Length,
+                        plaintextPtr, plaintext.Length,
+                        aadPtr, aad.Length);
+
+                    if (result != 1)
+                    {
+                        CryptographicOperations.ZeroMemory(plaintext);
+                        throw new CryptographicException();
+                    }
+                }
+                else
+                {
+                    int result = CCCryptorGCMOneshotDecrypt(
+                        0,
+                        keyPtr, key.Length,
+                        noncePtr, nonce.Length,
+                        aadPtr, aad.Length,
+                        ciphertextPtr == null ? (byte*)0x42 : ciphertextPtr, ciphertext.Length,
+                        plaintextPtr == null ? (byte*)0x42 : plaintextPtr,
+                        tagPtr, tag.Length);
+
+                    if (result != 0)
+                    {
+                        CryptographicOperations.ZeroMemory(plaintext);
+                        throw new CryptographicException();
+                    }
                 }
             }
         }
@@ -90,18 +135,39 @@ internal static partial class Interop
             fixed (byte* tagPtr = tag)
             fixed (byte* aadPtr = aad)
             {
-                int result = AppleCryptoNative_ChaChaPolyEncrypt(
-                    keyPtr, key.Length,
-                    noncePtr, nonce.Length,
-                    plaintextPtr, plaintext.Length,
-                    ciphertextPtr, ciphertext.Length,
-                    tagPtr, tag.Length,
-                    aadPtr, aad.Length);
-                if (result != 1)
+                if (UseCryptoKit)
                 {
-                    CryptographicOperations.ZeroMemory(ciphertext);
-                    CryptographicOperations.ZeroMemory(tag);
-                    throw new CryptographicException();
+                    int result = AppleCryptoNative_ChaChaPolyEncrypt(
+                        keyPtr, key.Length,
+                        noncePtr, nonce.Length,
+                        plaintextPtr, plaintext.Length,
+                        ciphertextPtr, ciphertext.Length,
+                        tagPtr, tag.Length,
+                        aadPtr, aad.Length);
+
+                    if (result != 1)
+                    {
+                        CryptographicOperations.ZeroMemory(ciphertext);
+                        CryptographicOperations.ZeroMemory(tag);
+                        throw new CryptographicException();
+                    }
+                }
+                else
+                {
+                    int result = CCCryptorChaCha20Poly1305OneshotEncrypt(
+                        keyPtr, key.Length,
+                        noncePtr, nonce.Length,
+                        aadPtr, aad.Length,
+                        plaintextPtr == null ? (byte*)0x42 : plaintextPtr, plaintext.Length,
+                        ciphertextPtr == null ? (byte*)0x42 : ciphertextPtr,
+                        tagPtr, tag.Length);
+
+                    if (result != 0)
+                    {
+                        CryptographicOperations.ZeroMemory(ciphertext);
+                        CryptographicOperations.ZeroMemory(tag);
+                        throw new CryptographicException();
+                    }
                 }
             }
         }
@@ -121,20 +187,98 @@ internal static partial class Interop
             fixed (byte* plaintextPtr = plaintext)
             fixed (byte* aadPtr = aad)
             {
-                int result = AppleCryptoNative_ChaChaPolyDecrypt(
-                    keyPtr, key.Length,
-                    noncePtr, nonce.Length,
-                    ciphertextPtr, ciphertext.Length,
-                    tagPtr, tag.Length,
-                    plaintextPtr, plaintext.Length,
-                    aadPtr, aad.Length);
-                if (result != 1)
+                if (UseCryptoKit)
                 {
-                    CryptographicOperations.ZeroMemory(plaintext);
-                    throw new CryptographicException();
+                    int result = AppleCryptoNative_ChaChaPolyDecrypt(
+                        keyPtr, key.Length,
+                        noncePtr, nonce.Length,
+                        ciphertextPtr, ciphertext.Length,
+                        tagPtr, tag.Length,
+                        plaintextPtr, plaintext.Length,
+                        aadPtr, aad.Length);
+
+                    if (result != 1)
+                    {
+                        CryptographicOperations.ZeroMemory(plaintext);
+                        throw new CryptographicException();
+                    }
+                }
+                else
+                {
+                    int result = CCCryptorChaCha20Poly1305OneshotDecrypt(
+                        keyPtr, key.Length,
+                        noncePtr, nonce.Length,
+                        aadPtr, aad.Length,
+                        ciphertextPtr == null ? (byte*)0x42 : ciphertextPtr, ciphertext.Length,
+                        plaintextPtr == null ? (byte*)0x42 : plaintextPtr,
+                        tagPtr, tag.Length);
+
+                    if (result != 0)
+                    {
+                        CryptographicOperations.ZeroMemory(plaintext);
+                        throw new CryptographicException();
+                    }
                 }
             }
         }
+
+        [DllImport("/usr/lib/system/libcommonCrypto.dylib")]
+        private static unsafe extern int CCCryptorGCMOneshotEncrypt(
+            int algorithm,
+            byte *keyPtr,
+            nint keyLength,
+            byte *noncePtr,
+            nint nonceLength,
+            byte *aadPtr,
+            nint aadLength,
+            byte *plaintextPtr,
+            nint plaintextLength,
+            byte *ciphertextPtr,
+            byte *tagPtr,
+            nint tagLength);
+
+        [DllImport("/usr/lib/system/libcommonCrypto.dylib")]
+        private static unsafe extern int CCCryptorGCMOneshotDecrypt(
+            int algorithm,
+            byte *keyPtr,
+            nint keyLength,
+            byte *noncePtr,
+            nint nonceLength,
+            byte *aadPtr,
+            nint aadLength,
+            byte *ciphertextPtr,
+            nint ciphertextLength,
+            byte *plaintextPtr,
+            byte *tagPtr,
+            nint tagLength);
+
+        [DllImport("/usr/lib/system/libcommonCrypto.dylib")]
+        private static unsafe extern int CCCryptorChaCha20Poly1305OneshotEncrypt(
+            byte *keyPtr,
+            nint keyLength,
+            byte *noncePtr,
+            nint nonceLength,
+            byte *aadPtr,
+            nint aadLength,
+            byte *plaintextPtr,
+            nint plaintextLength,
+            byte *ciphertextPtr,
+            byte *tagPtr,
+            nint tagLength);
+
+        [DllImport("/usr/lib/system/libcommonCrypto.dylib")]
+        private static unsafe extern int CCCryptorChaCha20Poly1305OneshotDecrypt(
+            byte *keyPtr,
+            nint keyLength,
+            byte *noncePtr,
+            nint nonceLength,
+            byte *aadPtr,
+            nint aadLength,
+            byte *ciphertextPtr,
+            nint ciphertextLength,
+            byte *plaintextPtr,
+            byte *tagPtr,
+            nint tagLength);
 
         [DllImport(Libraries.AppleCryptoNative)]
         private static unsafe extern int AppleCryptoNative_AesGcmEncrypt(

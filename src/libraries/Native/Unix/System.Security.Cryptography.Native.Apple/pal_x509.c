@@ -50,7 +50,7 @@ AppleCryptoNative_X509GetPublicKey(SecCertificateRef cert, SecKeyRef* pPublicKey
         *pPublicKeyOut = SecCertificateCopyKey(cert);
         return 1;
     }
-    else
+    else if (__builtin_available(macOS 10.3, iOS 10.3, tvOS 10.3, *))
     {
 #if defined(TARGET_OSX)
         *pOSStatusOut = SecCertificateCopyPublicKey(cert, pPublicKeyOut);
@@ -59,6 +59,10 @@ AppleCryptoNative_X509GetPublicKey(SecCertificateRef cert, SecKeyRef* pPublicKey
         *pPublicKeyOut = SecCertificateCopyPublicKey(cert);
         return 1;
 #endif
+    }
+    else
+    {
+        return kErrorBadInput;
     }
 }
 

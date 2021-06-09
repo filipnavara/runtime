@@ -75,6 +75,14 @@ PALEXPORT int32_t CryptoNative_EvpMdSize(const EVP_MD* md);
 
 /*
 Function:
+EvpMd4
+
+Direct shim to EVP_md4.
+*/
+PALEXPORT const EVP_MD* CryptoNative_EvpMd4(void);
+
+/*
+Function:
 EvpMd5
 
 Direct shim to EVP_md5.

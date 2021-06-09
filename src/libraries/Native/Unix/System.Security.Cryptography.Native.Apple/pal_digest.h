@@ -12,6 +12,7 @@
 enum
 {
     PAL_Unknown = 0,
+    PAL_MD4,
     PAL_MD5,
     PAL_SHA1,
     PAL_SHA256,

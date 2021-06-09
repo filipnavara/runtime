@@ -139,6 +139,7 @@ static const Entry s_cryptoNative[] =
     DllImportEntry(CryptoNative_EvpDigestOneShot)
     DllImportEntry(CryptoNative_EvpDigestReset)
     DllImportEntry(CryptoNative_EvpDigestUpdate)
+    DllImportEntry(CryptoNative_EvpMd4)
     DllImportEntry(CryptoNative_EvpMd5)
     DllImportEntry(CryptoNative_EvpMdCtxCreate)
     DllImportEntry(CryptoNative_EvpMdCtxDestroy)

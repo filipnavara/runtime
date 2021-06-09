@@ -606,6 +606,61 @@ namespace System.Security.Cryptography.Algorithms.Tests
             }
         }
 
+        [Fact]
+        public static void MD4DigestAlgorithm()
+        {
+            using (IncrementalHash incremental = IncrementalHash.CreateHash(new HashAlgorithmName("MD4")))
+            {
+                byte[] comparison = "31d6cfe0d16ae931b73c59d7e0c089c0".HexToByteArray(); // MD4 of empty array
+
+                VerifyBounds(
+                    comparison,
+                    incremental,
+                    inc => inc.GetHashAndReset(),
+                    (inc, dest) => inc.GetHashAndReset(dest),
+                    (IncrementalHash inc, Span<byte> dest, out int bytesWritten) =>
+                        inc.TryGetHashAndReset(dest, out bytesWritten));
+            }
+        }
+
+        [Fact]
+        public static void MD4HmacAlgorithm()
+        {
+            Assert.ThrowsAny<CryptographicException>(
+                () => IncrementalHash.CreateHMAC(new HashAlgorithmName("MD4"), Array.Empty<byte>()));
+        }
+
+
+        [Fact]
+        public static void VerifyMD4HMacUnsupported()
+        {
+            AssertExtensions.Throws<ArgumentException>("hashAlgorithm", () => IncrementalHash.CreateHash(new HashAlgorithmName(null)));
+            AssertExtensions.Throws<ArgumentException>("hashAlgorithm", () => IncrementalHash.CreateHash(new HashAlgorithmName("")));
+
+            if (PlatformDetection.IsNotBrowser)
+            {
+                // HMAC is not supported on Browser
+                AssertExtensions.Throws<ArgumentException>("hashAlgorithm", () => IncrementalHash.CreateHMAC(new HashAlgorithmName(null), new byte[1]));
+                AssertExtensions.Throws<ArgumentException>("hashAlgorithm", () => IncrementalHash.CreateHMAC(new HashAlgorithmName(""), new byte[1]));
+
+                AssertExtensions.Throws<ArgumentNullException>("key", () => IncrementalHash.CreateHMAC(HashAlgorithmName.SHA512, null));
+            }
+
+            using (IncrementalHash incrementalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA512))
+            {
+                AssertExtensions.Throws<ArgumentNullException>("data", () => incrementalHash.AppendData(null));
+                AssertExtensions.Throws<ArgumentNullException>("data", () => incrementalHash.AppendData(null, 0, 0));
+
+                AssertExtensions.Throws<ArgumentOutOfRangeException>("offset", () => incrementalHash.AppendData(new byte[1], -1, 1));
+
+                AssertExtensions.Throws<ArgumentOutOfRangeException>("count", () => incrementalHash.AppendData(new byte[1], 0, -1));
+                AssertExtensions.Throws<ArgumentOutOfRangeException>("count", () => incrementalHash.AppendData(new byte[1], 0, 2));
+
+                Assert.Throws<ArgumentException>(() => incrementalHash.AppendData(new byte[2], 1, 2));
+            }
+        }
+
+
         private static void VerifyGetCurrentHash(IncrementalHash single, IncrementalHash accumulated)
         {
             Span<byte> buf = stackalloc byte[2048];

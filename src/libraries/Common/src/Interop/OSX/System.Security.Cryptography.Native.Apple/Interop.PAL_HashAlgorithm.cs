@@ -8,6 +8,7 @@ internal static partial class Interop
         internal enum PAL_HashAlgorithm
         {
             Unknown = 0,
+            Md4,
             Md5,
             Sha1,
             Sha256,

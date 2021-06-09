@@ -19,7 +19,7 @@ namespace Internal.Cryptography
 
         internal static HashProvider CreateMacProvider(string hashAlgorithmId, ReadOnlySpan<byte> key)
         {
-            IntPtr evpType = Interop.Crypto.HashAlgorithmToEvp(hashAlgorithmId);
+            IntPtr evpType = Interop.Crypto.HashAlgorithmToEvp(hashAlgorithmId, isHmac: true);
             return new HmacHashProvider(evpType, key);
         }
 

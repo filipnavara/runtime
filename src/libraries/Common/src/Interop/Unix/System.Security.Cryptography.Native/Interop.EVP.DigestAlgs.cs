@@ -9,11 +9,18 @@ internal static partial class Interop
 {
     internal static partial class Crypto
     {
+        private static volatile IntPtr s_evpMd4;
         private static volatile IntPtr s_evpMd5;
         private static volatile IntPtr s_evpSha1;
         private static volatile IntPtr s_evpSha256;
         private static volatile IntPtr s_evpSha384;
         private static volatile IntPtr s_evpSha512;
+
+        [DllImport(Libraries.CryptoNative)]
+        private static extern IntPtr CryptoNative_EvpMd4();
+
+        internal static IntPtr EvpMd4() =>
+            s_evpMd4 != IntPtr.Zero ? s_evpMd4 : (s_evpMd4 = CryptoNative_EvpMd4());
 
         [DllImport(Libraries.CryptoNative)]
         private static extern IntPtr CryptoNative_EvpMd5();
@@ -45,13 +52,14 @@ internal static partial class Interop
         internal static IntPtr EvpSha512() =>
             s_evpSha512 != IntPtr.Zero ? s_evpSha512 : (s_evpSha512 = CryptoNative_EvpSha512());
 
-        internal static IntPtr HashAlgorithmToEvp(string hashAlgorithmId) => hashAlgorithmId switch
+        internal static IntPtr HashAlgorithmToEvp(string hashAlgorithmId, bool isHmac = false) => hashAlgorithmId switch
         {
             nameof(HashAlgorithmName.SHA1) => EvpSha1(),
             nameof(HashAlgorithmName.SHA256) => EvpSha256(),
             nameof(HashAlgorithmName.SHA384) => EvpSha384(),
             nameof(HashAlgorithmName.SHA512) => EvpSha512(),
             nameof(HashAlgorithmName.MD5) => EvpMd5(),
+            ("MD4") when (!isHmac) => EvpMd4(),
             _ => throw new CryptographicException(SR.Format(SR.Cryptography_UnknownHashAlgorithm, hashAlgorithmId))
         };
     }

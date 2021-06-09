@@ -18,11 +18,12 @@ namespace Internal.Cryptography
 
         public static HashProvider CreateMacProvider(string hashAlgorithmId, ReadOnlySpan<byte> key)
         {
-            Interop.AppleCrypto.PAL_HashAlgorithm algorithm = HashAlgorithmToPal(hashAlgorithmId);
+            Interop.AppleCrypto.PAL_HashAlgorithm algorithm = HashAlgorithmToPal(hashAlgorithmId, isHmac: true);
             return new AppleHmacProvider(algorithm, key);
         }
 
-        private static Interop.AppleCrypto.PAL_HashAlgorithm HashAlgorithmToPal(string hashAlgorithmId) => hashAlgorithmId switch {
+        private static Interop.AppleCrypto.PAL_HashAlgorithm HashAlgorithmToPal(string hashAlgorithmId, bool isHmac = false) => hashAlgorithmId switch {
+            ("MD4") when (!isHmac) => Interop.AppleCrypto.PAL_HashAlgorithm.Md4,
             HashAlgorithmNames.MD5 => Interop.AppleCrypto.PAL_HashAlgorithm.Md5,
             HashAlgorithmNames.SHA1 => Interop.AppleCrypto.PAL_HashAlgorithm.Sha1,
             HashAlgorithmNames.SHA256 => Interop.AppleCrypto.PAL_HashAlgorithm.Sha256,

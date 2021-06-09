@@ -14,6 +14,7 @@ struct digest_ctx_st
     // but it's also handy for remembering how big the final buffer is.
     int32_t cbDigest;
     union {
+        CC_MD4_CTX md4;
         CC_MD5_CTX md5;
         CC_SHA1_CTX sha1;
         CC_SHA256_CTX sha256;
@@ -43,6 +44,13 @@ DigestCtx* AppleCryptoNative_DigestCreate(PAL_HashAlgorithm algorithm, int32_t* 
 
     switch (algorithm)
     {
+        case PAL_MD4:
+            *pcbDigest = CC_MD4_DIGEST_LENGTH;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            CC_MD4_Init(&digestCtx->d.md4);
+#pragma clang diagnostic pop
+            break;
         case PAL_MD5:
             *pcbDigest = CC_MD5_DIGEST_LENGTH;
 #pragma clang diagnostic push
@@ -87,6 +95,11 @@ int32_t AppleCryptoNative_DigestUpdate(DigestCtx* ctx, uint8_t* pBuf, int32_t cb
 
     switch (ctx->algorithm)
     {
+        case PAL_MD4:
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            return CC_MD4_Update(&ctx->d.md4, pBuf, bufSize);
+#pragma clang diagnostic pop
         case PAL_MD5:
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -114,6 +127,12 @@ int32_t AppleCryptoNative_DigestFinal(DigestCtx* ctx, uint8_t* pOutput, int32_t 
 
     switch (ctx->algorithm)
     {
+        case PAL_MD4:
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            ret = CC_MD4_Final(pOutput, &ctx->d.md4);
+#pragma clang diagnostic pop
+            break;
         case PAL_MD5:
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -193,6 +212,17 @@ int32_t AppleCryptoNative_DigestOneShot(PAL_HashAlgorithm algorithm, uint8_t* pB
             }
             CC_SHA512(pBuf, cbBuf, pOutput);
             return 1;
+        case PAL_MD4:
+            *pcbDigest = CC_MD4_DIGEST_LENGTH;
+            if (cbOutput < CC_MD4_DIGEST_LENGTH)
+            {
+                return -1;
+            }
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            CC_MD4(pBuf, cbBuf, pOutput);
+#pragma clang diagnostic pop
+            return 1;
         case PAL_MD5:
             *pcbDigest = CC_MD5_DIGEST_LENGTH;
             if (cbOutput < CC_MD5_DIGEST_LENGTH)
@@ -216,6 +246,11 @@ int32_t AppleCryptoNative_DigestReset(DigestCtx* ctx)
 
     switch (ctx->algorithm)
     {
+        case PAL_MD4:
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            return CC_MD4_Init(&ctx->d.md4);
+#pragma clang diagnostic pop
         case PAL_MD5:
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"

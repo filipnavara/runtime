@@ -9,6 +9,7 @@
 
 PALEXPORT int32_t CryptoNative_EvpMdSize(intptr_t md);
 PALEXPORT int32_t CryptoNative_GetMaxMdSize(void);
+PALEXPORT intptr_t CryptoNative_EvpMd4(void);
 PALEXPORT intptr_t CryptoNative_EvpMd5(void);
 PALEXPORT intptr_t CryptoNative_EvpSha1(void);
 PALEXPORT intptr_t CryptoNative_EvpSha256(void);

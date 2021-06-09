@@ -314,6 +314,7 @@ const EVP_CIPHER* EVP_chacha20_poly1305(void);
     REQUIRED_FUNCTION(EVP_DigestInit_ex) \
     REQUIRED_FUNCTION(EVP_DigestUpdate) \
     REQUIRED_FUNCTION(EVP_get_digestbyname) \
+    REQUIRED_FUNCTION(EVP_md4) \
     REQUIRED_FUNCTION(EVP_md5) \
     REQUIRED_FUNCTION(EVP_MD_CTX_copy_ex) \
     RENAMED_FUNCTION(EVP_MD_CTX_free, EVP_MD_CTX_destroy) \
@@ -750,6 +751,7 @@ FOR_ALL_OPENSSL_FUNCTIONS
 #define EVP_DigestInit_ex EVP_DigestInit_ex_ptr
 #define EVP_DigestUpdate EVP_DigestUpdate_ptr
 #define EVP_get_digestbyname EVP_get_digestbyname_ptr
+#define EVP_md4 EVP_md4_ptr
 #define EVP_md5 EVP_md5_ptr
 #define EVP_MD_CTX_copy_ex EVP_MD_CTX_copy_ex_ptr
 #define EVP_MD_CTX_free EVP_MD_CTX_free_ptr

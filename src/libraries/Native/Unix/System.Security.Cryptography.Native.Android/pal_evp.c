@@ -9,6 +9,7 @@ intptr_t CryptoNative_EvpSha1()   { return 102; }
 intptr_t CryptoNative_EvpSha256() { return 103; }
 intptr_t CryptoNative_EvpSha384() { return 104; }
 intptr_t CryptoNative_EvpSha512() { return 105; }
+intptr_t CryptoNative_EvpMd4()    { return 106; }
 
 int32_t CryptoNative_EvpMdSize(intptr_t md)
 {
@@ -17,6 +18,7 @@ int32_t CryptoNative_EvpMdSize(intptr_t md)
     if (md == CryptoNative_EvpSha384()) return 48;
     if (md == CryptoNative_EvpSha512()) return 64;
     if (md == CryptoNative_EvpMd5()) return 16;
+    if (md == CryptoNative_EvpMd4()) return 16;
     assert(0 && "unexpected type");
     return -1;
 }
@@ -39,6 +41,8 @@ static jobject GetMessageDigestInstance(JNIEnv* env, intptr_t type)
         mdName = make_java_string(env, "SHA-512");
     else if (type == CryptoNative_EvpMd5())
         mdName = make_java_string(env, "MD5");
+    else if (type == CryptoNative_EvpMd4())
+        mdName = make_java_string(env, "MD4");
     else
         return NULL;
 

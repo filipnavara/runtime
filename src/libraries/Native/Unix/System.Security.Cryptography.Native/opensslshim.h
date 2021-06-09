@@ -357,6 +357,7 @@ const EVP_CIPHER* EVP_chacha20_poly1305(void);
     REQUIRED_FUNCTION(EVP_PKEY_verify_init) \
     REQUIRED_FUNCTION(EVP_rc2_cbc) \
     REQUIRED_FUNCTION(EVP_rc2_ecb) \
+    REQUIRED_FUNCTION(EVP_rc4) \
     REQUIRED_FUNCTION(EVP_sha1) \
     REQUIRED_FUNCTION(EVP_sha256) \
     REQUIRED_FUNCTION(EVP_sha384) \
@@ -794,6 +795,7 @@ FOR_ALL_OPENSSL_FUNCTIONS
 #define EVP_PKEY_verify EVP_PKEY_verify_ptr
 #define EVP_rc2_cbc EVP_rc2_cbc_ptr
 #define EVP_rc2_ecb EVP_rc2_ecb_ptr
+#define EVP_rc4 EVP_rc4_ptr
 #define EVP_sha1 EVP_sha1_ptr
 #define EVP_sha256 EVP_sha256_ptr
 #define EVP_sha384 EVP_sha384_ptr

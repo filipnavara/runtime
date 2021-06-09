@@ -328,6 +328,14 @@ PALEXPORT const EVP_CIPHER* CryptoNative_EvpRC2Cbc(void);
 
 /*
 Function:
+EvpRC4
+
+Direct shim to EVP_rc4.
+*/
+PALEXPORT const EVP_CIPHER* CryptoNative_EvpRC4(void);
+
+/*
+Function:
 EvpChaCha20Poly1305
 
 Direct shim to EVP_chacha20_poly1305. Returns NULL if not available

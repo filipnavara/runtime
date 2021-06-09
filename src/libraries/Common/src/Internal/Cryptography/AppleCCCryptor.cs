@@ -168,6 +168,11 @@ namespace Internal.Cryptography
 
         private Interop.AppleCrypto.PAL_ChainingMode GetPalChainMode(Interop.AppleCrypto.PAL_SymmetricAlgorithm algorithm, CipherMode cipherMode, int feedbackSizeInBytes)
         {
+            if (algorithm == Interop.AppleCrypto.PAL_SymmetricAlgorithm.RC4)
+            {
+                return Interop.AppleCrypto.PAL_ChainingMode.RC4;
+            }
+
             switch (cipherMode)
             {
                 case CipherMode.CBC:

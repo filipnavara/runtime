@@ -108,6 +108,8 @@
              Link="Internal\Cryptography\BasicSymmetricCipher.cs" />
     <Compile Include="$(CommonPath)Internal\Cryptography\Helpers.cs"
              Link="Internal\Cryptography\Helpers.cs" />
+    <Compile Include="$(CommonPath)Internal\Cryptography\Helpers.Symmetric.cs"
+             Link="Common\Internal\Cryptography\Helpers.Symmetric.cs" />
     <Compile Include="$(CommonPath)Internal\Cryptography\PemKeyImportHelpers.cs"
              Link="Common\Internal\Cryptography\PemKeyImportHelpers.cs" />
     <Compile Include="$(CommonPath)Internal\Cryptography\UniversalCryptoTransform.cs"
@@ -449,6 +451,8 @@
              Link="Common\System\Security\Cryptography\RSACng.SignVerify.cs" />
   </ItemGroup>
   <ItemGroup Condition=" '$(TargetsUnix)' == 'true' and '$(UseAppleCrypto)' != 'true'">
+    <Compile Include="$(CommonPath)Internal\Cryptography\OpenSslCipher.cs"
+             Link="Common\Internal\Cryptography\OpenSslCipher.cs" />
     <Compile Include="$(CommonPath)Interop\Unix\System.Security.Cryptography.Native\Interop.ASN1.cs"
              Link="Common\Interop\Unix\System.Security.Cryptography.Native\Interop.ASN1.cs" />
     <Compile Include="$(CommonPath)Interop\Unix\System.Security.Cryptography.Native\Interop.ASN1.Nid.cs"
@@ -473,13 +477,14 @@
              Link="Common\Microsoft\Win32\SafeHandles\SafeEvpPKeyHandle.Unix.cs" />
     <Compile Include="Internal\Cryptography\AesImplementation.Unix.cs" />
     <Compile Include="Internal\Cryptography\HashProviderDispenser.Unix.cs" />
-    <Compile Include="Internal\Cryptography\OpenSslCipher.cs" />
     <Compile Include="Internal\Cryptography\RandomNumberGeneratorImplementation.Unix.cs" />
     <Compile Include="Internal\Cryptography\TripleDesImplementation.Unix.cs" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseAppleCrypto)' == 'true'">
     <Compile Include="$(CommonPath)Internal\Cryptography\AsymmetricAlgorithmHelpers.Ansi.cs"
              Link="Common\Internal\Cryptography\AsymmetricAlgorithmHelpers.Ansi.cs" />
+    <Compile Include="$(CommonPath)Internal\Cryptography\AppleCCCryptor.cs"
+             Link="Common\Internal\Cryptography\AppleCCCryptor.cs" />
     <Compile Include="$(CommonPath)Interop\OSX\Interop.CoreFoundation.cs"
              Link="Common\Interop\OSX\Interop.CoreFoundation.cs" />
     <Compile Include="$(CommonPath)Interop\OSX\Interop.CoreFoundation.CFArray.cs"
@@ -533,7 +538,6 @@
     <Compile Include="$(CommonPath)System\Security\Cryptography\SecKeyPair.cs"
              Link="Common\System\Security\Cryptography\SecKeyPair.cs" />
     <Compile Include="Internal\Cryptography\AesImplementation.OSX.cs" />
-    <Compile Include="Internal\Cryptography\AppleCCCryptor.cs" />
     <Compile Include="Internal\Cryptography\DesImplementation.OSX.cs" />
     <Compile Include="Internal\Cryptography\HashProviderDispenser.OSX.cs" />
     <Compile Include="Internal\Cryptography\RandomNumberGeneratorImplementation.OSX.cs" />

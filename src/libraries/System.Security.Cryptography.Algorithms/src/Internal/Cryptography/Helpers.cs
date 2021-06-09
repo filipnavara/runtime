@@ -11,26 +11,6 @@ namespace Internal.Cryptography
 {
     internal static partial class Helpers
     {
-        public static bool UsesIv(this CipherMode cipherMode)
-        {
-            return cipherMode != CipherMode.ECB;
-        }
-
-        public static byte[]? GetCipherIv(this CipherMode cipherMode, byte[]? iv)
-        {
-            if (cipherMode.UsesIv())
-            {
-                if (iv == null)
-                {
-                    throw new CryptographicException(SR.Cryptography_MissingIV);
-                }
-
-                return iv;
-            }
-
-            return null;
-        }
-
         public static byte[] FixupKeyParity(this byte[] key)
         {
             byte[] oddParityKey = new byte[key.Length];

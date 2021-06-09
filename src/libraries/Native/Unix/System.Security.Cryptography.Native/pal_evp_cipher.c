@@ -357,6 +357,11 @@ const EVP_CIPHER* CryptoNative_EvpRC2Cbc()
     return EVP_rc2_cbc();
 }
 
+const EVP_CIPHER* CryptoNative_EvpRC4()
+{
+    return EVP_rc4();
+}
+
 const EVP_CIPHER* CryptoNative_EvpChaCha20Poly1305()
 {
 #if HAVE_OPENSSL_CHACHA20POLY1305

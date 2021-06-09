@@ -61,4 +61,5 @@ PALEXPORT CipherInfo* AndroidCryptoNative_Des3Cfb64(void);
 PALEXPORT CipherInfo* AndroidCryptoNative_DesEcb(void);
 PALEXPORT CipherInfo* AndroidCryptoNative_DesCfb8(void);
 PALEXPORT CipherInfo* AndroidCryptoNative_DesCbc(void);
+PALEXPORT CipherInfo* AndroidCryptoNative_Rc4(void);
 PALEXPORT CipherInfo* AndroidCryptoNative_ChaCha20Poly1305(void);

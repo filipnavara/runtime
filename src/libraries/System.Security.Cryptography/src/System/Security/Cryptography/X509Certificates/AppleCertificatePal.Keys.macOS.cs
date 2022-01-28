@@ -9,6 +9,7 @@ using System.Security.Cryptography.Apple;
 using System.Text;
 using System.Threading;
 using Microsoft.Win32.SafeHandles;
+using Internal.Cryptography;
 
 namespace System.Security.Cryptography.X509Certificates
 {
@@ -57,7 +58,7 @@ namespace System.Security.Cryptography.X509Certificates
 
             if (typedKey != null)
             {
-                return CopyWithPrivateKey(typedKey.GetKeys().PrivateKey);
+                return CopyWithPrivateEccKey(typedKey.GetKeys().PrivateKey);
             }
 
             byte[] ecPrivateKey = privateKey.ExportECPrivateKey();
@@ -75,7 +76,7 @@ namespace System.Security.Cryptography.X509Certificates
 
             if (typedKey != null)
             {
-                return CopyWithPrivateKey(typedKey.GetKeys().PrivateKey);
+                return CopyWithPrivateEccKey(typedKey.GetKeys().PrivateKey);
             }
 
             byte[] ecPrivateKey = privateKey.ExportECPrivateKey();
@@ -103,6 +104,54 @@ namespace System.Security.Cryptography.X509Certificates
             {
                 return CopyWithPrivateKey(privateSecKey);
             }
+        }
+
+        private ICertificatePal CopyWithPrivateEccKey(SafeSecKeyRefHandle? privateKey)
+        {
+            if (privateKey == null)
+            {
+                // Both Windows and Linux/OpenSSL are unaware if they bound a public or private key.
+                // Here, we do know.  So throw if we can't do what they asked.
+                throw new CryptographicException(SR.Cryptography_CSP_NoPrivateKey);
+            }
+
+            // If we succeed in getting the external representation it means it's an iOS-style
+            // key and we need to convert it to CSSM ephemeral key first.
+            if (Interop.AppleCrypto.TrySecKeyCopyExternalRepresentation(privateKey, out byte[] keyBlob))
+            {
+                using (PinAndClear.Track(keyBlob))
+                {
+                    AsymmetricAlgorithmHelpers.DecodeFromUncompressedAnsiX963Key(
+                        keyBlob,
+                        true,
+                        out ECParameters ecParameters);
+
+                    using (PinAndClear.Track(ecParameters.D!))
+                    {
+                        switch (Interop.AppleCrypto.EccGetKeySizeInBits(privateKey))
+                        {
+                            case 256: ecParameters.Curve = ECCurve.NamedCurves.nistP256; break;
+                            case 384: ecParameters.Curve = ECCurve.NamedCurves.nistP384; break;
+                            case 521: ecParameters.Curve = ECCurve.NamedCurves.nistP521; break;
+                            default:
+                                Debug.Fail("Unsupported curve");
+                                throw new CryptographicException();
+                        }
+
+                        AsnWriter writer = EccKeyFormatHelper.WriteECPrivateKey(ecParameters);
+                        byte[] ecPrivateKey = writer.Encode();
+
+                        using (PinAndClear.Track(ecPrivateKey))
+                        using (SafeSecKeyRefHandle privateSecKey = Interop.AppleCrypto.ImportEphemeralKey(ecPrivateKey, true))
+                        {
+                            return CopyWithPrivateKey(privateSecKey);
+                        }
+                    }
+                }
+            }
+
+            // The key is likely legacy CSSM key so we can take the common code path.
+            return CopyWithPrivateKey(privateKey);
         }
 
         private ICertificatePal CopyWithPrivateKey(SafeSecKeyRefHandle? privateKey)

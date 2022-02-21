@@ -618,21 +618,35 @@ namespace System.Net.Security
         internal static int MakeSignature(SafeDeleteContext securityContext, byte[] buffer, int offset, int count, [AllowNull] ref byte[] output)
         {
             SafeDeleteNegoContext gssContext = (SafeDeleteNegoContext)securityContext;
-            byte[] tempOutput = GssWrap(gssContext.GssContext, false, new ReadOnlySpan<byte>(buffer, offset, count));
-            // Create space for prefixing with the length
-            const int prefixLength = 4;
-            output = new byte[tempOutput.Length + prefixLength];
-            Array.Copy(tempOutput, 0, output, prefixLength, tempOutput.Length);
-            int resultSize = tempOutput.Length;
-            unchecked
-            {
-                output[0] = (byte)((resultSize) & 0xFF);
-                output[1] = (byte)(((resultSize) >> 8) & 0xFF);
-                output[2] = (byte)(((resultSize) >> 16) & 0xFF);
-                output[3] = (byte)(((resultSize) >> 24) & 0xFF);
-            }
+            ReadOnlySpan<byte> message = new ReadOnlySpan<byte>(buffer, offset, count);
 
-            return resultSize + 4;
+            Interop.NetSecurityNative.Status minorStatus;
+            Interop.NetSecurityNative.Status status = Interop.NetSecurityNative.WrapIovLength(
+                out minorStatus, gssContext.GssContext, false, message, out int headerSize, out int paddingSize, out int trailerSize);
+
+            if (status == Interop.NetSecurityNative.Status.GSS_S_UNAVAILABLE) // && !isNtlm
+            {
+                output = GssWrap(gssContext.GssContext, false, message);
+                return output.Length;
+            }
+            else
+            {
+                output = new byte[headerSize + trailerSize + message.Length + paddingSize];
+                message.CopyTo(output.AsSpan(headerSize + trailerSize, message.Length));
+                status = Interop.NetSecurityNative.WrapIov(
+                    out minorStatus, gssContext.GssContext, false,
+                    output.AsSpan(headerSize + trailerSize, message.Length),
+                    output.AsSpan(0, headerSize),
+                    output.AsSpan(headerSize + trailerSize + message.Length),
+                    output.AsSpan(headerSize, trailerSize));
+
+                if (status != Interop.NetSecurityNative.Status.GSS_S_COMPLETE)
+                {
+                    throw new Interop.NetSecurityNative.GssApiException(status, minorStatus);
+                }
+
+                return output.Length;
+            }
         }
     }
 }

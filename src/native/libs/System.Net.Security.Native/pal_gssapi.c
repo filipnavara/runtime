@@ -77,6 +77,8 @@ static gss_OID_desc gss_mech_ntlm_OID_desc = {.length = STRING_LENGTH(gss_ntlm_o
     PER_FUNCTION_BLOCK(gss_release_oid_set) \
     PER_FUNCTION_BLOCK(gss_unwrap) \
     PER_FUNCTION_BLOCK(gss_wrap) \
+    PER_FUNCTION_BLOCK(gss_wrap_iov) \
+    PER_FUNCTION_BLOCK(gss_wrap_iov_length) \
     PER_FUNCTION_BLOCK(GSS_C_NT_USER_NAME) \
     PER_FUNCTION_BLOCK(GSS_C_NT_HOSTBASED_SERVICE)
 
@@ -115,6 +117,8 @@ static void* volatile s_gssLib = NULL;
 #define gss_release_oid_set(...)            gss_release_oid_set_ptr(__VA_ARGS__)
 #define gss_unwrap(...)                     gss_unwrap_ptr(__VA_ARGS__)
 #define gss_wrap(...)                       gss_wrap_ptr(__VA_ARGS__)
+#define gss_wrap_iov(...)                   gss_wrap_iov_ptr(__VA_ARGS__)
+#define gss_wrap_iov_length(...)            gss_wrap_iov_length_ptr(__VA_ARGS__)
 
 #if HAVE_GSS_KRB5_CRED_NO_CI_FLAGS_X
 #define gss_set_cred_option(...)            gss_set_cred_option_ptr(__VA_ARGS__)
@@ -231,9 +235,9 @@ NetSecurityNative_DisplayMinorStatus(uint32_t* minorStatus, uint32_t statusValue
 }
 
 uint32_t
-NetSecurityNative_DisplayMajorStatus(uint32_t* minorStatus, uint32_t statusValue, PAL_GssBuffer* outBuffer)
+NetSecurityNative_DisplayMajorStatus(uint32_t* majorStatus, uint32_t statusValue, PAL_GssBuffer* outBuffer)
 {
-    return NetSecurityNative_DisplayStatus(minorStatus, statusValue, GSS_C_GSS_CODE, outBuffer);
+    return NetSecurityNative_DisplayStatus(majorStatus, statusValue, GSS_C_GSS_CODE, outBuffer);
 }
 
 uint32_t
@@ -541,6 +545,86 @@ uint32_t NetSecurityNative_Wrap(uint32_t* minorStatus,
 
     NetSecurityNative_MoveBuffer(&gssBuffer, outBuffer);
     return majorStatus;
+}
+
+uint32_t NetSecurityNative_WrapIovLength(uint32_t* minorStatus,
+                                         GssCtxId* contextHandle,
+                                         int32_t isEncrypt,
+                                         uint8_t* message,
+                                         int32_t messageSize,
+                                         int32_t *headerSize,
+                                         int32_t *paddingSize,
+                                         int32_t *trailerSize)
+{
+    assert(minorStatus != NULL);
+    assert(contextHandle != NULL);
+    assert(isEncrypt == 1 || isEncrypt == 0);
+    assert(message != NULL);
+    assert(messageSize >= 0);
+    assert(headerSize != NULL);
+    assert(paddingSize != NULL);
+    assert(trailerSize != NULL);
+    
+    gss_iov_buffer_desc iov[4];
+    uint32_t majorStatus;
+
+    iov[0].type = GSS_IOV_BUFFER_TYPE_HEADER;
+    iov[1].type = GSS_IOV_BUFFER_TYPE_DATA;
+    iov[1].buffer.value = message;
+    iov[1].buffer.length = (size_t)messageSize;
+    iov[2].type = GSS_IOV_BUFFER_TYPE_PADDING;
+    iov[3].type = GSS_IOV_BUFFER_TYPE_TRAILER;
+
+    majorStatus = gss_wrap_iov_length(minorStatus, contextHandle, isEncrypt, GSS_C_QOP_DEFAULT, NULL, iov, 4);
+
+    if (!GSS_ERROR(majorStatus))
+    {
+        *headerSize = (int32_t)iov[0].buffer.length;
+        *paddingSize = (int32_t)iov[2].buffer.length;
+        *trailerSize = (int32_t)iov[3].buffer.length;
+    }
+
+    return majorStatus;
+}
+
+uint32_t NetSecurityNative_WrapIov(uint32_t* minorStatus,
+                                   GssCtxId* contextHandle,
+                                   int32_t isEncrypt,
+                                   uint8_t* message,
+                                   int32_t messageSize,
+                                   uint8_t* headerBytes,
+                                   int32_t headerSize,
+                                   uint8_t* paddingBytes,
+                                   int32_t paddingSize,
+                                   uint8_t* trailerBytes,
+                                   int32_t trailerSize)
+{
+    assert(minorStatus != NULL);
+    assert(contextHandle != NULL);
+    assert(isEncrypt == 1 || isEncrypt == 0);
+    assert(message != NULL);
+    assert(messageSize >= 0);
+    assert(headerBytes != NULL || headerSize == 0);
+    assert(paddingBytes != NULL || paddingSize == 0);
+    assert(trailerBytes != NULL || trailerSize == 0);
+    
+    gss_iov_buffer_desc iov[4];
+    uint32_t majorStatus;
+
+    iov[0].type = GSS_IOV_BUFFER_TYPE_HEADER;
+    iov[0].buffer.value = headerBytes;
+    iov[0].buffer.length = (size_t)headerSize;
+    iov[1].type = GSS_IOV_BUFFER_TYPE_DATA;
+    iov[1].buffer.value = message;
+    iov[1].buffer.length = (size_t)messageSize;
+    iov[2].type = GSS_IOV_BUFFER_TYPE_PADDING;
+    iov[2].buffer.value = paddingBytes;
+    iov[2].buffer.length = (size_t)paddingSize;
+    iov[3].type = GSS_IOV_BUFFER_TYPE_TRAILER;
+    iov[3].buffer.value = trailerBytes;
+    iov[3].buffer.length = (size_t)trailerSize;
+
+    return gss_wrap_iov(minorStatus, contextHandle, isEncrypt, GSS_C_QOP_DEFAULT, NULL, iov, 4);
 }
 
 uint32_t NetSecurityNative_Unwrap(uint32_t* minorStatus,

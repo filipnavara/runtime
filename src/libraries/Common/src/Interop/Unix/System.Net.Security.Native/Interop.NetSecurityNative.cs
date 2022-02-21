@@ -133,6 +133,31 @@ internal static partial class Interop
             int count,
             ref GssBuffer outBuffer);
 
+        [GeneratedDllImport(Interop.Libraries.NetSecurityNative, EntryPoint="NetSecurityNative_WrapIovLength")]
+        private static unsafe partial Status WrapIovLength(
+            out Status minorStatus,
+            SafeGssContextHandle? contextHandle,
+            bool isEncrypt,
+            byte* inputBytes,
+            int count,
+            int* headerSize,
+            int* paddingSize,
+            int* trailerSize);
+
+        [GeneratedDllImport(Interop.Libraries.NetSecurityNative, EntryPoint="NetSecurityNative_WrapIov")]
+        private static unsafe partial Status WrapIov(
+            out Status minorStatus,
+            SafeGssContextHandle? contextHandle,
+            bool isEncrypt,
+            byte* inputBytes,
+            int count,
+            byte* headerBytes,
+            int headerSize,
+            byte* paddingBytes,
+            int paddingSize,
+            byte* trailerBytes,
+            int trailerSize);
+
         [GeneratedDllImport(Interop.Libraries.NetSecurityNative, EntryPoint="NetSecurityNative_Unwrap")]
         private static partial Status Unwrap(
             out Status minorStatus,
@@ -152,6 +177,42 @@ internal static partial class Interop
             fixed (byte* inputBytesPtr = inputBytes)
             {
                 return Wrap(out minorStatus, contextHandle, isEncrypt, inputBytesPtr, inputBytes.Length, ref outBuffer);
+            }
+        }
+
+        internal static unsafe Status WrapIovLength(
+            out Status minorStatus,
+            SafeGssContextHandle? contextHandle,
+            bool isEncrypt,
+            ReadOnlySpan<byte> inputBytes,
+            out int headerSize,
+            out int paddingSize,
+            out int trailerSize)
+        {
+            fixed (byte* inputBytesPtr = inputBytes)
+            fixed (int* headerSizePtr = &headerSize)
+            fixed (int* paddingSizePtr = &paddingSize)
+            fixed (int* trailerSizePtr = &trailerSize)
+            {
+                return WrapIovLength(out minorStatus, contextHandle, isEncrypt, inputBytesPtr, inputBytes.Length, headerSizePtr, paddingSizePtr, trailerSizePtr);
+            }
+        }
+
+        internal static unsafe Status WrapIov(
+            out Status minorStatus,
+            SafeGssContextHandle? contextHandle,
+            bool isEncrypt,
+            Span<byte> message,
+            Span<byte> header,
+            Span<byte> padding,
+            Span<byte> trailer)
+        {
+            fixed (byte* messagePtr = message)
+            fixed (byte* headerPtr = header)
+            fixed (byte* paddingPtr = padding)
+            fixed (byte* trailerPtr = trailer)
+            {
+                return WrapIov(out minorStatus, contextHandle, isEncrypt, messagePtr, message.Length, headerPtr, header.Length, paddingPtr, padding.Length, trailerPtr, trailer.Length);
             }
         }
 

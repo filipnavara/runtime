@@ -68,7 +68,7 @@ NetSecurityNative_DisplayMinorStatus(uint32_t* minorStatus, uint32_t statusValue
 Shims the gss_display_status method for major status (status_type = GSS_C_GSS_CODE).
 */
 PALEXPORT uint32_t
-NetSecurityNative_DisplayMajorStatus(uint32_t* minorStatus, uint32_t statusValue, PAL_GssBuffer* outBuffer);
+NetSecurityNative_DisplayMajorStatus(uint32_t* majorStatus, uint32_t statusValue, PAL_GssBuffer* outBuffer);
 
 /*
 Shims the gss_import_name method with nametype = GSS_C_NT_USER_NAME.
@@ -147,7 +147,6 @@ PALEXPORT uint32_t NetSecurityNative_AcceptSecContext(uint32_t* minorStatus,
                                                       int32_t* isNtlmUsed);
 
 /*
-
 Shims the gss_delete_sec_context method.
 */
 PALEXPORT uint32_t NetSecurityNative_DeleteSecContext(uint32_t* minorStatus, GssCtxId** contextHandle);
@@ -161,6 +160,33 @@ PALEXPORT uint32_t NetSecurityNative_Wrap(uint32_t* minorStatus,
                                           uint8_t* inputBytes,
                                           int32_t count,
                                           PAL_GssBuffer* outBuffer);
+
+/*
+Shims the gss_wrap_iov_length method.
+*/
+PALEXPORT uint32_t NetSecurityNative_WrapIovLength(uint32_t* minorStatus,
+                                                   GssCtxId* contextHandle,
+                                                   int32_t isEncrypt,
+                                                   uint8_t* message,
+                                                   int32_t messageSize,
+                                                   int32_t *headerSize,
+                                                   int32_t *paddingSize,
+                                                   int32_t *trailerSize);
+
+/*
+Shims the gss_wrap_iov method.
+*/
+PALEXPORT uint32_t NetSecurityNative_WrapIov(uint32_t* minorStatus,
+                                             GssCtxId* contextHandle,
+                                             int32_t isEncrypt,
+                                             uint8_t* message,
+                                             int32_t messageSize,
+                                             uint8_t* headerBytes,
+                                             int32_t headerSize,
+                                             uint8_t* paddingBytes,
+                                             int32_t paddingSize,
+                                             uint8_t* trailerBytes,
+                                             int32_t trailerSize);
 
 /*
 Shims the gss_unwrap method.

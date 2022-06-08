@@ -91,7 +91,7 @@ namespace Microsoft.Win32.SafeHandles
         ///  returns the handle for the given credentials.
         ///  The method returns an invalid handle if the username is null or empty.
         /// </summary>
-        public static SafeGssCredHandle Create(string username, string password, bool isNtlmOnly)
+        public static SafeGssCredHandle Create(string username, string password, bool isNtlmOnly, out bool isNoCIFlagsUsed)
         {
             if (isNtlmOnly && !s_IsNtlmInstalled.Value)
             {
@@ -103,6 +103,7 @@ namespace Microsoft.Win32.SafeHandles
 
             if (string.IsNullOrEmpty(username))
             {
+                isNoCIFlagsUsed = false;
                 return new SafeGssCredHandle();
             }
 
@@ -113,11 +114,11 @@ namespace Microsoft.Win32.SafeHandles
                 Interop.NetSecurityNative.Status minorStatus;
                 if (string.IsNullOrEmpty(password))
                 {
-                    status = Interop.NetSecurityNative.InitiateCredSpNego(out minorStatus, userHandle, out retHandle);
+                    status = Interop.NetSecurityNative.InitiateCredSpNegoEx(out minorStatus, userHandle, out retHandle, out isNoCIFlagsUsed);
                 }
                 else
                 {
-                    status = Interop.NetSecurityNative.InitiateCredWithPassword(out minorStatus, isNtlmOnly, userHandle, password, Encoding.UTF8.GetByteCount(password), out retHandle);
+                    status = Interop.NetSecurityNative.InitiateCredWithPasswordEx(out minorStatus, isNtlmOnly, userHandle, password, Encoding.UTF8.GetByteCount(password), out retHandle, out isNoCIFlagsUsed);
                 }
 
                 if (status != Interop.NetSecurityNative.Status.GSS_S_COMPLETE)

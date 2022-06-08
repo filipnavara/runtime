@@ -17,6 +17,7 @@ namespace System.Net.Security
         private readonly bool _isNtlmOnly;
         private readonly string _userName;
         private readonly bool _isDefault;
+        private readonly bool _isNoCIFlagsUsed;
 
         public SafeGssCredHandle GssCredential
         {
@@ -37,6 +38,11 @@ namespace System.Net.Security
         public bool IsDefault
         {
             get { return _isDefault; }
+        }
+
+        public bool IsNoCIFlagsUsed
+        {
+            get { return _isNoCIFlagsUsed; }
         }
 
         public SafeFreeNegoCredentials(bool isNtlmOnly, string username, string password, string domain)
@@ -71,7 +77,7 @@ namespace System.Net.Security
             _isNtlmOnly = isNtlmOnly;
             _userName = username;
             _isDefault = string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password);
-            _credential = SafeGssCredHandle.Create(username, password, isNtlmOnly);
+            _credential = SafeGssCredHandle.Create(username, password, isNtlmOnly, out _isNoCIFlagsUsed);
             _credential.DangerousAddRef(ref ignore);
         }
 

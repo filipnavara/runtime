@@ -173,12 +173,14 @@ static void NetSecurityNative_MoveBuffer(gss_buffer_t gssBuffer, PAL_GssBuffer* 
 static uint32_t AcquireCredSpNego(uint32_t* minorStatus,
                                   GssName* desiredName,
                                   gss_cred_usage_t credUsage,
-                                  GssCredId** outputCredHandle)
+                                  GssCredId** outputCredHandle,
+                                  int32_t* isNoCIFlagsUsed)
 {
     assert(minorStatus != NULL);
     assert(desiredName != NULL);
     assert(outputCredHandle != NULL);
     assert(*outputCredHandle == NULL);
+    assert(isNoCIFlagsUsed != NULL);
 
 #if HAVE_GSS_SPNEGO_MECHANISM
     gss_OID_set_desc gss_mech_spnego_OID_set_desc = {.count = 1, .elements = GSS_SPNEGO_MECHANISM};
@@ -190,10 +192,17 @@ static uint32_t AcquireCredSpNego(uint32_t* minorStatus,
 
     // call gss_set_cred_option with GSS_KRB5_CRED_NO_CI_FLAGS_X to support Kerberos Sign Only option from *nix client against a windows server
 #if HAVE_GSS_KRB5_CRED_NO_CI_FLAGS_X
+    *isNoCIFlagsUsed = 0;
     if (majorStatus == GSS_S_COMPLETE)
     {
         GssBuffer emptyBuffer = GSS_C_EMPTY_BUFFER;
         majorStatus = gss_set_cred_option(minorStatus, outputCredHandle, GSS_KRB5_CRED_NO_CI_FLAGS_X, &emptyBuffer);
+        *isNoCIFlagsUsed = majorStatus == GSS_S_COMPLETE;
+        if (majorStatus == GSS_S_UNAVAILABLE)
+        {
+            majorStatus = GSS_S_COMPLETE;
+            *minorStatus = 0;
+        }
     }
 #endif
 
@@ -203,7 +212,14 @@ static uint32_t AcquireCredSpNego(uint32_t* minorStatus,
 uint32_t
 NetSecurityNative_InitiateCredSpNego(uint32_t* minorStatus, GssName* desiredName, GssCredId** outputCredHandle)
 {
-    return AcquireCredSpNego(minorStatus, desiredName, GSS_C_INITIATE, outputCredHandle);
+    int32_t isNoCIFlagsUsed;
+    return AcquireCredSpNego(minorStatus, desiredName, GSS_C_INITIATE, outputCredHandle, &isNoCIFlagsUsed);
+}
+
+uint32_t
+NetSecurityNative_InitiateCredSpNegoEx(uint32_t* minorStatus, GssName* desiredName, GssCredId** outputCredHandle, int32_t* isNoCIFlagsUsed)
+{
+    return AcquireCredSpNego(minorStatus, desiredName, GSS_C_INITIATE, outputCredHandle, isNoCIFlagsUsed);
 }
 
 uint32_t NetSecurityNative_DeleteSecContext(uint32_t* minorStatus, GssCtxId** contextHandle)
@@ -579,7 +595,8 @@ static uint32_t AcquireCredWithPassword(uint32_t* minorStatus,
                                         char* password,
                                         uint32_t passwdLen,
                                         gss_cred_usage_t credUsage,
-                                        GssCredId** outputCredHandle)
+                                        GssCredId** outputCredHandle,
+                                        int32_t* isNoCIFlagsUsed)
 {
     assert(minorStatus != NULL);
     assert(isNtlm == 1 || isNtlm == 0);
@@ -587,6 +604,7 @@ static uint32_t AcquireCredWithPassword(uint32_t* minorStatus,
     assert(password != NULL);
     assert(outputCredHandle != NULL);
     assert(*outputCredHandle == NULL);
+    assert(isNoCIFlagsUsed);
 
 #if HAVE_GSS_SPNEGO_MECHANISM
     (void)isNtlm; // unused
@@ -613,10 +631,17 @@ static uint32_t AcquireCredWithPassword(uint32_t* minorStatus,
 
     // call gss_set_cred_option with GSS_KRB5_CRED_NO_CI_FLAGS_X to support Kerberos Sign Only option from *nix client against a windows server
 #if HAVE_GSS_KRB5_CRED_NO_CI_FLAGS_X
+    *isNoCIFlagsUsed = 0;
     if (!isNtlm && majorStatus == GSS_S_COMPLETE)
     {
         GssBuffer emptyBuffer = GSS_C_EMPTY_BUFFER;
         majorStatus = gss_set_cred_option(minorStatus, outputCredHandle, GSS_KRB5_CRED_NO_CI_FLAGS_X, &emptyBuffer);
+        *isNoCIFlagsUsed = majorStatus == GSS_S_COMPLETE;
+        if (majorStatus == GSS_S_UNAVAILABLE)
+        {
+            majorStatus = GSS_S_COMPLETE;
+            *minorStatus = 0;
+        }
     }
 #endif
 
@@ -643,8 +668,21 @@ uint32_t NetSecurityNative_InitiateCredWithPassword(uint32_t* minorStatus,
                                                     uint32_t passwdLen,
                                                     GssCredId** outputCredHandle)
 {
+    int32_t isNoCIFlagsUsed;
     return AcquireCredWithPassword(
-        minorStatus, isNtlm, desiredName, password, passwdLen, GSS_C_INITIATE, outputCredHandle);
+        minorStatus, isNtlm, desiredName, password, passwdLen, GSS_C_INITIATE, outputCredHandle, &isNoCIFlagsUsed);
+}
+
+uint32_t NetSecurityNative_InitiateCredWithPasswordEx(uint32_t* minorStatus,
+                                                      int32_t isNtlm,
+                                                      GssName* desiredName,
+                                                      char* password,
+                                                      uint32_t passwdLen,
+                                                      GssCredId** outputCredHandle,
+                                                      int32_t* isNoCIFlagsUsed)
+{
+    return AcquireCredWithPassword(
+        minorStatus, isNtlm, desiredName, password, passwdLen, GSS_C_INITIATE, outputCredHandle, isNoCIFlagsUsed);
 }
 
 uint32_t NetSecurityNative_IsNtlmInstalled()

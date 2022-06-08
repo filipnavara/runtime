@@ -52,20 +52,22 @@ internal static partial class Interop
             out Status minorStatus,
             out SafeGssCredHandle outputCredHandle);
 
-        [LibraryImport(Interop.Libraries.NetSecurityNative, EntryPoint="NetSecurityNative_InitiateCredSpNego")]
-        internal static partial Status InitiateCredSpNego(
+        [LibraryImport(Interop.Libraries.NetSecurityNative, EntryPoint="NetSecurityNative_InitiateCredSpNegoEx")]
+        internal static partial Status InitiateCredSpNegoEx(
             out Status minorStatus,
             SafeGssNameHandle desiredName,
-            out SafeGssCredHandle outputCredHandle);
+            out SafeGssCredHandle outputCredHandle,
+            [MarshalAs(UnmanagedType.Bool)] out bool isNoCIFlagsUsed);
 
-        [LibraryImport(Interop.Libraries.NetSecurityNative, EntryPoint="NetSecurityNative_InitiateCredWithPassword", StringMarshalling = StringMarshalling.Utf8)]
-        internal static partial Status InitiateCredWithPassword(
+        [LibraryImport(Interop.Libraries.NetSecurityNative, EntryPoint="NetSecurityNative_InitiateCredWithPasswordEx", StringMarshalling = StringMarshalling.Utf8)]
+        internal static partial Status InitiateCredWithPasswordEx(
             out Status minorStatus,
             [MarshalAs(UnmanagedType.Bool)] bool isNtlm,
             SafeGssNameHandle desiredName,
             string password,
             int passwordLen,
-            out SafeGssCredHandle outputCredHandle);
+            out SafeGssCredHandle outputCredHandle,
+            [MarshalAs(UnmanagedType.Bool)] out bool isNoCIFlagsUsed);
 
         [LibraryImport(Interop.Libraries.NetSecurityNative, EntryPoint="NetSecurityNative_ReleaseCred")]
         internal static partial Status ReleaseCred(

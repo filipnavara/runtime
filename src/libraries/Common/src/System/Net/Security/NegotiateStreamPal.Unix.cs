@@ -377,7 +377,9 @@ namespace System.Net.Security
                 ref contextFlags);
 
             // Confidentiality flag should not be set if not requested
-            if (status.ErrorCode == SecurityStatusPalErrorCode.CompleteNeeded)
+            // (only possible if the GSS_KRB5_CRED_NO_CI_FLAGS_X option is supported)
+            if (status.ErrorCode == SecurityStatusPalErrorCode.CompleteNeeded &&
+                negoCredentialsHandle.IsNoCIFlagsUsed)
             {
                 ContextFlagsPal mask = ContextFlagsPal.Confidentiality;
                 if ((requestedContextFlags & mask) != (contextFlags & mask))

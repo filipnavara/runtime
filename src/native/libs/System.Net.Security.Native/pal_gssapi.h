@@ -95,10 +95,16 @@ Shims the gss_acquire_cred method with GSS_C_ACCEPT.
 PALEXPORT uint32_t NetSecurityNative_AcquireAcceptorCred(uint32_t* minorStatus, GssCredId** outputCredHandle);
 
 /*
-Shims the gss_acquire_cred method with SPNEGO oids with  GSS_C_INITIATE.
+Kept for SqlClient compatibility, use NetSecurityNative_InitiateCredSpNegoEx instead.
 */
 PALEXPORT uint32_t
 NetSecurityNative_InitiateCredSpNego(uint32_t* minorStatus, GssName* desiredName, GssCredId** outputCredHandle);
+
+/*
+Shims the gss_acquire_cred method with SPNEGO oids with GSS_C_INITIATE.
+*/
+PALEXPORT uint32_t
+NetSecurityNative_InitiateCredSpNegoEx(uint32_t* minorStatus, GssName* desiredName, GssCredId** outputCredHandle, int32_t* isNoCIFlagsUsed);
 
 /*
 Shims the gss_release_cred method.
@@ -173,7 +179,7 @@ PALEXPORT uint32_t NetSecurityNative_Unwrap(uint32_t* minorStatus,
                                             PAL_GssBuffer* outBuffer);
 
 /*
-Shims the gss_acquire_cred_with_password method with GSS_C_INITIATE.
+Kept for SqlClient compatibility, use NetSecurityNative_InitiateCredWithPasswordEx instead.
 */
 PALEXPORT uint32_t NetSecurityNative_InitiateCredWithPassword(uint32_t* minorStatus,
                                                               int32_t isNtlm,
@@ -181,6 +187,16 @@ PALEXPORT uint32_t NetSecurityNative_InitiateCredWithPassword(uint32_t* minorSta
                                                               char* password,
                                                               uint32_t passwdLen,
                                                               GssCredId** outputCredHandle);
+/*
+Shims the gss_acquire_cred_with_password method with GSS_C_INITIATE.
+*/
+PALEXPORT uint32_t NetSecurityNative_InitiateCredWithPasswordEx(uint32_t* minorStatus,
+                                                                int32_t isNtlm,
+                                                                GssName* desiredName,
+                                                                char* password,
+                                                                uint32_t passwdLen,
+                                                                GssCredId** outputCredHandle,
+                                                                int32_t* isNoCIFlagsUsed);
 
 /*
 Shims the gss_indicate_mechs method to detect if NTLM mech is installed.

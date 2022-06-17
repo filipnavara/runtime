@@ -1,15 +1,17 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Buffers;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Net.Security;
 using System.Security.Authentication.ExtendedProtection;
 
 namespace System.Net.Mail
 {
     internal sealed class SmtpNegotiateAuthenticationModule : ISmtpAuthenticationModule
     {
-        private readonly Dictionary<object, NTAuthentication> _sessions = new Dictionary<object, NTAuthentication>();
+        private readonly Dictionary<object, NegotiateAuthentication> _sessions = new Dictionary<object, NegotiateAuthentication>();
 
         internal SmtpNegotiateAuthenticationModule()
         {
@@ -17,66 +19,55 @@ namespace System.Net.Mail
 
         public Authorization? Authenticate(string? challenge, NetworkCredential? credential, object sessionCookie, string? spn, ChannelBinding? channelBindingToken)
         {
-            try
+            lock (_sessions)
             {
-                lock (_sessions)
+                NegotiateAuthentication? clientContext;
+                if (!_sessions.TryGetValue(sessionCookie, out clientContext))
                 {
-                    NTAuthentication? clientContext;
-                    if (!_sessions.TryGetValue(sessionCookie, out clientContext))
+                    if (credential == null)
                     {
-                        if (credential == null)
-                        {
-                            return null;
-                        }
-
-                        _sessions[sessionCookie] =
-                            clientContext =
-                            new NTAuthentication(false, "Negotiate", credential, spn,
-                                                 ContextFlagsPal.Connection | ContextFlagsPal.InitIntegrity, channelBindingToken);
+                        return null;
                     }
 
-                    byte[]? byteResp;
-                    string? resp = null;
-
-                    if (!clientContext.IsCompleted)
-                    {
-
-                        // If auth is not yet completed keep producing
-                        // challenge responses with GetOutgoingBlob
-
-                        byte[]? decodedChallenge = null;
-                        if (challenge != null)
-                        {
-                            decodedChallenge =
-                                Convert.FromBase64String(challenge);
-                        }
-                        byteResp = clientContext.GetOutgoingBlob(decodedChallenge, false);
-                        if (clientContext.IsCompleted && byteResp == null)
-                        {
-                            resp = "\r\n";
-                        }
-                        if (byteResp != null)
-                        {
-                            resp = Convert.ToBase64String(byteResp);
-                        }
-                    }
-                    else
-                    {
-                        // If auth completed and still have a challenge then
-                        // server may be doing "correct" form of GSSAPI SASL.
-                        // Validate incoming and produce outgoing SASL security
-                        // layer negotiate message.
-
-                        resp = GetSecurityLayerOutgoingBlob(challenge, clientContext);
-                    }
-
-                    return new Authorization(resp, clientContext.IsCompleted);
+                    _sessions[sessionCookie] = clientContext =
+                        new NegotiateAuthentication(
+                            new NegotiateAuthenticationClientOptions
+                            {
+                                Credential = credential,
+                                TargetName = spn,
+                                RequiredProtectionLevel = ProtectionLevel.Sign,
+                                Binding = channelBindingToken
+                            });
                 }
-            }
-            // From reflected type NTAuthentication in System.Net.Security.
-            catch (NullReferenceException)
-            {
-                return null;
+
+                string? resp = null;
+                NegotiateAuthenticationStatusCode statusCode;
+
+                if (!clientContext.IsAuthenticated)
+                {
+                    // If auth is not yet completed keep producing
+                    // challenge responses with GetOutgoingBlob
+                    resp = clientContext.GetOutgoingBlob(challenge, out statusCode);
+                    if (statusCode >= NegotiateAuthenticationStatusCode.GenericFailure)
+                    {
+                        return null;
+                    }
+                    if (clientContext.IsAuthenticated && string.IsNullOrEmpty(resp))
+                    {
+                        resp = "\r\n";
+                    }
+                }
+                else
+                {
+                    // If auth completed and still have a challenge then
+                    // server may be doing "correct" form of GSSAPI SASL.
+                    // Validate incoming and produce outgoing SASL security
+                    // layer negotiate message.
+
+                    resp = GetSecurityLayerOutgoingBlob(challenge, clientContext);
+                }
+
+                return new Authorization(resp, clientContext.IsAuthenticated);
             }
         }
 
@@ -90,7 +81,7 @@ namespace System.Net.Mail
 
         public void CloseContext(object sessionCookie)
         {
-            NTAuthentication? clientContext = null;
+            NegotiateAuthentication? clientContext = null;
             lock (_sessions)
             {
                 if (_sessions.TryGetValue(sessionCookie, out clientContext))
@@ -100,7 +91,7 @@ namespace System.Net.Mail
             }
             if (clientContext != null)
             {
-                clientContext.CloseContext();
+                clientContext.Dispose();
             }
         }
 
@@ -109,7 +100,7 @@ namespace System.Net.Mail
         //
         // Returns null for failure, Base64 encoded string on
         // success.
-        private static string? GetSecurityLayerOutgoingBlob(string? challenge, NTAuthentication clientContext)
+        private static string? GetSecurityLayerOutgoingBlob(string? challenge, NegotiateAuthentication clientContext)
         {
             // must have a security layer challenge
 
@@ -119,14 +110,11 @@ namespace System.Net.Mail
             // "unwrap" challenge
 
             byte[] input = Convert.FromBase64String(challenge);
+            ArrayBufferWriter<byte> unwrappedInput = new ArrayBufferWriter<byte>();
+            NegotiateAuthenticationStatusCode statusCode;
 
-            int len;
-
-            try
-            {
-                len = clientContext.VerifySignature(input, 0, input.Length);
-            }
-            catch (Win32Exception)
+            statusCode = clientContext.Unwrap(input, unwrappedInput, out _);
+            if (statusCode != NegotiateAuthenticationStatusCode.Completed)
             {
                 // any decrypt failure is an auth failure
                 return null;
@@ -154,11 +142,12 @@ namespace System.Net.Mail
             // and the 2nd-4th bytes are value zero since token size is not
             // applicable when there is no security layer.
 
-            if (len < 4 ||          // expect 4 bytes
-                input[0] != 1 ||    // first value 1
-                input[1] != 0 ||    // rest value 0
-                input[2] != 0 ||
-                input[3] != 0)
+            ReadOnlySpan<byte> unwrappedInputSpan = unwrappedInput.WrittenSpan;
+            if (unwrappedInputSpan.Length < 4 ||          // expect 4 bytes
+                unwrappedInputSpan[0] != 1 ||    // first value 1
+                unwrappedInputSpan[1] != 0 ||    // rest value 0
+                unwrappedInputSpan[2] != 0 ||
+                unwrappedInputSpan[3] != 0)
             {
                 return null;
             }
@@ -176,19 +165,17 @@ namespace System.Net.Mail
             // "authorization identity" is not supplied as it is unnecessary.
 
             // let MakeSignature figure out length of output
-            byte[]? output = null;
-            try
-            {
-                len = clientContext.MakeSignature(input, 0, 4, ref output);
-            }
-            catch (Win32Exception)
+            ArrayBufferWriter<byte> output = new ArrayBufferWriter<byte>();
+            bool isConfidential = false;
+            statusCode = clientContext.Wrap(input, output, ref isConfidential);
+            if (statusCode != NegotiateAuthenticationStatusCode.Completed)
             {
                 // any encrypt failure is an auth failure
                 return null;
             }
 
             // return Base64 encoded string of signed payload
-            return Convert.ToBase64String(output, 0, len);
+            return Convert.ToBase64String(output.WrittenSpan);
         }
     }
 }

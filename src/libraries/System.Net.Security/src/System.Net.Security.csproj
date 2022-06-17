@@ -92,7 +92,7 @@
              Link="Common\System\Net\ContextFlagsPal.cs" />
     <Compile Include="$(CommonPath)System\Net\NegotiationInfoClass.cs"
              Link="Common\System\Net\NegotiationInfoClass.cs" />
-    <Compile Include="$(CommonPath)System\Net\NTAuthentication.Common.cs"
+    <Compile Include="$(CommonPath)System\Net\"
              Link="Common\System\Net\NTAuthentication.Common.cs"
              Condition="'$(UseManagedNtlm)' != 'true'" />
     <Compile Include="$(CommonPath)System\Net\SecurityStatusPal.cs"

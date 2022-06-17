@@ -281,6 +281,25 @@ namespace System.Net.Security
             return outgoingBlob;
         }
 
+        /// <summary>
+        /// Wrap an input message with signature and optionally with an encryption.
+        /// <summary>
+        /// <param name="input">Input message to be wrapped.</param>
+        /// <param name="outputWriter">Buffer writter where the wrapped message is written.</param>
+        /// <param name="isConfidential">
+        /// On input specifies whether confidentiality transformation (encryption) is requested.
+        /// On output specifies whether the confidentiality transformation was applied in the wrapping.
+        /// </param>
+        /// <returns>
+        /// <see cref="NegotiateAuthenticationStatusCode.Completed" /> on success, other
+        /// <see cref="NegotiateAuthenticationStatusCode" /> values on failure.
+        /// </returns>
+        /// <remarks>
+        /// Like the <see href="https://datatracker.ietf.org/doc/html/rfc2743#page-65">GSS_Wrap</see> API
+        /// the authentication protocol implementation may choose to override the requested value in the
+        /// <see cref="isConfidential" /> parameter. This may result in either downgrade or upgrade of the
+        /// protection level.
+        /// </remarks>
         public NegotiateAuthenticationStatusCode Wrap(ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, ref bool isConfidential)
         {
             if (!IsAuthenticated || _ntAuthentication == null)
@@ -291,6 +310,22 @@ namespace System.Net.Security
             return _ntAuthentication.Wrap(input, outputWriter, ref isConfidential);
         }
 
+        /// <summary>
+        /// Unwrap an input message with signature or encryption applied by the other party.
+        /// <summary>
+        /// <param name="input">Input message to be unwrapped.</param>
+        /// <param name="outputWriter">Buffer writter where the unwrapped message is written.</param>
+        /// <param name="isConfidential">
+        /// On output specifies whether the wrapped message had confidentiality transformation applied.
+        /// </param>
+        /// <returns>
+        /// <see cref="NegotiateAuthenticationStatusCode.Completed" /> on success.
+        /// <see cref="NegotiateAuthenticationStatusCode.MessageAltered" /> if the message signature was
+        /// invalid.
+        /// <see cref="NegotiateAuthenticationStatusCode.InvalidToken" /> if the wrapped message was
+        /// in invalid format.
+        /// Other <see cref="NegotiateAuthenticationStatusCode" /> values on failure.
+        /// </returns>
         public NegotiateAuthenticationStatusCode Unwrap(ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, out bool isConfidential)
         {
             if (!IsAuthenticated || _ntAuthentication == null)

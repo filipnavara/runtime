@@ -47,8 +47,9 @@ namespace System.Net.Security
             Interop.NetSecurityNative.GssBuffer encryptedBuffer = default;
             try
             {
+                bool isConfidential = encrypt;
                 Interop.NetSecurityNative.Status minorStatus;
-                Interop.NetSecurityNative.Status status = Interop.NetSecurityNative.WrapBuffer(out minorStatus, context, encrypt, buffer, ref encryptedBuffer);
+                Interop.NetSecurityNative.Status status = Interop.NetSecurityNative.WrapBuffer(out minorStatus, context, ref isConfidential, buffer, ref encryptedBuffer);
                 if (status != Interop.NetSecurityNative.Status.GSS_S_COMPLETE)
                 {
                     throw new Interop.NetSecurityNative.GssApiException(status, minorStatus);
@@ -76,7 +77,7 @@ namespace System.Net.Security
             try
             {
                 Interop.NetSecurityNative.Status minorStatus;
-                Interop.NetSecurityNative.Status status = Interop.NetSecurityNative.UnwrapBuffer(out minorStatus, context, buffer, offset, count, ref decryptedBuffer);
+                Interop.NetSecurityNative.Status status = Interop.NetSecurityNative.UnwrapBuffer(out minorStatus, context, out _, buffer.AsSpan(offset, count), ref decryptedBuffer);
                 if (status != Interop.NetSecurityNative.Status.GSS_S_COMPLETE)
                 {
                     throw new Interop.NetSecurityNative.GssApiException(status, minorStatus);
@@ -614,6 +615,63 @@ namespace System.Net.Security
             SafeDeleteNegoContext gssContext = (SafeDeleteNegoContext)securityContext;
             output = GssWrap(gssContext.GssContext, false, new ReadOnlySpan<byte>(buffer, offset, count));
             return output.Length;
+        }
+
+
+        internal static NegotiateAuthenticationStatusCode Wrap(SafeDeleteContext securityContext, ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, ref bool isConfidential, bool isNtlm)
+        {
+            Interop.NetSecurityNative.GssBuffer encryptedBuffer = default;
+            try
+            {
+                Interop.NetSecurityNative.Status minorStatus;
+                Interop.NetSecurityNative.Status status = Interop.NetSecurityNative.WrapBuffer(
+                    out minorStatus,
+                    ((SafeDeleteNegoContext)securityContext).GssContext,
+                    ref isConfidential,
+                    input,
+                    ref encryptedBuffer);
+                if (status != Interop.NetSecurityNative.Status.GSS_S_COMPLETE)
+                {
+                    return NegotiateAuthenticationStatusCode.GenericFailure;
+                }
+
+                outputWriter.Write(encryptedBuffer.Span);
+                return NegotiateAuthenticationStatusCode.Completed;
+            }
+            finally
+            {
+                encryptedBuffer.Dispose();
+            }
+        }
+
+        internal static NegotiateAuthenticationStatusCode Unwrap(SafeDeleteContext securityContext, ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, ref bool isConfidential, bool isNtlm)
+        {
+            Interop.NetSecurityNative.GssBuffer decryptedBuffer = default(Interop.NetSecurityNative.GssBuffer);
+            try
+            {
+                Interop.NetSecurityNative.Status minorStatus;
+                Interop.NetSecurityNative.Status status = Interop.NetSecurityNative.UnwrapBuffer(
+                    out minorStatus,
+                    ((SafeDeleteNegoContext)securityContext).GssContext,
+                    out isConfidential,
+                    input,
+                    ref decryptedBuffer);
+                if (status != Interop.NetSecurityNative.Status.GSS_S_COMPLETE)
+                {
+                    return status switch
+                    {
+                        Interop.NetSecurityNative.Status.GSS_S_BAD_SIG => NegotiateAuthenticationStatusCode.MessageAltered,
+                        _ => NegotiateAuthenticationStatusCode.InvalidToken
+                    };
+                }
+
+                outputWriter.Write(decryptedBuffer.Span);
+                return NegotiateAuthenticationStatusCode.Completed;
+            }
+            finally
+            {
+                decryptedBuffer.Dispose();
+            }
         }
     }
 }

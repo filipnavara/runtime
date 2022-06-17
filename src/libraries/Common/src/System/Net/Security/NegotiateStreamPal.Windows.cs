@@ -1,11 +1,13 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Buffers;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Security.Authentication.ExtendedProtection;
 
 namespace System.Net.Security
@@ -465,6 +467,100 @@ namespace System.Net.Security
 
             newOffset = securityBuffer[1].offset;
             return securityBuffer[1].size;
+        }
+
+
+        internal static NegotiateAuthenticationStatusCode Wrap(SafeDeleteContext securityContext, ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, ref bool isConfidential, bool isNtlm)
+        {
+            SecPkgContext_Sizes sizes = default;
+            bool success = SSPIWrapper.QueryBlittableContextAttributes(GlobalSSPI.SSPIAuth, securityContext, Interop.SspiCli.ContextAttribute.SECPKG_ATTR_SIZES, ref sizes);
+            Debug.Assert(success);
+
+            int maxCount = checked(int.MaxValue - sizes.cbBlockSize - sizes.cbSecurityTrailer);
+            if (input.Length > maxCount)
+            {
+                throw new ArgumentOutOfRangeException(nameof(input.Length), SR.Format(SR.net_io_out_range, maxCount));
+            }
+
+            int resultSize = input.Length + sizes.cbSecurityTrailer + sizes.cbBlockSize;
+            //Span<byte> output = outputWriter.GetSpan(resultSize);
+            byte[] output = CryptoPool.Rent(resultSize);
+
+            try
+            {
+                // Make a copy of user data for in-place encryption.
+                input.CopyTo(output.AsSpan(sizes.cbSecurityTrailer, input.Length));
+
+                // Prepare buffers TOKEN(signature), DATA and Padding.
+                ThreeSecurityBuffers buffers = default;
+                var securityBuffer = MemoryMarshal.CreateSpan(ref buffers._item0, 3);
+                securityBuffer[0] = new SecurityBuffer(output, 0, sizes.cbSecurityTrailer, SecurityBufferType.SECBUFFER_TOKEN);
+                securityBuffer[1] = new SecurityBuffer(output, sizes.cbSecurityTrailer, input.Length, SecurityBufferType.SECBUFFER_DATA);
+                securityBuffer[2] = new SecurityBuffer(output, sizes.cbSecurityTrailer + input.Length, sizes.cbBlockSize, SecurityBufferType.SECBUFFER_PADDING);
+
+                int errorCode;
+                if (isConfidential)
+                {
+                    errorCode = SSPIWrapper.EncryptMessage(GlobalSSPI.SSPIAuth, securityContext, securityBuffer, 0);
+                }
+                else
+                {
+                    if (isNtlm)
+                    {
+                        securityBuffer[1].type |= SecurityBufferType.SECBUFFER_READONLY;
+                    }
+
+                    errorCode = SSPIWrapper.MakeSignature(GlobalSSPI.SSPIAuth, securityContext, securityBuffer, 0);
+                }
+
+                if (errorCode != 0)
+                {
+                    SecurityStatusPal securityStatus = SecurityStatusAdapterPal.GetSecurityStatusPalFromNativeInt(errorCode);
+                    return NegotiateAuthentication.TranslateStatusCode(securityStatus);
+                }
+
+                // Compacting the result.
+                int compactedOutputSize = securityBuffer[0].size + securityBuffer[1].size + securityBuffer[2].size;
+                Span<byte> compactedOutput = outputWriter.GetSpan(compactedOutputSize);
+                output.AsSpan(securityBuffer[0].offset, securityBuffer[0].size).CopyTo(compactedOutput.Slice(0, securityBuffer[0].size));
+                compactedOutput = compactedOutput.Slice(securityBuffer[0].size);
+                output.AsSpan(securityBuffer[1].offset, securityBuffer[1].size).CopyTo(compactedOutput.Slice(0, securityBuffer[1].size));
+                compactedOutput = compactedOutput.Slice(securityBuffer[1].size);
+                output.AsSpan(securityBuffer[2].offset, securityBuffer[2].size).CopyTo(compactedOutput.Slice(0, securityBuffer[2].size));
+                outputWriter.Advance(compactedOutputSize);
+                return NegotiateAuthenticationStatusCode.Completed;
+            }
+            finally
+            {
+                CryptoPool.Return(output, resultSize);
+            }
+        }
+
+        internal static NegotiateAuthenticationStatusCode Unwrap(SafeDeleteContext securityContext, ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, ref bool isConfidential, bool isNtlm)
+        {
+            byte[] buffer = CryptoPool.Rent(input.Length);
+
+            input.CopyTo(buffer);
+
+            try
+            {
+                int newOffset, newSize;
+                newSize = Decrypt(securityContext, buffer, 0, input.Length, true, isConfidential, out newOffset, 0);
+                outputWriter.Write(buffer.AsSpan(newOffset, newSize));
+                return NegotiateAuthenticationStatusCode.Completed;
+            }
+            catch (Win32Exception e)
+            {
+                return e.NativeErrorCode switch
+                {
+                    (int)Interop.SECURITY_STATUS.MessageAltered => NegotiateAuthenticationStatusCode.MessageAltered,
+                    _ => NegotiateAuthenticationStatusCode.InvalidToken
+                };
+            }
+            finally
+            {
+                CryptoPool.Return(buffer, input.Length);
+            }
         }
     }
 }

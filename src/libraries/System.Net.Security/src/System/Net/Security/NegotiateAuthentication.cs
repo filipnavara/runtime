@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Buffers;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Security.Principal;
@@ -241,9 +242,68 @@ namespace System.Net.Security
             }
 
             byte[]? blob = _ntAuthentication.GetOutgoingBlob(incomingBlob, false, out SecurityStatusPal securityStatus);
+            statusCode = TranslateStatusCode(securityStatus);
+            return blob;
+        }
 
-            // Map error codes
-            statusCode = securityStatus.ErrorCode switch
+        /// <summary>
+        /// Evaluates an authentication token sent by the other party and returns a token in response.
+        /// </summary>
+        /// <param name="incomingBlob">Incoming authentication token, or empty value when initiating the authentication exchange. Encoded as base64.</param>
+        /// <param name="statusCode">Status code returned by the authentication provider.</param>
+        /// <returns>Outgoing authentication token to be sent to the other party, encoded as base64.</returns>
+        /// <remarks>
+        /// When initiating the authentication exchange, one of the parties starts
+        /// with an empty incomingBlob parameter.
+        ///
+        /// Successful step of the authentication returns either <see cref="NegotiateAuthenticationStatusCode.Completed" />
+        /// or <see cref="NegotiateAuthenticationStatusCode.ContinueNeeded" /> status codes.
+        /// Any other status code indicates an unrecoverable error.
+        ///
+        /// When <see cref="NegotiateAuthenticationStatusCode.ContinueNeeded" /> is returned the
+        /// return value is an authentication token to be transported to the other party.
+        /// </remarks>
+        public string? GetOutgoingBlob(string? incomingBlob, out NegotiateAuthenticationStatusCode statusCode)
+        {
+            byte[]? decodedIncomingBlob = null;
+            if (!string.IsNullOrEmpty(incomingBlob))
+            {
+                decodedIncomingBlob = Convert.FromBase64String(incomingBlob);
+            }
+            byte[]? decodedOutgoingBlob = GetOutgoingBlob(decodedIncomingBlob, out statusCode);
+
+            string? outgoingBlob = null;
+            if (decodedOutgoingBlob != null && decodedOutgoingBlob.Length > 0)
+            {
+                outgoingBlob = Convert.ToBase64String(decodedOutgoingBlob);
+            }
+
+            return outgoingBlob;
+        }
+
+        public NegotiateAuthenticationStatusCode Wrap(ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, ref bool isConfidential)
+        {
+            if (!IsAuthenticated || _ntAuthentication == null)
+            {
+                throw new InvalidOperationException(SR.net_auth_noauth);
+            }
+
+            return _ntAuthentication.Wrap(input, outputWriter, ref isConfidential);
+        }
+
+        public NegotiateAuthenticationStatusCode Unwrap(ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, out bool isConfidential)
+        {
+            if (!IsAuthenticated || _ntAuthentication == null)
+            {
+                throw new InvalidOperationException(SR.net_auth_noauth);
+            }
+
+            return _ntAuthentication.Unwrap(input, outputWriter, out isConfidential);
+        }
+
+        internal static NegotiateAuthenticationStatusCode TranslateStatusCode(SecurityStatusPal securityStatus)
+        {
+            return securityStatus.ErrorCode switch
             {
                 SecurityStatusPalErrorCode.OK => NegotiateAuthenticationStatusCode.Completed,
                 SecurityStatusPalErrorCode.ContinueNeeded => NegotiateAuthenticationStatusCode.ContinueNeeded,
@@ -284,43 +344,6 @@ namespace System.Net.Security
 
                 _ => NegotiateAuthenticationStatusCode.GenericFailure,
             };
-
-            return blob;
-        }
-
-        /// <summary>
-        /// Evaluates an authentication token sent by the other party and returns a token in response.
-        /// </summary>
-        /// <param name="incomingBlob">Incoming authentication token, or empty value when initiating the authentication exchange. Encoded as base64.</param>
-        /// <param name="statusCode">Status code returned by the authentication provider.</param>
-        /// <returns>Outgoing authentication token to be sent to the other party, encoded as base64.</returns>
-        /// <remarks>
-        /// When initiating the authentication exchange, one of the parties starts
-        /// with an empty incomingBlob parameter.
-        ///
-        /// Successful step of the authentication returns either <see cref="NegotiateAuthenticationStatusCode.Completed" />
-        /// or <see cref="NegotiateAuthenticationStatusCode.ContinueNeeded" /> status codes.
-        /// Any other status code indicates an unrecoverable error.
-        ///
-        /// When <see cref="NegotiateAuthenticationStatusCode.ContinueNeeded" /> is returned the
-        /// return value is an authentication token to be transported to the other party.
-        /// </remarks>
-        public string? GetOutgoingBlob(string? incomingBlob, out NegotiateAuthenticationStatusCode statusCode)
-        {
-            byte[]? decodedIncomingBlob = null;
-            if (!string.IsNullOrEmpty(incomingBlob))
-            {
-                decodedIncomingBlob = Convert.FromBase64String(incomingBlob);
-            }
-            byte[]? decodedOutgoingBlob = GetOutgoingBlob(decodedIncomingBlob, out statusCode);
-
-            string? outgoingBlob = null;
-            if (decodedOutgoingBlob != null && decodedOutgoingBlob.Length > 0)
-            {
-                outgoingBlob = Convert.ToBase64String(decodedOutgoingBlob);
-            }
-
-            return outgoingBlob;
         }
     }
 }

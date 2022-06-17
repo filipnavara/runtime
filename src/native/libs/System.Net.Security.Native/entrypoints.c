@@ -26,7 +26,9 @@ static const Entry s_securityNative[] =
     DllImportEntry(NetSecurityNative_ReleaseGssBuffer)
     DllImportEntry(NetSecurityNative_ReleaseName)
     DllImportEntry(NetSecurityNative_Unwrap)
+    DllImportEntry(NetSecurityNative_UnwrapEx)
     DllImportEntry(NetSecurityNative_Wrap)
+    DllImportEntry(NetSecurityNative_WrapEx)
 };
 
 EXTERN_C const void* SecurityResolveDllImport(const char* name);

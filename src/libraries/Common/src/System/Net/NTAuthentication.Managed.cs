@@ -3,6 +3,7 @@
 
 using System;
 using System.ComponentModel;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -967,6 +968,7 @@ namespace System.Net
                             using (writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, (int)NegTokenResp.MechListMIC)))
                             {
                                 writer.WriteOctetString(GetMIC(_spnegoMechList));
+                                _clientSequenceNumber = 0;
                             }
                         }
                     }
@@ -1002,15 +1004,91 @@ namespace System.Net
             return null;
         }
 
+        internal NegotiateAuthenticationStatusCode Wrap(ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, ref bool isConfidential)
+        {
+            if (_clientSeal == null)
+            {
+                throw new InvalidOperationException(SR.net_auth_noauth);
+            }
+
+            Span<byte> output = outputWriter.GetSpan(input.Length + SignatureLength);
+            _clientSeal.Transform(input, output.Slice(SignatureLength, input.Length));
+            CalculateSignature(input, _clientSequenceNumber, _clientSigningKey, _clientSeal, output.Slice(0, SignatureLength));
+            _clientSequenceNumber++;
+
+            isConfidential = true;
+            outputWriter.Advance(input.Length + SignatureLength);
+
+            return NegotiateAuthenticationStatusCode.Completed;
+        }
+
+        internal NegotiateAuthenticationStatusCode Unwrap(ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, out bool isConfidential)
+        {
+            isConfidential = true;
+
+            if (_serverSeal == null)
+            {
+                throw new InvalidOperationException(SR.net_auth_noauth);
+            }
+
+            if (input.Length < SignatureLength)
+            {
+                return NegotiateAuthenticationStatusCode.InvalidToken;
+            }
+
+            Span<byte> output = outputWriter.GetSpan(input.Length - SignatureLength);
+            _serverSeal.Transform(input.Slice(SignatureLength), output.Slice(0, input.Length - SignatureLength));
+            if (!VerifyMIC(output.Slice(0, input.Length - SignatureLength), input.Slice(0, SignatureLength)))
+            {
+                CryptographicOperations.ZeroMemory(output);
+                return NegotiateAuthenticationStatusCode.MessageAltered;
+            }
+
+            isConfidential = true;
+            outputWriter.Advance(input.Length - SignatureLength);
+
+            return NegotiateAuthenticationStatusCode.Completed;
+        }
+
 #pragma warning disable CA1822
         internal int Encrypt(ReadOnlySpan<byte> buffer, [NotNull] ref byte[]? output, uint sequenceNumber)
         {
-            throw new PlatformNotSupportedException();
+            if (_clientSeal == null)
+            {
+                throw new InvalidOperationException(SR.net_auth_noauth);
+            }
+
+            if (output == null || output.Length < SignatureLength + buffer.Length + 4)
+            {
+                output = new byte[SignatureLength + buffer.Length + 4];
+            }
+
+            _clientSeal.Transform(buffer, output.AsSpan(SignatureLength + 4));
+            CalculateSignature(buffer, _clientSequenceNumber, _clientSigningKey, _clientSeal, output.AsSpan(4, SignatureLength));
+            _clientSequenceNumber++;
+            BinaryPrimitives.WriteInt32LittleEndian(output.AsSpan(0, 4), buffer.Length + SignatureLength);
+
+            return buffer.Length + SignatureLength + 4;
         }
 
         internal int Decrypt(byte[] payload, int offset, int count, out int newOffset, uint expectedSeqNumber)
         {
-            throw new PlatformNotSupportedException();
+            if (_serverSeal == null)
+            {
+                throw new InvalidOperationException(SR.net_auth_noauth);
+            }
+
+            // TODO: Verify parameters
+
+            Span<byte> message = payload.AsSpan(offset + SignatureLength, count - SignatureLength);
+            _serverSeal.Transform(message, message);
+            if (!VerifyMIC(message, payload.AsSpan(offset, SignatureLength)))
+            {
+                throw new Win32Exception(NTE_FAIL, nameof(SecurityStatusPalErrorCode.MessageAltered));
+            }
+
+            newOffset = offset + SignatureLength;
+            return message.Length;
         }
 
         internal string ProtocolName => _isSpNego ? NegotiationInfoClass.Negotiate : NegotiationInfoClass.NTLM;

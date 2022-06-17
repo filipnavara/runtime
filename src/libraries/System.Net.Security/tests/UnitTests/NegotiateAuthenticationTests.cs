@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.IO;
 using System.Net.Security;
@@ -249,6 +250,49 @@ namespace System.Net.Security.Tests
                 }
             }
             while (!ntAuth.IsAuthenticated);
+        }
+
+        [ConditionalFact(nameof(IsNtlmAvailable))]
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/65678", TestPlatforms.OSX | TestPlatforms.iOS | TestPlatforms.MacCatalyst)]
+        public void NtlmSignatureTest()
+        {
+            FakeNtlmServer fakeNtlmServer = new FakeNtlmServer(s_testCredentialRight);
+            NegotiateAuthentication ntAuth = new NegotiateAuthentication(
+                new NegotiateAuthenticationClientOptions
+                {
+                    Package = "NTLM",
+                    Credential = s_testCredentialRight,
+                    TargetName = "HTTP/foo",
+                    RequiredProtectionLevel = ProtectionLevel.EncryptAndSign
+                });
+
+            DoNtlmExchange(fakeNtlmServer, ntAuth);
+
+            Assert.True(fakeNtlmServer.IsAuthenticated);
+
+            // Test Wrap on client side and decoding it on server side
+            ArrayBufferWriter<byte> output = new ArrayBufferWriter<byte>();
+            bool isConfidential = false;
+            NegotiateAuthenticationStatusCode statusCode;
+            statusCode = ntAuth.Wrap(s_Hello, output, ref isConfidential);
+            Assert.Equal(NegotiateAuthenticationStatusCode.Completed, statusCode);
+            Assert.Equal(16 + s_Hello.Length, output.WrittenCount);
+            // Unseal the content and check it
+            byte[] temp = new byte[s_Hello.Length];
+            fakeNtlmServer.Unseal(output.WrittenSpan.Slice(16), temp);
+            Assert.Equal(s_Hello, temp);
+            // Check the signature
+            fakeNtlmServer.VerifyMIC(temp, output.WrittenSpan.Slice(0, 16), sequenceNumber: 0);
+
+            // Test creating signature on server side and decoding it with Unwrap on client side 
+            byte[] serverSignedMessage = new byte[16 + s_Hello.Length];
+            fakeNtlmServer.Seal(s_Hello, serverSignedMessage.AsSpan(16, s_Hello.Length));
+            fakeNtlmServer.GetMIC(s_Hello, serverSignedMessage.AsSpan(0, 16), sequenceNumber: 0);
+            output.Clear();
+            statusCode = ntAuth.Unwrap(serverSignedMessage, output, out isConfidential);
+            Assert.Equal(NegotiateAuthenticationStatusCode.Completed, statusCode);
+            Assert.Equal(s_Hello.Length, output.WrittenCount);
+            Assert.Equal(s_Hello, output.WrittenSpan.ToArray());
         }
     }
 }

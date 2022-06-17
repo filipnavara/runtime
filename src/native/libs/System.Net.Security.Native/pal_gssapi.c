@@ -503,12 +503,25 @@ uint32_t NetSecurityNative_Wrap(uint32_t* minorStatus,
                                 int32_t count,
                                 PAL_GssBuffer* outBuffer)
 {
+    int32_t isConfidential = isEncrypt;
+    return NetSecurityNative_WrapEx(minorStatus, contextHandle, &isConfidential, inputBytes, count, outBuffer);
+}
+
+uint32_t NetSecurityNative_WrapEx(uint32_t* minorStatus,
+                                  GssCtxId* contextHandle,
+                                  int32_t* isConfidential,
+                                  uint8_t* inputBytes,
+                                  int32_t count,
+                                  PAL_GssBuffer* outBuffer)
+{
     assert(minorStatus != NULL);
     assert(contextHandle != NULL);
-    assert(isEncrypt == 1 || isEncrypt == 0);
+    assert(isConfidential != NULL);
+    assert(*isConfidential == 1 || *isConfidential == 0);
     assert(inputBytes != NULL);
     assert(count >= 0);
     assert(outBuffer != NULL);
+    assert(isConfidential != NULL);
     // count refers to the length of the input message. That is, number of bytes of inputBytes
     // that need to be wrapped.
 
@@ -516,9 +529,10 @@ uint32_t NetSecurityNative_Wrap(uint32_t* minorStatus,
     GssBuffer inputMessageBuffer = {.length = (size_t)count, .value = inputBytes};
     GssBuffer gssBuffer;
     uint32_t majorStatus =
-        gss_wrap(minorStatus, contextHandle, isEncrypt, GSS_C_QOP_DEFAULT, &inputMessageBuffer, &confState, &gssBuffer);
+        gss_wrap(minorStatus, contextHandle, *isConfidential, GSS_C_QOP_DEFAULT, &inputMessageBuffer, &confState, &gssBuffer);
 
     NetSecurityNative_MoveBuffer(&gssBuffer, outBuffer);
+    *isConfidential = confState;
     return majorStatus;
 }
 
@@ -529,19 +543,32 @@ uint32_t NetSecurityNative_Unwrap(uint32_t* minorStatus,
                                   int32_t count,
                                   PAL_GssBuffer* outBuffer)
 {
+    int32_t isConfidential;
+    return NetSecurityNative_UnwrapEx(minorStatus, contextHandle, &isConfidential, inputBytes + offset, count, outBuffer);
+}
+
+uint32_t NetSecurityNative_UnwrapEx(uint32_t* minorStatus,
+                                    GssCtxId* contextHandle,
+                                    int32_t* isConfidential,
+                                    uint8_t* inputBytes,
+                                    int32_t count,
+                                    PAL_GssBuffer* outBuffer)
+{
     assert(minorStatus != NULL);
     assert(contextHandle != NULL);
     assert(inputBytes != NULL);
-    assert(offset >= 0);
     assert(count >= 0);
     assert(outBuffer != NULL);
+    assert(isConfidential != NULL);
 
     // count refers to the length of the input message. That is, the number of bytes of inputBytes
     // starting at offset that need to be wrapped.
-    GssBuffer inputMessageBuffer = {.length = (size_t)count, .value = inputBytes + offset};
+    GssBuffer inputMessageBuffer = {.length = (size_t)count, .value = inputBytes};
     GssBuffer gssBuffer = {.length = 0, .value = NULL};
-    uint32_t majorStatus = gss_unwrap(minorStatus, contextHandle, &inputMessageBuffer, &gssBuffer, NULL, NULL);
+    int isConfidentialTemp;
+    uint32_t majorStatus = gss_unwrap(minorStatus, contextHandle, &inputMessageBuffer, &gssBuffer, &isConfidentialTemp, NULL);
     NetSecurityNative_MoveBuffer(&gssBuffer, outBuffer);
+    *isConfidential = isConfidentialTemp;
     return majorStatus;
 }
 

@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Buffers;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -346,6 +347,27 @@ namespace System.Net
                 IsNTLM,
                 out newOffset,
                 expectedSeqNumber);
+        }
+
+        public NegotiateAuthenticationStatusCode Wrap(ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, ref bool isConfidential)
+        {
+            return NegotiateStreamPal.Wrap(
+                _securityContext!,
+                input,
+                outputWriter,
+                ref isConfidential,
+                IsNTLM);
+        }
+
+        public NegotiateAuthenticationStatusCode Unwrap(ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, out bool isConfidential)
+        {
+            isConfidential = (_contextFlags & ContextFlagsPal.Confidentiality) != 0;
+            return NegotiateStreamPal.Unwrap(
+                _securityContext!,
+                input,
+                outputWriter,
+                ref isConfidential,
+                IsNTLM);
         }
     }
 }

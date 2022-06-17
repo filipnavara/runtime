@@ -200,50 +200,42 @@ internal static partial class Interop
             SafeGssContextHandle? acceptContextHandle,
             ref GssBuffer token);
 
-        [LibraryImport(Interop.Libraries.NetSecurityNative, EntryPoint="NetSecurityNative_Wrap")]
-        private static unsafe partial Status Wrap(
+        [LibraryImport(Interop.Libraries.NetSecurityNative, EntryPoint="NetSecurityNative_WrapEx")]
+        private static unsafe partial Status WrapEx(
             out Status minorStatus,
             SafeGssContextHandle? contextHandle,
-            [MarshalAs(UnmanagedType.Bool)] bool isEncrypt,
-            byte* inputBytes,
+            [MarshalAs(UnmanagedType.Bool)] ref bool isConfidental,
+            ref byte inputBytes,
             int count,
             ref GssBuffer outBuffer);
 
-        [LibraryImport(Interop.Libraries.NetSecurityNative, EntryPoint="NetSecurityNative_Unwrap")]
-        private static partial Status Unwrap(
+        [LibraryImport(Interop.Libraries.NetSecurityNative, EntryPoint="NetSecurityNative_UnwrapEx")]
+        private static partial Status UnwrapEx(
             out Status minorStatus,
             SafeGssContextHandle? contextHandle,
-            byte[] inputBytes,
-            int offset,
+            [MarshalAs(UnmanagedType.Bool)] out bool isConfidental,
+            ref byte inputBytes,
             int count,
             ref GssBuffer outBuffer);
 
-        internal static unsafe Status WrapBuffer(
+        internal static Status WrapBuffer(
             out Status minorStatus,
             SafeGssContextHandle? contextHandle,
-            bool isEncrypt,
+            ref bool isConfidental,
             ReadOnlySpan<byte> inputBytes,
             ref GssBuffer outBuffer)
         {
-            fixed (byte* inputBytesPtr = inputBytes)
-            {
-                return Wrap(out minorStatus, contextHandle, isEncrypt, inputBytesPtr, inputBytes.Length, ref outBuffer);
-            }
+            return WrapEx(out minorStatus, contextHandle, ref isConfidental, ref MemoryMarshal.GetReference(inputBytes), inputBytes.Length, ref outBuffer);
         }
 
         internal static Status UnwrapBuffer(
             out Status minorStatus,
             SafeGssContextHandle? contextHandle,
-            byte[] inputBytes,
-            int offset,
-            int count,
+            out bool isConfidental,
+            ReadOnlySpan<byte> inputBytes,
             ref GssBuffer outBuffer)
         {
-            Debug.Assert(inputBytes != null, "inputBytes must be valid value");
-            Debug.Assert(offset >= 0 && offset <= inputBytes.Length, "offset must be valid");
-            Debug.Assert(count >= 0 && count <= inputBytes.Length, "count must be valid");
-
-            return Unwrap(out minorStatus, contextHandle, inputBytes, offset, count, ref outBuffer);
+            return UnwrapEx(out minorStatus, contextHandle, out isConfidental, ref MemoryMarshal.GetReference(inputBytes), inputBytes.Length, ref outBuffer);
         }
     }
 }

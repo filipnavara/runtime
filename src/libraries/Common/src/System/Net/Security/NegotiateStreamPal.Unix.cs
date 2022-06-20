@@ -70,9 +70,11 @@ namespace System.Net.Security
             try
             {
                 Interop.NetSecurityNative.Status minorStatus;
+                Console.WriteLine($"GssUnwrap {Convert.ToHexString(buffer)}");
                 Interop.NetSecurityNative.Status status = Interop.NetSecurityNative.UnwrapBuffer(out minorStatus, context, buffer, ref decryptedBuffer);
                 if (status != Interop.NetSecurityNative.Status.GSS_S_COMPLETE)
                 {
+                    Console.WriteLine($"GssUnwrap status {status:x}");
                     throw new Interop.NetSecurityNative.GssApiException(status, minorStatus);
                 }
 
@@ -579,37 +581,6 @@ namespace System.Net.Security
         {
             newOffset = 0;
             return GssUnwrap(((SafeDeleteNegoContext)securityContext).GssContext, buffer);
-        }
-
-        internal static int VerifySignature(SafeDeleteContext securityContext, ReadOnlySpan<byte> buffer)
-        {
-            Interop.NetSecurityNative.GssBuffer decryptedBuffer = default(Interop.NetSecurityNative.GssBuffer);
-            try
-            {
-                Interop.NetSecurityNative.Status minorStatus;
-                Interop.NetSecurityNative.Status status = Interop.NetSecurityNative.UnwrapBuffer(
-                    out minorStatus,
-                    ((SafeDeleteNegoContext)securityContext).GssContext,
-                    buffer,
-                    ref decryptedBuffer);
-                if (status != Interop.NetSecurityNative.Status.GSS_S_COMPLETE)
-                {
-                    throw new Interop.NetSecurityNative.GssApiException(status, minorStatus);
-                }
-
-                return decryptedBuffer.Span.Length;
-            }
-            finally
-            {
-                decryptedBuffer.Dispose();
-            }
-        }
-
-        internal static int MakeSignature(SafeDeleteContext securityContext, ReadOnlySpan<byte> buffer, [AllowNull] ref byte[] output)
-        {
-            SafeDeleteNegoContext gssContext = (SafeDeleteNegoContext)securityContext;
-            output = GssWrap(gssContext.GssContext, false, buffer);
-            return output.Length;
         }
     }
 }

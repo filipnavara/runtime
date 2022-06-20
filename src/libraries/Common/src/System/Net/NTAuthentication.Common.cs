@@ -96,6 +96,18 @@ namespace System.Net
             }
         }
 
+        internal bool IsConfidentialityFlag => (_contextFlags & ContextFlagsPal.Confidentiality) != 0;
+
+        internal bool IsIntegrityFlag => (_contextFlags & (IsServer ? ContextFlagsPal.AcceptIntegrity : ContextFlagsPal.InitIntegrity)) != 0;
+
+        internal bool IsMutualAuthFlag => (_contextFlags & ContextFlagsPal.MutualAuth) != 0;
+
+        internal bool IsDelegationFlag => (_contextFlags & ContextFlagsPal.Delegate) != 0;
+
+        internal bool IsIdentifyFlag => (_contextFlags & (IsServer ? ContextFlagsPal.AcceptIdentify : ContextFlagsPal.InitIdentify)) != 0;
+
+        internal string? Spn => _spn;
+
         //
         // This overload does not attempt to impersonate because the caller either did it already or the original thread context is still preserved.
         //
@@ -159,16 +171,6 @@ namespace System.Net
             _isCompleted = false;
         }
 
-        internal int VerifySignature(ReadOnlySpan<byte> buffer)
-        {
-            return NegotiateStreamPal.VerifySignature(_securityContext!, buffer);
-        }
-
-        internal int MakeSignature(ReadOnlySpan<byte> buffer, [AllowNull] ref byte[] output)
-        {
-            return NegotiateStreamPal.MakeSignature(_securityContext!, buffer, ref output);
-        }
-
         internal string? GetOutgoingBlob(string? incomingBlob)
         {
             return GetOutgoingBlob(incomingBlob, throwOnError: true, out _);
@@ -199,11 +201,6 @@ namespace System.Net
             if (decodedOutgoingBlob != null && decodedOutgoingBlob.Length > 0)
             {
                 outgoingBlob = Convert.ToBase64String(decodedOutgoingBlob);
-            }
-
-            if (IsCompleted)
-            {
-                CloseContext();
             }
 
             return outgoingBlob;
@@ -283,7 +280,6 @@ namespace System.Net
                 }
             }
 
-
             if (((int)statusCode.ErrorCode >= (int)SecurityStatusPalErrorCode.OutOfMemory))
             {
                 CloseContext();
@@ -334,12 +330,12 @@ namespace System.Net
             return spn;
         }
 
-        internal int Encrypt(ReadOnlySpan<byte> buffer, [NotNull] ref byte[]? output, uint sequenceNumber)
+        internal int Encrypt(ReadOnlySpan<byte> buffer, [NotNull] ref byte[]? output, uint sequenceNumber, bool? isConfidential = null)
         {
             return NegotiateStreamPal.Encrypt(
                 _securityContext!,
                 buffer,
-                (_contextFlags & ContextFlagsPal.Confidentiality) != 0,
+                isConfidential ?? (_contextFlags & ContextFlagsPal.Confidentiality) != 0,
                 IsNTLM,
                 ref output,
                 sequenceNumber);

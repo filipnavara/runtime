@@ -26,7 +26,6 @@ namespace System.Net
         private readonly NetworkCredential _credential;
         private readonly string? _spn;
         private readonly ChannelBinding? _channelBinding;
-        private readonly ContextFlagsPal _contextFlags;
 
         // State parameters
         private byte[]? _spnegoMechList;
@@ -281,7 +280,6 @@ namespace System.Net
             _credential = credential;
             _spn = spn;
             _channelBinding = channelBinding;
-            _contextFlags = requestedContextFlags;
             IsServer = isServer;
         }
 
@@ -1022,6 +1020,18 @@ namespace System.Net
         internal bool IsServer { get; set; }
 
         internal bool IsValidContext => true;
+
+        internal bool IsConfidentialityFlag => true;
+
+        internal bool IsIntegrityFlag => true;
+
+        internal bool IsMutualAuthFlag => false;
+
+        internal bool IsDelegationFlag => false;
+
+        internal bool IsIdentifyFlag => false;
+
+        internal string? Spn => _spn;
 
         internal string? ClientSpecifiedSpn => _spn;
 #pragma warning restore CA1822

@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Security.Authentication.ExtendedProtection;
@@ -121,10 +122,12 @@ namespace System.Net.Mail
             byte[] input = Convert.FromBase64String(challenge);
 
             int len;
+            Span<byte> unwrappedInput;
 
             try
             {
-                len = clientContext.VerifySignature(input);
+                len = clientContext.Decrypt(input, out int offset, 0);
+                unwrappedInput = input.AsSpan(offset, len);
             }
             catch (Win32Exception)
             {
@@ -154,11 +157,12 @@ namespace System.Net.Mail
             // and the 2nd-4th bytes are value zero since token size is not
             // applicable when there is no security layer.
 
-            if (len < 4 ||          // expect 4 bytes
-                input[0] != 1 ||    // first value 1
-                input[1] != 0 ||    // rest value 0
-                input[2] != 0 ||
-                input[3] != 0)
+            int expectedProtectionLevel =
+                clientContext.IsConfidentialityFlag ? 4 :
+                (clientContext.IsIntegrityFlag ? 2 : 1);
+
+            if (unwrappedInput.Length != 4 ||
+                BinaryPrimitives.ReadUInt32LittleEndian(unwrappedInput) != expectedProtectionLevel)
             {
                 return null;
             }
@@ -179,7 +183,7 @@ namespace System.Net.Mail
             byte[]? output = null;
             try
             {
-                len = clientContext.MakeSignature(input.AsSpan(0, 4), ref output);
+                len = clientContext.Encrypt(input.AsSpan(0, 4), ref output, 0, clientContext.IsNTLM);
             }
             catch (Win32Exception)
             {

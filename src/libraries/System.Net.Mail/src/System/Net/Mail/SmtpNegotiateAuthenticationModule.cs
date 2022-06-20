@@ -167,7 +167,7 @@ namespace System.Net.Mail
             // let MakeSignature figure out length of output
             ArrayBufferWriter<byte> output = new ArrayBufferWriter<byte>();
             bool isConfidential = false;
-            statusCode = clientContext.Wrap(input, output, ref isConfidential);
+            statusCode = clientContext.Wrap(unwrappedInputSpan, output, ref isConfidential);
             if (statusCode != NegotiateAuthenticationStatusCode.Completed)
             {
                 // any encrypt failure is an auth failure

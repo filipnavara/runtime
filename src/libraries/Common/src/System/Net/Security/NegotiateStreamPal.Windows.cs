@@ -499,17 +499,13 @@ namespace System.Net.Security
                 securityBuffer[2] = new SecurityBuffer(output, sizes.cbSecurityTrailer + input.Length, sizes.cbBlockSize, SecurityBufferType.SECBUFFER_PADDING);
 
                 int errorCode;
-                if (isConfidential)
+                if (isConfidential || isNtlm)
                 {
+                    isConfidential = true;
                     errorCode = SSPIWrapper.EncryptMessage(GlobalSSPI.SSPIAuth, securityContext, securityBuffer, 0);
                 }
                 else
                 {
-                    if (isNtlm)
-                    {
-                        securityBuffer[1].type |= SecurityBufferType.SECBUFFER_READONLY;
-                    }
-
                     errorCode = SSPIWrapper.MakeSignature(GlobalSSPI.SSPIAuth, securityContext, securityBuffer, 0);
                 }
 

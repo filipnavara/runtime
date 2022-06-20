@@ -51,8 +51,8 @@ namespace System.Net.Security
         public void Dispose() { }
         public byte[]? GetOutgoingBlob(System.ReadOnlySpan<byte> incomingBlob, out System.Net.Security.NegotiateAuthenticationStatusCode statusCode) { throw null; }
         public string? GetOutgoingBlob(string? incomingBlob, out System.Net.Security.NegotiateAuthenticationStatusCode statusCode) { throw null; }
-        public System.Net.Security.NegotiateAuthenticationStatusCode Wrap(System.ReadOnlySpan<byte> input, System.Buffers.IBufferWriter<byte> outputWriter, ref bool isConfidential) { throw null; }
-        public System.Net.Security.NegotiateAuthenticationStatusCode Unwrap(System.ReadOnlySpan<byte> input, System.Buffers.IBufferWriter<byte> outputWriter, out bool isConfidential) { throw null; }
+        public System.Net.Security.NegotiateAuthenticationStatusCode Wrap(System.ReadOnlySpan<byte> input, System.Buffers.IBufferWriter<byte> outputWriter, ref bool isEncrypted) { throw null; }
+        public System.Net.Security.NegotiateAuthenticationStatusCode Unwrap(System.ReadOnlySpan<byte> input, System.Buffers.IBufferWriter<byte> outputWriter, out bool isEncrypted) { throw null; }
     }
     public partial class NegotiateAuthenticationClientOptions
     {

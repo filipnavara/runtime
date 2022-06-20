@@ -272,9 +272,9 @@ namespace System.Net.Security.Tests
 
             // Test Wrap on client side and decoding it on server side
             ArrayBufferWriter<byte> output = new ArrayBufferWriter<byte>();
-            bool isConfidential = false;
+            bool isEncrypted = ntAuth.IsEncrypted;
             NegotiateAuthenticationStatusCode statusCode;
-            statusCode = ntAuth.Wrap(s_Hello, output, ref isConfidential);
+            statusCode = ntAuth.Wrap(s_Hello, output, ref isEncrypted);
             Assert.Equal(NegotiateAuthenticationStatusCode.Completed, statusCode);
             Assert.Equal(16 + s_Hello.Length, output.WrittenCount);
             // Unseal the content and check it
@@ -289,7 +289,7 @@ namespace System.Net.Security.Tests
             fakeNtlmServer.Seal(s_Hello, serverSignedMessage.AsSpan(16, s_Hello.Length));
             fakeNtlmServer.GetMIC(s_Hello, serverSignedMessage.AsSpan(0, 16), sequenceNumber: 0);
             output.Clear();
-            statusCode = ntAuth.Unwrap(serverSignedMessage, output, out isConfidential);
+            statusCode = ntAuth.Unwrap(serverSignedMessage, output, out isEncrypted);
             Assert.Equal(NegotiateAuthenticationStatusCode.Completed, statusCode);
             Assert.Equal(s_Hello.Length, output.WrittenCount);
             Assert.Equal(s_Hello, output.WrittenSpan.ToArray());

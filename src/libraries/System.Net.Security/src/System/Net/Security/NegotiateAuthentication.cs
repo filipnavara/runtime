@@ -283,12 +283,12 @@ namespace System.Net.Security
 
         /// <summary>
         /// Wrap an input message with signature and optionally with an encryption.
-        /// <summary>
+        /// </summary>
         /// <param name="input">Input message to be wrapped.</param>
         /// <param name="outputWriter">Buffer writter where the wrapped message is written.</param>
-        /// <param name="isConfidential">
-        /// On input specifies whether confidentiality transformation (encryption) is requested.
-        /// On output specifies whether the confidentiality transformation was applied in the wrapping.
+        /// <param name="isEncrypted">
+        /// On input specifies whether encryption is requested.
+        /// On output specifies whether encryption was applied in the wrapping.
         /// </param>
         /// <returns>
         /// <see cref="NegotiateAuthenticationStatusCode.Completed" /> on success, other
@@ -297,26 +297,26 @@ namespace System.Net.Security
         /// <remarks>
         /// Like the <see href="https://datatracker.ietf.org/doc/html/rfc2743#page-65">GSS_Wrap</see> API
         /// the authentication protocol implementation may choose to override the requested value in the
-        /// <see cref="isConfidential" /> parameter. This may result in either downgrade or upgrade of the
-        /// protection level.
+        /// isEncrypted parameter. This may result in either downgrade or upgrade of the protection level.
         /// </remarks>
-        public NegotiateAuthenticationStatusCode Wrap(ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, ref bool isConfidential)
+        /// <exception cref="InvalidOperationException">Authentication failed or has not occurred.</exception>
+        public NegotiateAuthenticationStatusCode Wrap(ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, ref bool isEncrypted)
         {
             if (!IsAuthenticated || _ntAuthentication == null)
             {
                 throw new InvalidOperationException(SR.net_auth_noauth);
             }
 
-            return _ntAuthentication.Wrap(input, outputWriter, ref isConfidential);
+            return _ntAuthentication.Wrap(input, outputWriter, ref isEncrypted);
         }
 
         /// <summary>
         /// Unwrap an input message with signature or encryption applied by the other party.
-        /// <summary>
+        /// </summary>
         /// <param name="input">Input message to be unwrapped.</param>
         /// <param name="outputWriter">Buffer writter where the unwrapped message is written.</param>
-        /// <param name="isConfidential">
-        /// On output specifies whether the wrapped message had confidentiality transformation applied.
+        /// <param name="isEncrypted">
+        /// On output specifies whether the wrapped message had encryption applied.
         /// </param>
         /// <returns>
         /// <see cref="NegotiateAuthenticationStatusCode.Completed" /> on success.
@@ -326,14 +326,15 @@ namespace System.Net.Security
         /// in invalid format.
         /// Other <see cref="NegotiateAuthenticationStatusCode" /> values on failure.
         /// </returns>
-        public NegotiateAuthenticationStatusCode Unwrap(ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, out bool isConfidential)
+        /// <exception cref="InvalidOperationException">Authentication failed or has not occurred.</exception>
+        public NegotiateAuthenticationStatusCode Unwrap(ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, out bool isEncrypted)
         {
             if (!IsAuthenticated || _ntAuthentication == null)
             {
                 throw new InvalidOperationException(SR.net_auth_noauth);
             }
 
-            return _ntAuthentication.Unwrap(input, outputWriter, out isConfidential);
+            return _ntAuthentication.Unwrap(input, outputWriter, out isEncrypted);
         }
 
         internal static NegotiateAuthenticationStatusCode TranslateStatusCode(SecurityStatusPal securityStatus)

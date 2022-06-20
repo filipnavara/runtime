@@ -15,6 +15,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Systen.Net.Mail.Tests;
+using System.Net.Test.Common;
 using Xunit;
 
 namespace System.Net.Mail.Tests
@@ -23,6 +24,9 @@ namespace System.Net.Mail.Tests
     public class SmtpClientTest : FileCleanupTestBase
     {
         private SmtpClient _smtp;
+
+        public static bool IsNtlmAvailable =>
+            Capability.IsNtlmInstalled() || OperatingSystem.IsAndroid() || OperatingSystem.IsTvOS();
 
         private SmtpClient Smtp
         {
@@ -522,6 +526,21 @@ namespace System.Net.Mail.Tests
             // There is a latency between send/receive.
             quitReceived.Wait(TimeSpan.FromSeconds(30));
             Assert.True(quitMessageReceived, "QUIT message not received");
+        }
+
+        [ConditionalFact(nameof(IsNtlmAvailable))]
+        public void TestGssapiAuthentication()
+        {
+            using var server = new LoopbackSmtpServer();
+            server.AdvertiseGssapiAuthSupport = true;
+            server.ExpectedGssapiCredential = new NetworkCredential("foo", "bar");
+            using SmtpClient client = server.CreateClient();
+            client.Credentials = server.ExpectedGssapiCredential;
+            MailMessage msg = new MailMessage("foo@example.com", "bar@example.com", "hello", "howdydoo");
+
+            client.Send(msg);
+
+            Assert.Equal("GSSAPI", server.AuthMethodUsed, StringComparer.OrdinalIgnoreCase);
         }
     }
 }

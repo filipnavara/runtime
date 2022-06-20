@@ -159,16 +159,6 @@ namespace System.Net
             _isCompleted = false;
         }
 
-        internal int VerifySignature(byte[] buffer, int offset, int count)
-        {
-            return NegotiateStreamPal.VerifySignature(_securityContext!, buffer, offset, count);
-        }
-
-        internal int MakeSignature(byte[] buffer, int offset, int count, [AllowNull] ref byte[] output)
-        {
-            return NegotiateStreamPal.MakeSignature(_securityContext!, buffer, offset, count, ref output);
-        }
-
         internal string? GetOutgoingBlob(string? incomingBlob)
         {
             return GetOutgoingBlob(incomingBlob, throwOnError: true, out _);

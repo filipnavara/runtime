@@ -593,31 +593,6 @@ namespace System.Net.Security
             return GssUnwrap(((SafeDeleteNegoContext)securityContext).GssContext, buffer!, offset, count);
         }
 
-        internal static int VerifySignature(SafeDeleteContext securityContext, byte[] buffer, int offset, int count)
-        {
-            if (offset < 0 || offset > (buffer == null ? 0 : buffer.Length))
-            {
-                Debug.Fail("Argument 'offset' out of range");
-                throw new ArgumentOutOfRangeException(nameof(offset));
-            }
-
-            if (count < 0 || count > (buffer == null ? 0 : buffer.Length - offset))
-            {
-                Debug.Fail("Argument 'count' out of range.");
-                throw new ArgumentOutOfRangeException(nameof(count));
-            }
-
-            return GssUnwrap(((SafeDeleteNegoContext)securityContext).GssContext, buffer!, offset, count);
-        }
-
-        internal static int MakeSignature(SafeDeleteContext securityContext, byte[] buffer, int offset, int count, [AllowNull] ref byte[] output)
-        {
-            SafeDeleteNegoContext gssContext = (SafeDeleteNegoContext)securityContext;
-            output = GssWrap(gssContext.GssContext, false, new ReadOnlySpan<byte>(buffer, offset, count));
-            return output.Length;
-        }
-
-
         internal static NegotiateAuthenticationStatusCode Wrap(SafeDeleteContext securityContext, ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, ref bool isConfidential, bool isNtlm)
         {
             Interop.NetSecurityNative.GssBuffer encryptedBuffer = default;

@@ -196,7 +196,7 @@ namespace System.Net.Security
 
                 if (nextmsg is { Length: > 0 })
                 {
-                    await TIOAdapter.WriteAsync(InnerStream, nextmsg, 0, nextmsg.Length, cancellationToken).ConfigureAwait(false);
+                    await TIOAdapter.WriteAsync(InnerStream, nextmsg, cancellationToken).ConfigureAwait(false);
                     await TIOAdapter.FlushAsync(InnerStream, cancellationToken).ConfigureAwait(false);
                 }
 
@@ -219,7 +219,7 @@ namespace System.Net.Security
                     message = await ReceiveBlobAsync<TIOAdapter>(cancellationToken).ConfigureAwait(false);
                     if (message.Size > 0)
                     {
-                        await TIOAdapter.WriteAsync(InnerStream, message.Payload!, 0, message.Size, cancellationToken).ConfigureAwait(false);
+                        await TIOAdapter.WriteAsync(InnerStream, new ReadOnlyMemory<byte>(message.Payload!, 0, message.Size), cancellationToken).ConfigureAwait(false);
                         await TIOAdapter.FlushAsync(InnerStream, cancellationToken).ConfigureAwait(false);
                     }
                 }
@@ -264,7 +264,7 @@ namespace System.Net.Security
                     message = NextMessage(reAuthenticationData);
                     if (message.Size > 0)
                     {
-                        await TIOAdapter.WriteAsync(InnerStream, message.Payload!, 0, message.Size, cancellationToken).ConfigureAwait(false);
+                        await TIOAdapter.WriteAsync(InnerStream, new ReadOnlyMemory<byte>(message.Payload!, 0, message.Size), cancellationToken).ConfigureAwait(false);
                         await TIOAdapter.FlushAsync(InnerStream, cancellationToken).ConfigureAwait(false);
                         if (NetEventSource.Log.IsEnabled())
                             NetEventSource.Log.SentFrame(this, message.Payload);
@@ -308,7 +308,7 @@ namespace System.Net.Security
                     if (payload != null && size > 0)
                     {
                         // If there is message send it out even if call failed. It may contain TLS Alert.
-                        await TIOAdapter.WriteAsync(InnerStream, payload!, 0, size, cancellationToken).ConfigureAwait(false);
+                        await TIOAdapter.WriteAsync(InnerStream, new ReadOnlyMemory<byte>(payload!, 0, size), cancellationToken).ConfigureAwait(false);
                         await TIOAdapter.FlushAsync(InnerStream, cancellationToken).ConfigureAwait(false);
 
                         if (NetEventSource.Log.IsEnabled())
@@ -592,7 +592,7 @@ namespace System.Net.Security
                 return ValueTask.FromException(ExceptionDispatchInfo.SetCurrentStackTrace(new IOException(SR.net_io_encrypt, SslStreamPal.GetException(status))));
             }
 
-            ValueTask t = TIOAdapter.WriteAsync(InnerStream, outBuffer, 0, encryptedBytes, cancellationToken);
+            ValueTask t = TIOAdapter.WriteAsync(InnerStream, new ReadOnlyMemory<byte>(outBuffer, 0, encryptedBytes), cancellationToken);
             if (t.IsCompletedSuccessfully)
             {
                 ArrayPool<byte>.Shared.Return(rentedBuffer);
@@ -626,7 +626,7 @@ namespace System.Net.Security
                     }
                     else if (status.ErrorCode == SecurityStatusPalErrorCode.OK)
                     {
-                        await TIOAdapter.WriteAsync(InnerStream, outBuffer, 0, encryptedBytes, cancellationToken).ConfigureAwait(false);
+                        await TIOAdapter.WriteAsync(InnerStream, new ReadOnlyMemory<byte>(outBuffer, 0, encryptedBytes), cancellationToken).ConfigureAwait(false);
                     }
                     else
                     {

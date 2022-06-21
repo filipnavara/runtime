@@ -476,6 +476,16 @@ namespace System.Net.Security
             return _ntAuthentication.UnwrapInPlace(input, out unwrappedOffset, out unwrappedLength, out wasEncrypted);
         }
 
+        internal int Encrypt(ReadOnlySpan<byte> buffer, [NotNull] ref byte[]? output)
+        {
+            return _ntAuthentication.Encrypt(buffer, ref output);
+        }
+
+        internal int Decrypt(Span<byte> payload, out int newOffset)
+        {
+            return _ntAuthentication.Decrypt(buffer, out newOffset);
+        }
+
         private bool CheckSpn()
         {
             Debug.Assert(_ntAuthentication != null);

@@ -421,8 +421,12 @@ namespace System.Net.Security
 
                 if (errorCode != 0)
                 {
-                    SecurityStatusPal securityStatus = SecurityStatusAdapterPal.GetSecurityStatusPalFromNativeInt(errorCode);
-                    return NegotiateAuthentication.TranslateStatusCode(securityStatus);
+                    return errorCode switch
+                    {
+                        (int)Interop.SECURITY_STATUS.ContextExpired => NegotiateAuthenticationStatusCode.ContextExpired,
+                        (int)Interop.SECURITY_STATUS.QopNotSupported => NegotiateAuthenticationStatusCode.QopNotSupported,
+                        _ => NegotiateAuthenticationStatusCode.GenericFailure,
+                    };
                 }
 
                 // Compacting the result.

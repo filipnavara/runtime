@@ -315,30 +315,6 @@ namespace System.Net
             return spn;
         }
 
-        internal int Encrypt(ReadOnlySpan<byte> buffer, [NotNull] ref byte[]? output, uint sequenceNumber)
-        {
-            return NegotiateStreamPal.Encrypt(
-                _securityContext!,
-                buffer,
-                (_contextFlags & ContextFlagsPal.Confidentiality) != 0,
-                IsNTLM,
-                ref output,
-                sequenceNumber);
-        }
-
-        internal int Decrypt(byte[] payload, int offset, int count, out int newOffset, uint expectedSeqNumber)
-        {
-            return NegotiateStreamPal.Decrypt(
-                _securityContext!,
-                payload,
-                offset,
-                count,
-                (_contextFlags & ContextFlagsPal.Confidentiality) != 0,
-                IsNTLM,
-                out newOffset,
-                expectedSeqNumber);
-        }
-
         public NegotiateAuthenticationStatusCode Wrap(ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, ref bool isConfidential)
         {
             return NegotiateStreamPal.Wrap(

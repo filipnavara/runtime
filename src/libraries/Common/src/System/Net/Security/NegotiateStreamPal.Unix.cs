@@ -39,58 +39,6 @@ namespace System.Net.Security
             return negoContext.IsNtlmUsed ? NegotiationInfoClass.NTLM : NegotiationInfoClass.Kerberos;
         }
 
-        private static byte[] GssWrap(
-            SafeGssContextHandle? context,
-            bool encrypt,
-            ReadOnlySpan<byte> buffer)
-        {
-            Interop.NetSecurityNative.GssBuffer encryptedBuffer = default;
-            try
-            {
-                bool isConfidential = encrypt;
-                Interop.NetSecurityNative.Status minorStatus;
-                Interop.NetSecurityNative.Status status = Interop.NetSecurityNative.WrapBuffer(out minorStatus, context, ref isConfidential, buffer, ref encryptedBuffer);
-                if (status != Interop.NetSecurityNative.Status.GSS_S_COMPLETE)
-                {
-                    throw new Interop.NetSecurityNative.GssApiException(status, minorStatus);
-                }
-
-                return encryptedBuffer.ToByteArray();
-            }
-            finally
-            {
-                encryptedBuffer.Dispose();
-            }
-        }
-
-        private static int GssUnwrap(
-            SafeGssContextHandle? context,
-            byte[] buffer,
-            int offset,
-            int count)
-        {
-            Debug.Assert((buffer != null) && (buffer.Length > 0), "Invalid input buffer passed to Decrypt");
-            Debug.Assert((offset >= 0) && (offset <= buffer.Length), "Invalid input offset passed to Decrypt");
-            Debug.Assert((count >= 0) && (count <= (buffer.Length - offset)), "Invalid input count passed to Decrypt");
-
-            Interop.NetSecurityNative.GssBuffer decryptedBuffer = default(Interop.NetSecurityNative.GssBuffer);
-            try
-            {
-                Interop.NetSecurityNative.Status minorStatus;
-                Interop.NetSecurityNative.Status status = Interop.NetSecurityNative.UnwrapBuffer(out minorStatus, context, out _, buffer.AsSpan(offset, count), ref decryptedBuffer);
-                if (status != Interop.NetSecurityNative.Status.GSS_S_COMPLETE)
-                {
-                    throw new Interop.NetSecurityNative.GssApiException(status, minorStatus);
-                }
-
-                return decryptedBuffer.Copy(buffer, offset);
-            }
-            finally
-            {
-                decryptedBuffer.Dispose();
-            }
-        }
-
         private static bool GssInitSecurityContext(
             ref SafeGssContextHandle? context,
             SafeGssCredHandle credential,
@@ -538,59 +486,6 @@ namespace System.Net.Security
             byte[]? incomingBlob)
         {
             return new SecurityStatusPal(SecurityStatusPalErrorCode.OK);
-        }
-
-        internal static int Encrypt(
-            SafeDeleteContext securityContext,
-            ReadOnlySpan<byte> buffer,
-            bool isConfidential,
-            bool isNtlm,
-            [NotNull] ref byte[]? output,
-            uint sequenceNumber)
-        {
-            SafeDeleteNegoContext gssContext = (SafeDeleteNegoContext) securityContext;
-            byte[] tempOutput = GssWrap(gssContext.GssContext, isConfidential, buffer);
-
-            // Create space for prefixing with the length
-            const int prefixLength = 4;
-            output = new byte[tempOutput.Length + prefixLength];
-            Array.Copy(tempOutput, 0, output, prefixLength, tempOutput.Length);
-            int resultSize = tempOutput.Length;
-            unchecked
-            {
-                output[0] = (byte)((resultSize) & 0xFF);
-                output[1] = (byte)(((resultSize) >> 8) & 0xFF);
-                output[2] = (byte)(((resultSize) >> 16) & 0xFF);
-                output[3] = (byte)(((resultSize) >> 24) & 0xFF);
-            }
-
-            return resultSize + 4;
-        }
-
-        internal static int Decrypt(
-            SafeDeleteContext securityContext,
-            byte[]? buffer,
-            int offset,
-            int count,
-            bool isConfidential,
-            bool isNtlm,
-            out int newOffset,
-            uint sequenceNumber)
-        {
-            if (offset < 0 || offset > (buffer == null ? 0 : buffer.Length))
-            {
-                Debug.Fail("Argument 'offset' out of range");
-                throw new ArgumentOutOfRangeException(nameof(offset));
-            }
-
-            if (count < 0 || count > (buffer == null ? 0 : buffer.Length - offset))
-            {
-                Debug.Fail("Argument 'count' out of range.");
-                throw new ArgumentOutOfRangeException(nameof(count));
-            }
-
-            newOffset = offset;
-            return GssUnwrap(((SafeDeleteNegoContext)securityContext).GssContext, buffer!, offset, count);
         }
 
         internal static NegotiateAuthenticationStatusCode Wrap(SafeDeleteContext securityContext, ReadOnlySpan<byte> input, IBufferWriter<byte> outputWriter, ref bool isConfidential, bool isNtlm)

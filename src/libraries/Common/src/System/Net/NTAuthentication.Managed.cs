@@ -1051,46 +1051,6 @@ namespace System.Net
         }
 
 #pragma warning disable CA1822
-        internal int Encrypt(ReadOnlySpan<byte> buffer, [NotNull] ref byte[]? output, uint sequenceNumber)
-        {
-            if (_clientSeal == null)
-            {
-                throw new InvalidOperationException(SR.net_auth_noauth);
-            }
-
-            if (output == null || output.Length < SignatureLength + buffer.Length + 4)
-            {
-                output = new byte[SignatureLength + buffer.Length + 4];
-            }
-
-            _clientSeal.Transform(buffer, output.AsSpan(SignatureLength + 4));
-            CalculateSignature(buffer, _clientSequenceNumber, _clientSigningKey, _clientSeal, output.AsSpan(4, SignatureLength));
-            _clientSequenceNumber++;
-            BinaryPrimitives.WriteInt32LittleEndian(output.AsSpan(0, 4), buffer.Length + SignatureLength);
-
-            return buffer.Length + SignatureLength + 4;
-        }
-
-        internal int Decrypt(byte[] payload, int offset, int count, out int newOffset, uint expectedSeqNumber)
-        {
-            if (_serverSeal == null)
-            {
-                throw new InvalidOperationException(SR.net_auth_noauth);
-            }
-
-            // TODO: Verify parameters
-
-            Span<byte> message = payload.AsSpan(offset + SignatureLength, count - SignatureLength);
-            _serverSeal.Transform(message, message);
-            if (!VerifyMIC(message, payload.AsSpan(offset, SignatureLength)))
-            {
-                throw new Win32Exception(NTE_FAIL, nameof(SecurityStatusPalErrorCode.MessageAltered));
-            }
-
-            newOffset = offset + SignatureLength;
-            return message.Length;
-        }
-
         internal string ProtocolName => _isSpNego ? NegotiationInfoClass.Negotiate : NegotiationInfoClass.NTLM;
 
         internal bool IsNTLM => true;

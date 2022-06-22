@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.ComponentModel;
+using System.Net.Security;
 using System.Net.WebSockets;
 using System.Runtime.InteropServices;
 using System.Security.Authentication.ExtendedProtection;
@@ -14,6 +15,7 @@ namespace System.Net
     public sealed unsafe partial class HttpListenerContext
     {
         private string? _mutualAuthentication;
+        private NegotiateAuthentication? _sessionAuthentication;
         internal HttpListenerSession ListenerSession { get; private set; }
 
         internal HttpListenerContext(HttpListenerSession session, RequestContextBase memoryBlob)
@@ -28,10 +30,11 @@ namespace System.Net
         }
 
         // Call this right after construction, and only once!  Not after it's been handed to a user.
-        internal void SetIdentity(IPrincipal principal, string? mutualAuthentication)
+        internal void SetIdentity(IPrincipal principal, string? mutualAuthentication, NegotiateAuthentication? sessionAuthentication)
         {
-            _mutualAuthentication = mutualAuthentication;
             _user = principal;
+            _mutualAuthentication = mutualAuthentication;
+            _sessionAuthentication = sessionAuthentication;
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"mutual: {mutualAuthentication ?? "<null>"}, Principal: {principal}");
         }
 
@@ -87,15 +90,9 @@ namespace System.Net
                 }
                 finally
                 {
-                    IDisposable? user = _user == null ? null : _user.Identity as IDisposable;
-
-                    // For unsafe connection ntlm auth we dont dispose this identity as yet since its cached
-                    if ((user != null) &&
-                        (_user!.Identity!.AuthenticationType != NegotiationInfoClass.NTLM) &&
-                        (!_listener!.UnsafeConnectionNtlmAuthentication))
-                    {
-                        user.Dispose();
-                    }
+                    // If we have ownership of the session authentication then dispose it now,
+                    // the identity gets disposed too.
+                    _sessionAuthentication?.Dispose();
                 }
             }
         }
@@ -109,7 +106,7 @@ namespace System.Net
             }
             finally
             {
-                (_user?.Identity as IDisposable)?.Dispose();
+                _sessionAuthentication?.Dispose();
             }
         }
 

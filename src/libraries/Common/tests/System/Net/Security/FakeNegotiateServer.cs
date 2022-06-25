@@ -219,7 +219,7 @@ namespace System.Net.Security
                     // Validate mechListMIC, if present
                     if (mechListMIC is not null)
                     {
-                        _ntlmServer.VerifyMIC(_spnegoMechList, mechListMIC, 0);
+                        _ntlmServer.VerifyMIC(_spnegoMechList, mechListMIC);
                     }
                 }
                 else
@@ -262,8 +262,9 @@ namespace System.Net.Security
                             using (writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, (int)NegTokenResp.MechListMIC)))
                             {
                                 Span<byte> mic = stackalloc byte[16];
-                                _ntlmServer.GetMIC(_spnegoMechList, mic, 0);
+                                _ntlmServer.GetMIC(_spnegoMechList, mic);
                                 writer.WriteOctetString(mic);
+                                _ntlmServer.ResetKeys();
                             }
                         }
                     }

@@ -33,7 +33,7 @@ namespace System.Net.Mail
                         _sessions[sessionCookie] =
                             clientContext =
                             new NTAuthentication(false, "Negotiate", credential, spn,
-                                                 ContextFlagsPal.Connection | ContextFlagsPal.InitIntegrity, channelBindingToken);
+                                                 ContextFlagsPal.Connection | ContextFlagsPal.InitIntegrity | ContextFlagsPal.Confidentiality, channelBindingToken);
                     }
 
                     byte[]? byteResp;
@@ -192,7 +192,7 @@ namespace System.Net.Mail
             }
 
             // return Base64 encoded string of signed payload
-            return Convert.ToBase64String(output, 0, len);
+            return Convert.ToBase64String(output, 4, len - 4);
         }
     }
 }

@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -174,14 +175,18 @@ namespace Systen.Net.Mail.Tests
                                 }
                             }
                             while (!fakeNegotiateServer.IsAuthenticated);
-                            byte[] saslToken = new byte[] { 1, 0, 0, 0 };
+
+                            byte[] saslToken = new byte[4];
+                            int protectionLevel =
+                                fakeNtlmServer.IsEncrypted ? 4 :
+                                (fakeNtlmServer.IsSigned ? 2 : 1);
+                            BinaryPrimitives.WriteInt32LittleEndian(saslToken, protectionLevel);
+
                             outgoingBlob = new byte[20]; // 16 bytes of NTLM signature, 4 bytes of content
-                            fakeNtlmServer.Seal(saslToken, outgoingBlob.AsSpan(16, 4));
-                            fakeNtlmServer.GetMIC(saslToken, outgoingBlob.AsSpan(0, 16), 0);
+                            fakeNtlmServer.Wrap(saslToken, outgoingBlob);
                             await SendMessageAsync("334 " + Convert.ToBase64String(outgoingBlob));
                             incomingBlob = Convert.FromBase64String(await ReceiveMessageAsync());
-                            fakeNtlmServer.Unseal(incomingBlob.AsSpan(16), saslToken);
-                            fakeNtlmServer.VerifyMIC(saslToken, incomingBlob.AsSpan(0, 16), 0);
+                            fakeNtlmServer.Unwrap(incomingBlob, saslToken);
                             await SendMessageAsync("235 Authentication successful");
                         }
                         else await SendMessageAsync("504 scheme not supported");

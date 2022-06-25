@@ -70,11 +70,9 @@ namespace System.Net.Security
             try
             {
                 Interop.NetSecurityNative.Status minorStatus;
-                Console.WriteLine($"GssUnwrap {Convert.ToHexString(buffer)}");
                 Interop.NetSecurityNative.Status status = Interop.NetSecurityNative.UnwrapBuffer(out minorStatus, context, buffer, ref decryptedBuffer);
                 if (status != Interop.NetSecurityNative.Status.GSS_S_COMPLETE)
                 {
-                    Console.WriteLine($"GssUnwrap status {status:x}");
                     throw new Interop.NetSecurityNative.GssApiException(status, minorStatus);
                 }
 

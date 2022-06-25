@@ -34,24 +34,23 @@ namespace System.Net.Security.Tests
 
             // Test MakeSignature on client side and decoding it on server side
             byte[]? output = null;
-            int len = ntAuth.MakeSignature(s_Hello, ref output);
+            int len = ntAuth.Encrypt(s_Hello, ref output, 0);
             Assert.NotNull(output);
-            Assert.Equal(16 + s_Hello.Length, len);
+            Assert.Equal(16 + s_Hello.Length + 4, len);
             // Unseal the content and check it
             byte[] temp = new byte[s_Hello.Length];
-            fakeNtlmServer.Unseal(output.AsSpan(16), temp);
+            fakeNtlmServer.Unseal(output.AsSpan(4 + 16), temp);
             Assert.Equal(s_Hello, temp);
             // Check the signature
-            fakeNtlmServer.VerifyMIC(temp, output.AsSpan(0, 16), sequenceNumber: 0);
+            fakeNtlmServer.VerifyMIC(temp, output.AsSpan(4, 16), sequenceNumber: 0);
 
             // Test creating signature on server side and decoding it with VerifySignature on client side 
             byte[] serverSignedMessage = new byte[16 + s_Hello.Length];
             fakeNtlmServer.Seal(s_Hello, serverSignedMessage.AsSpan(16, s_Hello.Length));
             fakeNtlmServer.GetMIC(s_Hello, serverSignedMessage.AsSpan(0, 16), sequenceNumber: 0);
-            len = ntAuth.VerifySignature(serverSignedMessage);
+            len = ntAuth.Decrypt(serverSignedMessage, out int offset, 0);
             Assert.Equal(s_Hello.Length, len);
-            // NOTE: VerifySignature doesn't return the content on Windows
-            // Assert.Equal(s_Hello, serverSignedMessage.AsSpan(0, len).ToArray());
+            Assert.Equal(s_Hello, serverSignedMessage.AsSpan(offset, len).ToArray());
         }
 
         private void DoNtlmExchange(FakeNtlmServer fakeNtlmServer, NTAuthentication ntAuth)

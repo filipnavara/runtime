@@ -19,14 +19,17 @@ namespace System.Net.Security.Tests
         private static NetworkCredential s_testCredentialRight = new NetworkCredential("rightusername", "rightpassword");
         private static readonly byte[] s_Hello = "Hello"u8.ToArray();
 
-        [ConditionalFact(nameof(IsNtlmInstalled))]
+        [ConditionalTheory(nameof(IsNtlmInstalled))]
         [ActiveIssue("https://github.com/dotnet/runtime/issues/65678", TestPlatforms.OSX | TestPlatforms.iOS | TestPlatforms.MacCatalyst)]
-        public void NtlmSignatureTest()
+        [InlineData(false)]
+        [InlineData(true)]
+        public void NtlmSignatureTest(bool isConfidential)
         {
             FakeNtlmServer fakeNtlmServer = new FakeNtlmServer(s_testCredentialRight);
             NTAuthentication ntAuth = new NTAuthentication(
                 isServer: false, "NTLM", s_testCredentialRight, "HTTP/foo",
-                ContextFlagsPal.Connection | ContextFlagsPal.InitIntegrity | ContextFlagsPal.Confidentiality, null);
+                ContextFlagsPal.Connection | ContextFlagsPal.InitIntegrity |
+                (isConfidential ? ContextFlagsPal.Confidentiality : 0), null);
 
             DoNtlmExchange(fakeNtlmServer, ntAuth);
 
@@ -39,15 +42,12 @@ namespace System.Net.Security.Tests
             Assert.Equal(16 + s_Hello.Length + 4, len);
             // Unseal the content and check it
             byte[] temp = new byte[s_Hello.Length];
-            fakeNtlmServer.Unseal(output.AsSpan(4 + 16), temp);
+            fakeNtlmServer.Unwrap(output.AsSpan(4), temp);
             Assert.Equal(s_Hello, temp);
-            // Check the signature
-            fakeNtlmServer.VerifyMIC(temp, output.AsSpan(4, 16), sequenceNumber: 0);
 
             // Test creating signature on server side and decoding it with VerifySignature on client side 
             byte[] serverSignedMessage = new byte[16 + s_Hello.Length];
-            fakeNtlmServer.Seal(s_Hello, serverSignedMessage.AsSpan(16, s_Hello.Length));
-            fakeNtlmServer.GetMIC(s_Hello, serverSignedMessage.AsSpan(0, 16), sequenceNumber: 0);
+            fakeNtlmServer.Wrap(s_Hello, serverSignedMessage);
             len = ntAuth.Decrypt(serverSignedMessage, out int offset, 0);
             Assert.Equal(s_Hello.Length, len);
             Assert.Equal(s_Hello, serverSignedMessage.AsSpan(offset, len).ToArray());

@@ -462,19 +462,29 @@ namespace System.Net.Security
         public void Wrap(ReadOnlySpan<byte> message, Span<byte> wrappedMessage)
         {
             Assert.Equal(wrappedMessage.Length, message.Length + 16);
-            Seal(message, wrappedMessage.Slice(16));
+            if (_negotiatedFlags.HasFlag(Flags.NegotiateSeal))
+            {
+                Seal(message, wrappedMessage.Slice(16));
+            }
+            else
+            {
+                message.CopyTo(wrappedMessage.Slice(16));
+            }
             GetMIC(message, wrappedMessage.Slice(0, 16));
         }
 
         public void Unwrap(ReadOnlySpan<byte> wrappedMessage, Span<byte> message)
         {
             Assert.Equal(wrappedMessage.Length, message.Length + 16);
-            Unseal(wrappedMessage.Slice(16), message);
+            if (_negotiatedFlags.HasFlag(Flags.NegotiateSeal))
+            {
+                Unseal(wrappedMessage.Slice(16), message);
+            }
+            else
+            {
+                wrappedMessage.Slice(16).CopyTo(message);
+            }
             VerifyMIC(message, wrappedMessage.Slice(0, 16));
         }
-
-        public bool IsEncrypted => _negotiatedFlags.HasFlag(Flags.NegotiateSeal);
-
-        public bool IsSigned => _negotiatedFlags.HasFlag(Flags.NegotiateSign);
     }
 }

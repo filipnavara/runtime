@@ -264,6 +264,10 @@ namespace System.Net.Security
                                 Span<byte> mic = stackalloc byte[16];
                                 _ntlmServer.GetMIC(_spnegoMechList, mic);
                                 writer.WriteOctetString(mic);
+
+                                // MS-SPNG section 3.2.5.1 NTLM RC4 Key State for MechListMIC and First Signed Message
+                                // specifies that the RC4 sealing keys are reset back to the initial state for the
+                                // first message.
                                 _ntlmServer.ResetKeys();
                             }
                         }

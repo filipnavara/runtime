@@ -163,6 +163,8 @@ namespace Systen.Net.Mail.Tests
                             Debug.Assert(ExpectedGssapiCredential != null);
                             FakeNtlmServer fakeNtlmServer = new FakeNtlmServer(ExpectedGssapiCredential) { ForceNegotiateVersion = true };
                             FakeNegotiateServer fakeNegotiateServer = new FakeNegotiateServer(fakeNtlmServer);
+
+                            // Do the authentication loop
                             byte[]? incomingBlob = Convert.FromBase64String(parts[2]);
                             byte[]? outgoingBlob;
                             do
@@ -176,17 +178,15 @@ namespace Systen.Net.Mail.Tests
                             }
                             while (!fakeNegotiateServer.IsAuthenticated);
 
-                            byte[] saslToken = new byte[4];
-                            int protectionLevel =
-                                fakeNtlmServer.IsEncrypted ? 4 :
-                                (fakeNtlmServer.IsSigned ? 2 : 1);
-                            BinaryPrimitives.WriteInt32LittleEndian(saslToken, protectionLevel);
-
+                            // Negotiate the SASL protection (no encryption and no signing)
+                            byte[] saslToken = new byte[] { 1, 0, 0, 0 };
                             outgoingBlob = new byte[20]; // 16 bytes of NTLM signature, 4 bytes of content
                             fakeNtlmServer.Wrap(saslToken, outgoingBlob);
                             await SendMessageAsync("334 " + Convert.ToBase64String(outgoingBlob));
                             incomingBlob = Convert.FromBase64String(await ReceiveMessageAsync());
                             fakeNtlmServer.Unwrap(incomingBlob, saslToken);
+                            // TODO: Verify the token we got back
+
                             await SendMessageAsync("235 Authentication successful");
                         }
                         else await SendMessageAsync("504 scheme not supported");

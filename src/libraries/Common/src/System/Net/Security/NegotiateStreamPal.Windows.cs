@@ -251,10 +251,10 @@ namespace System.Net.Security
                 }
                 else
                 {
-                    if (isNtlm)
+                    /*if (isNtlm)
                     {
                        dataBuffer->BufferType |= SecurityBufferType.SECBUFFER_READONLY;
-                    }
+                    }*/
 
                     errorCode = GlobalSSPI.SSPIAuth.MakeSignature(securityContext, ref sdcInOut, 0);
                 }
@@ -385,7 +385,7 @@ namespace System.Net.Security
                 }
                 else
                 {
-                    realDataType |= SecurityBufferType.SECBUFFER_READONLY;
+                    //realDataType |= SecurityBufferType.SECBUFFER_READONLY;
                     dataBuffer->BufferType = realDataType;
                     errorCode = GlobalSSPI.SSPIAuth.VerifySignature(securityContext, ref sdcInOut, sequenceNumber);
                 }

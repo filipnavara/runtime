@@ -542,5 +542,15 @@ namespace System.Net.Mail.Tests
 
             Assert.Equal("GSSAPI", server.AuthMethodUsed, StringComparer.OrdinalIgnoreCase);
         }
+
+        [Fact]
+        public void TestWinServerAuthentication()
+        {
+            using SmtpClient client = new SmtpClient("20.121.60.164", 587);
+            client.Credentials = new NetworkCredential("mao", "gzYBDXEtgRVwH6n");
+            MailMessage msg = new MailMessage("foo@example.com", "bar@example.com", "hello", "howdydoo");
+
+            client.Send(msg);
+        }
     }
 }

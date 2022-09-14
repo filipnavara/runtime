@@ -1934,12 +1934,19 @@ bool StackFrameIterator::ShouldSkipRegularGcReporting()
 COOP_PINVOKE_HELPER(FC_BOOL_RET, RhpSfiInit, (StackFrameIterator* pThis, PAL_LIMITED_CONTEXT* pStackwalkCtx, CLR_BOOL instructionFault))
 {
     Thread * pCurThread = ThreadStore::GetCurrentThread();
+    bool disablePreemptive = false;
 
     // The stackwalker is intolerant to hijacked threads, as it is largely expecting to be called from C++
     // where the hijack state of the thread is invariant.  Because we've exposed the iterator out to C#, we
     // need to unhijack every time we callback into C++ because the thread could have been hijacked during our
     // time executing C#.
     pCurThread->Unhijack();
+
+    if (pCurThread->IsCurrentThreadInCooperativeMode())
+    {
+        pCurThread->EnablePreemptiveMode();
+        disablePreemptive = true;
+    }
 
     // Passing NULL is a special-case to request a standard managed stack trace for the current thread.
     if (pStackwalkCtx == NULL)
@@ -1950,16 +1957,31 @@ COOP_PINVOKE_HELPER(FC_BOOL_RET, RhpSfiInit, (StackFrameIterator* pThis, PAL_LIM
     bool isValid = pThis->IsValid();
     if (isValid)
         pThis->CalculateCurrentMethodState();
+
+    if (disablePreemptive)
+    {
+        pCurThread->DisablePreemptiveMode();
+    }
+
     FC_RETURN_BOOL(isValid);
 }
 
 COOP_PINVOKE_HELPER(FC_BOOL_RET, RhpSfiNext, (StackFrameIterator* pThis, uint32_t* puExCollideClauseIdx, CLR_BOOL* pfUnwoundReversePInvoke))
 {
+    Thread * pCurThread = ThreadStore::GetCurrentThread();
+    bool disablePreemptive = false;
+
     // The stackwalker is intolerant to hijacked threads, as it is largely expecting to be called from C++
     // where the hijack state of the thread is invariant.  Because we've exposed the iterator out to C#, we
     // need to unhijack every time we callback into C++ because the thread could have been hijacked during our
     // time executing C#.
-    ThreadStore::GetCurrentThread()->Unhijack();
+    pCurThread->Unhijack();
+
+    if (pCurThread->IsCurrentThreadInCooperativeMode())
+    {
+        pCurThread->EnablePreemptiveMode();
+        disablePreemptive = true;
+    }
 
     const uint32_t MaxTryRegionIdx = 0xFFFFFFFF;
 
@@ -1986,6 +2008,11 @@ COOP_PINVOKE_HELPER(FC_BOOL_RET, RhpSfiNext, (StackFrameIterator* pThis, uint32_
     if (pfUnwoundReversePInvoke != NULL)
     {
         *pfUnwoundReversePInvoke = (pThis->m_dwFlags & StackFrameIterator::UnwoundReversePInvoke) != 0;
+    }
+
+    if (disablePreemptive)
+    {
+        pCurThread->DisablePreemptiveMode();
     }
 
     FC_RETURN_BOOL(isValid);

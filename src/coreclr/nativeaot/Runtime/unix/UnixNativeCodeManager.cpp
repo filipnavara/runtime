@@ -662,7 +662,7 @@ bool UnixNativeCodeManager::GetReturnAddressHijackInfo(MethodInfo *    pMethodIn
 
 #if defined(TARGET_AMD64) && defined(TARGET_OSX)
     // Compact unwinding on macOS cannot properly handle unwinding the function prolog
-    if ((PTR_VOID)pRegisterSet->IP == pNativeMethodInfo->pMethodStartAddress)
+    /*if ((PTR_VOID)pRegisterSet->IP == pNativeMethodInfo->pMethodStartAddress)
     {
         *ppvRetAddrLocation = (PTR_PTR_VOID)pRegisterSet->GetSP();
         return true;
@@ -670,7 +670,7 @@ bool UnixNativeCodeManager::GetReturnAddressHijackInfo(MethodInfo *    pMethodIn
     else if ((PTR_UInt8)pRegisterSet->IP < (PTR_UInt8)pNativeMethodInfo->pMethodStartAddress + decoder.GetPrologSize())
     {
         return false;
-    }
+    }*/
 #endif
 
     int epilogueInstructions = TrailingEpilogueInstructionsCount((PTR_VOID)pRegisterSet->IP);

@@ -1287,7 +1287,7 @@ namespace ILCompiler.DependencyAnalysis
                     break;
                 case TargetOS.OSX:
                     vendor = "apple";
-                    sys = "darwin";
+                    sys = "darwin16";
                     abi = "macho";
                     break;
                 case TargetOS.WebAssembly:

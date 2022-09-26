@@ -23,6 +23,7 @@
 #include "metadata/method-builder.h"
 #include "metadata/abi-details.h"
 #include "metadata/class-abi-details.h"
+#include "metadata/class-internals.h"
 #include <mono/metadata/mono-gc.h>
 #include "metadata/runtime.h"
 #include "metadata/sgen-bridge-internals.h"
@@ -63,6 +64,13 @@ static MonoGCCallbacks gc_callbacks;
 
 /* Used for GetGCMemoryInfo */
 SgenGCInfo sgen_gc_info;
+
+/* Used by sgen_client_object_finalize_eagerly */
+static GENERATE_TRY_GET_CLASS_WITH_CACHE_DECL(weakreference);
+static GENERATE_TRY_GET_CLASS_WITH_CACHE_DECL(generic_weakreference);
+
+GENERATE_TRY_GET_CLASS_WITH_CACHE (weakreference, "System", "WeakReference");
+GENERATE_TRY_GET_CLASS_WITH_CACHE (generic_weakreference, "System", "WeakReference`1")
 
 #define OPDEF(a,b,c,d,e,f,g,h,i,j) \
 	a = i,
@@ -457,8 +465,8 @@ is_finalization_aware (MonoObject *obj)
 gboolean
 sgen_client_object_finalize_eagerly (GCObject *obj)
 {
-	if (obj->vtable->klass == mono_defaults.weakreference_class ||
-	    obj->vtable->klass == mono_defaults.generic_weakreference_class) {
+	if (obj->vtable->klass == mono_class_try_get_weakreference_class() ||
+	    obj->vtable->klass == mono_class_try_get_generic_weakreference_class()) {
 		MonoWeakReference *wr = (MonoWeakReference*)obj;
 		MonoGCHandle gc_handle = (MonoGCHandle)(wr->handleAndKind & ~(gsize)1);
 		mono_gchandle_free_internal (gc_handle);

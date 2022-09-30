@@ -13,6 +13,12 @@ class UnixNativeCodeManager : public ICodeManager
     PTR_PTR_VOID m_pClasslibFunctions;
     uint32_t m_nClasslibFunctions;
 
+    int TrailingEpilogueInstructionsCount(PTR_VOID pvAddress); 
+
+    bool UnwindProlog(MethodInfo *    pMethodInfo,
+                      REGDISPLAY *    pRegisterSet,
+                      PTR_PTR_VOID *  ppvRetAddrLocation);
+
 public:
     UnixNativeCodeManager(TADDR moduleBase,
                           PTR_VOID pvManagedCodeStartRange, uint32_t cbManagedCodeRange,
@@ -52,8 +58,6 @@ public:
                                                         REGDISPLAY *   pRegisterSet);
 
     bool IsUnwindable(PTR_VOID pvAddress);
-
-    int TrailingEpilogueInstructionsCount(PTR_VOID pvAddress); 
 
     bool GetReturnAddressHijackInfo(MethodInfo *    pMethodInfo,
                                     REGDISPLAY *    pRegisterSet,       // in

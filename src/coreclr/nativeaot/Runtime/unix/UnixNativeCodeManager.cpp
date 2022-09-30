@@ -333,12 +333,6 @@ bool UnixNativeCodeManager::IsUnwindable(PTR_VOID pvAddress)
     return TrailingEpilogueInstructionsCount(pvAddress) == 0;
 }
 
-// when stopped in an epilogue, returns the count of remaining stack-consuming instructions
-// otherwise returns
-//  0 - not in epilogue,
-// -1 - unknown.
-int UnixNativeCodeManager::TrailingEpilogueInstructionsCount(PTR_VOID pvAddress)
-{
 #ifdef TARGET_AMD64
 
 #define SIZE64_PREFIX 0x48
@@ -351,12 +345,22 @@ int UnixNativeCodeManager::TrailingEpilogueInstructionsCount(PTR_VOID pvAddress)
 #define REPNE_PREFIX 0xf2
 #define REP_PREFIX 0xf3
 #define POP_OP 0x58
+#define PUSH_OP 0x50
 #define RET_OP 0xc3
 #define RET_OP_2 0xc2
 #define INT3_OP 0xcc
 
 #define IS_REX_PREFIX(x) (((x) & 0xf0) == 0x40)
 
+#endif
+
+// when stopped in an epilogue, returns the count of remaining stack-consuming instructions
+// otherwise returns
+//  0 - not in epilogue,
+// -1 - unknown.
+int UnixNativeCodeManager::TrailingEpilogueInstructionsCount(PTR_VOID pvAddress)
+{
+#ifdef TARGET_AMD64
     //
     // Everything below is inspired by the code in minkernel\ntos\rtl\amd64\exdsptch.c file from Windows
     // For details see similar code in OOPStackUnwinderAMD64::UnwindEpilogue
@@ -614,6 +618,74 @@ int UnixNativeCodeManager::TrailingEpilogueInstructionsCount(PTR_VOID pvAddress)
     return 0;
 }
 
+bool UnixNativeCodeManager::UnwindProlog(MethodInfo *    pMethodInfo,
+                                         REGDISPLAY *    pRegisterSet,
+                                         PTR_PTR_VOID *  ppvRetAddrLocation)
+{
+#if defined(TARGET_AMD64)
+    UnixNativeMethodInfo* pNativeMethodInfo = (UnixNativeMethodInfo*)pMethodInfo;
+    uint8_t* pNextByte = (uint8_t*)pNativeMethodInfo->pMethodStartAddress;
+    uint32_t stackOffset = 0;
+
+    while (pNextByte < (uint8_t*)pRegisterSet->IP)
+    {
+        if ((pNextByte[0] & 0xf8) == PUSH_OP)
+        {
+            stackOffset += 8;
+            pNextByte += 1;
+        }
+        else if (IS_REX_PREFIX(pNextByte[0]) && ((pNextByte[1] & 0xf8) == PUSH_OP))
+        {
+            stackOffset += 8;
+            pNextByte += 2;
+        }
+        else if ((pNextByte[0] & 0xf8) == SIZE64_PREFIX &&
+                 pNextByte[1] == ADD_IMM8_OP &&
+                 pNextByte[2] == 0xec)
+        {
+            // sub rsp, imm8
+            stackOffset += pNextByte[3];
+            pNextByte += 4;
+        }
+        else if ((pNextByte[0] & 0xf8) == SIZE64_PREFIX &&
+                 pNextByte[1] == ADD_IMM32_OP &&
+                 pNextByte[2] == 0xec)
+        {
+            // sub rsp, imm32
+            stackOffset +=
+                (uint32_t)pNextByte[3] |
+                ((uint32_t)pNextByte[4] << 8) |
+                ((uint32_t)pNextByte[5] << 16) |
+                ((uint32_t)pNextByte[6] << 24);
+            pNextByte += 7;
+        }
+        else
+        {
+            // Bail out for anything that we cannot handle. This could be a breakpoint
+            // (int 3) inserted by a debugger, or some more complicated prolog pattern
+            // like the stack probing:
+            //
+            //     lea r11, [rsp-XXX]
+            //     call __chkstk
+            //     mov rsp, r11
+            //
+            // Additionally, these sequences may establish the prolog frame but we don't
+            // need to handle them since they are always the last instruction of the
+            // prolog and thus regular unwinding should work:
+            //
+            //     lea rbp, [rsp+IMM8]
+            //     lea rbp, [rsp+IMM32]
+            return false;
+        }
+    }
+
+    *ppvRetAddrLocation = (PTR_PTR_VOID)(pRegisterSet->GetSP() + stackOffset);
+    return true;
+#else
+    PORTABILITY_ASSERT("UnwindProlog");
+#endif
+}
+
 // Convert the return kind that was encoded by RyuJIT to the
 // enum used by the runtime.
 GCRefKind GetGcRefKind(ReturnKind returnKind)
@@ -654,9 +726,21 @@ bool UnixNativeCodeManager::GetReturnAddressHijackInfo(MethodInfo *    pMethodIn
 #if defined(TARGET_ARM) || defined(TARGET_ARM64)
     flags = (GcInfoDecoderFlags)(flags | DECODE_HAS_TAILCALLS);
 #endif // TARGET_ARM || TARGET_ARM64
+#if defined(TARGET_AMD64) && defined(TARGET_OSX)
+    flags = (GcInfoDecoderFlags)(flags | DECODE_PROLOG_LENGTH);
+#endif
 
     GcInfoDecoder decoder(GCInfoToken(p), flags);
     *pRetValueKind = GetGcRefKind(decoder.GetReturnKind());
+
+#if defined(TARGET_AMD64) && defined(TARGET_OSX)
+    // Compact unwinding on macOS cannot properly handle unwinding the function prolog
+    // so we have to handle it explicitly
+    if ((PTR_UInt8)pRegisterSet->IP < (PTR_UInt8)pNativeMethodInfo->pMethodStartAddress + decoder.GetPrologSize())
+    {
+        return UnwindProlog(pMethodInfo, pRegisterSet, ppvRetAddrLocation);
+    }
+#endif
 
     int epilogueInstructions = TrailingEpilogueInstructionsCount((PTR_VOID)pRegisterSet->IP);
     if (epilogueInstructions < 0)

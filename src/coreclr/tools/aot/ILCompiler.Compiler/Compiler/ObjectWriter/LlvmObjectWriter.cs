@@ -7,6 +7,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
+using ILCompiler.DependencyAnalysis;
 using ILCompiler.DependencyAnalysisFramework;
 
 using Internal.Text;
@@ -15,12 +16,12 @@ using Internal.TypeSystem.TypesDebugInfo;
 using Internal.JitInterface;
 using ObjectData = ILCompiler.DependencyAnalysis.ObjectNode.ObjectData;
 
-namespace ILCompiler.DependencyAnalysis
+namespace ILCompiler.ObjectWriter
 {
     /// <summary>
     /// Object writer using src/Native/ObjWriter
     /// </summary>
-    public class ObjectWriter : IDisposable, ITypesDebugInfoWriter
+    public class LlvmObjectWriter : IDisposable, ITypesDebugInfoWriter
     {
         private readonly ObjectWritingOptions _options;
 
@@ -843,7 +844,7 @@ namespace ILCompiler.DependencyAnalysis
 
         private IntPtr _nativeObjectWriter = IntPtr.Zero;
 
-        public ObjectWriter(string objectFilePath, NodeFactory factory, ObjectWritingOptions options)
+        public LlvmObjectWriter(string objectFilePath, NodeFactory factory, ObjectWritingOptions options)
         {
             var triple = GetLLVMTripleFromTarget(factory.Target);
 
@@ -886,7 +887,7 @@ namespace ILCompiler.DependencyAnalysis
             }
         }
 
-        ~ObjectWriter()
+        ~LlvmObjectWriter()
         {
             Dispose(false);
         }
@@ -941,7 +942,7 @@ namespace ILCompiler.DependencyAnalysis
 
         public static void EmitObject(string objectFilePath, IReadOnlyCollection<DependencyNode> nodes, NodeFactory factory, ObjectWritingOptions options, IObjectDumper dumper, Logger logger)
         {
-            ObjectWriter objectWriter = new ObjectWriter(objectFilePath, factory, options);
+            LlvmObjectWriter objectWriter = new LlvmObjectWriter(objectFilePath, factory, options);
             bool succeeded = false;
 
             try

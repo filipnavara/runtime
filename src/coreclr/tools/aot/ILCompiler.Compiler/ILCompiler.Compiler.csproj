@@ -23,6 +23,10 @@
     <ProjectReference Include="..\ILCompiler.DependencyAnalysisFramework\ILCompiler.DependencyAnalysisFramework.csproj" />
     <ProjectReference Include="..\ILCompiler.MetadataTransform\ILCompiler.MetadataTransform.csproj" />
     <ProjectReference Include="..\ILCompiler.TypeSystem\ILCompiler.TypeSystem.csproj" />
+        
+    <ProjectReference Include="..\..\..\..\..\..\unwind\Melanzana.MachO\Melanzana.MachO.csproj" />
+    <ProjectReference Include="..\..\..\..\..\..\LibObjectFile\src\LibObjectFile\LibObjectFile.csproj" />
+    <!--<PackageReference Include="LibObjectFile" Version="0.3.6" />-->
 
     <PackageReference Condition="'$(DotNetBuildFromSource)' != 'true'" Include="StaticCs" Version="$(StaticCsVersion)">
       <PrivateAssets>all</PrivateAssets>
@@ -526,7 +530,6 @@
     <Compile Include="Compiler\DependencyAnalysis\NodeFactory.NativeLayout.cs" />
     <Compile Include="Compiler\DependencyAnalysis\NonGCStaticsNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\ModuleUseBasedDependencyAlgorithm.cs" />
-    <Compile Include="Compiler\DependencyAnalysis\ObjectWriter.cs" />
     <Compile Include="Compiler\DependencyAnalysis\ReadyToRunHelperNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\Target_X64\X64UnboxingStubNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\ThreadStaticsNode.cs" />
@@ -556,6 +559,15 @@
     <Compile Include="Compiler\DependencyAnalysis\Target_LoongArch64\LoongArch64ReadyToRunHelperNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\Target_LoongArch64\LoongArch64ReadyToRunGenericHelperNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\Target_LoongArch64\LoongArch64UnboxingStubNode.cs" />
+    <Compile Include="Compiler\ObjectWriter\DwarfBuilder.cs" />
+    <Compile Include="Compiler\ObjectWriter\DwarfCie.cs" />
+    <Compile Include="Compiler\ObjectWriter\DwarfEhFrame.cs" />
+    <Compile Include="Compiler\ObjectWriter\DwarfFde.cs" />
+    <Compile Include="Compiler\ObjectWriter\DwarfNative.cs" />
+    <Compile Include="Compiler\ObjectWriter\LlvmObjectWriter.cs" />
+    <Compile Include="Compiler\ObjectWriter\MachObjectWriter.cs" />
+    <Compile Include="Compiler\ObjectWriter\ElfObjectWriter.cs" />
+    <Compile Include="Compiler\ObjectWriter\UnixObjectWriter.cs" />
     <Compile Include="Compiler\ExportedMethodsRootProvider.cs" />
     <Compile Include="Compiler\GenericDictionaryLookup.cs" />
     <Compile Include="Compiler\IRootingServiceProvider.cs" />

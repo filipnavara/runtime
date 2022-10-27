@@ -571,6 +571,7 @@
     <Compile Include="Compiler\ObjectWriter\ElfObjectWriter.cs" />
     <Compile Include="Compiler\ObjectWriter\UnixObjectWriter.cs" />
     <Compile Include="Compiler\ObjectWriter\CoffObjectWriter.cs" />
+    <Compile Include="Compiler\ObjectWriter\SectionWriter.cs" />
     <Compile Include="Compiler\ExportedMethodsRootProvider.cs" />
     <Compile Include="Compiler\GenericDictionaryLookup.cs" />
     <Compile Include="Compiler\IRootingServiceProvider.cs" />

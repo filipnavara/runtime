@@ -156,6 +156,9 @@ The .NET Foundation licenses this file to you under the MIT license.
       <!-- FreeBSD's inotify is an installed package and not found in default libraries  -->
       <LinkerArg Include="-L/usr/local/lib -linotify" Condition="'$(TargetOS)' == 'freebsd'" />
 
+      <LinkerArg Include="-Wl,-segprot,__THUNKS,rx,rx" />
+      <LinkerArg Include="-Wl,-segprot,__THUNKS_DATA,rw,rw" />
+
       <LinkerArg Include="@(NativeFramework->'-framework %(Identity)')" Condition="'$(TargetOS)' == 'osx'" />
     </ItemGroup>
 

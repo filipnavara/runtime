@@ -54,6 +54,10 @@
 #include <time.h>
 #endif
 
+#include <sys/proc_info.h>
+#include <libproc.h>
+#include <mach-o/getsect.h>
+
 using std::nullptr_t;
 
 #define PalRaiseFailFastException RaiseFailFastException
@@ -490,12 +494,49 @@ extern "C" bool PalDetachThread(void* thread)
 #if !defined(USE_PORTABLE_HELPERS) && !defined(FEATURE_RX_THUNKS)
 REDHAWK_PALEXPORT UInt32_BOOL REDHAWK_PALAPI PalAllocateThunksFromTemplate(HANDLE hTemplateModule, uint32_t templateRva, size_t templateSize, void** newThunksOut)
 {
-    PORTABILITY_ASSERT("UNIXTODO: Implement this function");
+    char pathbuf[PROC_PIDPATHINFO_MAXSIZE];
+    int ret;
+    int f;
+    const struct section_64 *thunks_section;
+    const struct section_64 *thunks_data_section;
+
+    // NOTE: We ignore hTemplateModule, it is alwyas the current module
+    ret = proc_pidpath(getpid(), pathbuf, sizeof(pathbuf));
+    if (ret <= 0)
+    {
+        return UInt32_FALSE;
+    }
+
+    f = open(pathbuf, O_RDONLY);
+    if (f < 0)
+    {
+        return UInt32_FALSE;
+    }
+
+    // NOTE: We ignore templateRva since we would need to convert it to file offset
+    // and templateSize is useless too.
+    thunks_section = getsectbyname("__THUNKS", "__thunks");
+    thunks_data_section = getsectbyname("__THUNKS_DATA", "__thunks");
+    *newThunksOut = mmap(
+        NULL,
+        thunks_section->size + thunks_data_section->size,
+        PROT_READ | PROT_EXEC,
+        MAP_PRIVATE,
+        f,
+        thunks_section->offset);
+    close(f);
+
+    return *newThunksOut == NULL ? UInt32_FALSE : UInt32_TRUE;
 }
 
 REDHAWK_PALEXPORT UInt32_BOOL REDHAWK_PALAPI PalFreeThunksFromTemplate(void *pBaseAddress)
 {
-    PORTABILITY_ASSERT("UNIXTODO: Implement this function");
+    const struct section_64 *thunks_section;
+    const struct section_64 *thunks_data_section;
+    thunks_section = getsectbyname("__THUNKS", "__thunks");
+    thunks_data_section = getsectbyname("__THUNKS_DATA", "__thunks");
+    int ret = munmap(pBaseAddress, thunks_section->size + thunks_data_section->size);
+    return ret == 0 ? UInt32_TRUE : UInt32_FALSE;
 }
 #endif // !USE_PORTABLE_HELPERS && !FEATURE_RX_THUNKS
 
@@ -506,6 +547,14 @@ REDHAWK_PALEXPORT UInt32_BOOL REDHAWK_PALAPI PalMarkThunksAsValidCallTargets(
     int thunkBlockSize,
     int thunkBlocksPerMapping)
 {
+    //void *thunkDataBlock = RhpGetThunkDataBlockAddress(virtualAddress);
+    printf("PalMarkThunksAsValidCallTargets: %p\n", virtualAddress);
+    printf("PalMarkThunksAsValidCallTargets: %d %d %d %d\n", thunkSize, thunksPerBlock, thunkBlockSize, thunkBlocksPerMapping);
+    int res = mprotect(
+        (void*)((uintptr_t)virtualAddress + (thunkBlocksPerMapping * OS_PAGE_SIZE)),
+        thunkBlocksPerMapping * OS_PAGE_SIZE,
+        PROT_READ | PROT_WRITE);
+    printf("PalMarkThunksAsValidCallTargets: %d %d\n", res, errno);
     return UInt32_TRUE;
 }
 

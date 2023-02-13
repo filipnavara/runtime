@@ -6,7 +6,9 @@ project(Runtime)
 # Include auto-generated files on include path
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
+if (NOT CLR_CMAKE_TARGET_OSX)
 add_definitions(-DFEATURE_RX_THUNKS)
+endif (CLR_CMAKE_TARGET_OSX)
 
 if (CLR_CMAKE_TARGET_WIN32)
   if (CLR_CMAKE_HOST_ARCH_ARM OR CLR_CMAKE_HOST_ARCH_ARM64)

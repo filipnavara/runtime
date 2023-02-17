@@ -27,6 +27,10 @@
     <KnownFrameworkReference Remove="Microsoft.WindowsDesktop.App" />
   </ItemGroup>
 
+  <ItemGroup>
+    <FrameworkReference Update="Microsoft.NETCore.App" RuntimeFrameworkVersion="8.0.0-dev" />
+  </ItemGroup>
+
   <Target Name="CopyDependencyToCoreRoot"
           DependsOnTargets="ResolveAssemblyReferences;ResolveRuntimeFilesFromLocalBuild">
 

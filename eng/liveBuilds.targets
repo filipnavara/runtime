@@ -88,6 +88,8 @@
                              Condition="Exists('$(CoreCLRArtifactsPath)System.Private.CoreLib.dll')" />
       <_systemPrivateCoreLib Include="$(CoreCLRArtifactsPath)IL/System.Private.CoreLib.dll"
                              Condition="Exists('$(CoreCLRArtifactsPath)IL/System.Private.CoreLib.dll') and '@(_systemPrivateCoreLib)' == ''" />
+      <_systemPrivateCoreLib Include="$(CoreCLRArtifactsPath)aotsdk/System.Private.CoreLib.dll"
+                             Condition="Exists('$(CoreCLRArtifactsPath)aotsdk/System.Private.CoreLib.dll') and '@(_systemPrivateCoreLib)' == ''" />
       <RuntimeFiles Include="@(_systemPrivateCoreLib)" />
       <RuntimeFiles
         Include="

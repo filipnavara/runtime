@@ -138,6 +138,7 @@
     <GenerateRuntimeConfigurationFiles>false</GenerateRuntimeConfigurationFiles>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <UseAppHost>false</UseAppHost>
+    <InvariantGlobalization Condition="'$(TestBuildMode)' == 'nativeaot' and '$(TargetsAppleMobile)' == 'true'">true</InvariantGlobalization>
   </PropertyGroup>
 
   <!-- Set arch specific properties -->

@@ -644,7 +644,8 @@
     <DisableUnsupportedError>true</DisableUnsupportedError>
 
     <IlcToolsPath>$(CoreCLRILCompilerDir)</IlcToolsPath>
-    <IlcBuildTasksPath>$(CoreCLRILCompilerDir)netstandard/ILCompiler.Build.Tasks.dll</IlcBuildTasksPath>
+    <IlcToolsPath Condition="'$(TargetsAppleMobile)' == 'true'">$(RepoRoot)/artifacts/bin/coreclr/osx.$(BuildArchitecture).$(Configuration)/ilc-published/</IlcToolsPath>
+    <IlcBuildTasksPath>$(IlcToolsPath)netstandard/ILCompiler.Build.Tasks.dll</IlcBuildTasksPath>
     <IlcSdkPath>$(CoreCLRAotSdkDir)</IlcSdkPath>
     <IlcFrameworkPath>$(MicrosoftNetCoreAppRuntimePackRidLibTfmDir)</IlcFrameworkPath>
     <IlcFrameworkNativePath>$(MicrosoftNetCoreAppRuntimePackNativeDir)</IlcFrameworkNativePath>

@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <DisableImplicitFrameworkReferences>false</DisableImplicitFrameworkReferences>
     <OutputType>Library</OutputType>
     <TargetFrameworks>netstandard2.0;netcoreapp3.1</TargetFrameworks>
     <RootNamespace>Microsoft.Diagnostics.NETCore.Client</RootNamespace>

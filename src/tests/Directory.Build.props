@@ -91,6 +91,10 @@
     <MonoBinDir>$(__MonoBinDir)</MonoBinDir>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+  </PropertyGroup>
+
   <!-- Language settings -->
   <PropertyGroup>
     <RunAnalyzers>false</RunAnalyzers>
@@ -120,6 +124,7 @@
 
   <!-- Disable some standard properties for building our projects -->
   <PropertyGroup>
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
     <NoExplicitReferenceToStdLib>true</NoExplicitReferenceToStdLib>
     <AddAdditionalExplicitAssemblyReferences>false</AddAdditionalExplicitAssemblyReferences>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>

@@ -434,11 +434,6 @@
   </PropertyGroup>
   <Import Project="$(BaseOutputPath)\packages\Common\test_dependencies\test_dependencies\test_dependencies.*.targets" />
 
-
-  <PropertyGroup>
-    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
-  </PropertyGroup>
-
   <PropertyGroup>
     <IncludeOOBLibraries>true</IncludeOOBLibraries>
   </PropertyGroup>

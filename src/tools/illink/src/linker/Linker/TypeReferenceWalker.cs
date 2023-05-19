@@ -103,6 +103,14 @@ namespace Mono.Linker
 
 					if (m.HasBody)
 						WalkTypeScope (m.Body);
+
+					if (m.DebugInformation?.Scope?.Import is ImportDebugInformation importDebugInformation) {
+						foreach (var target in importDebugInformation.Targets) {
+							if (target.Type != null) {
+								WalkScopeOfTypeReference (target.Type);
+							}
+						}
+					}
 				}
 			}
 

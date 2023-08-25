@@ -46,10 +46,6 @@ namespace System.Net
             {
                 return new UnsupportedNegotiateAuthenticationPal(clientOptions);
             }
-            catch (PlatformNotSupportedException)
-            {
-                return new UnsupportedNegotiateAuthenticationPal(clientOptions);
-            }
             catch (EntryPointNotFoundException)
             {
                 // GSSAPI shim may not be available on some platforms (Linux Bionic)
@@ -184,7 +180,7 @@ namespace System.Net
 
                 if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"Peer SPN-> '{_spn}'");
 
-                if (clientOptions.Credential == CredentialCache.DefaultCredentials ||
+                if (clientOptions.Credential == CredentialCache.DefaultNetworkCredentials ||
                     string.IsNullOrWhiteSpace(clientOptions.Credential.UserName) ||
                     string.IsNullOrWhiteSpace(clientOptions.Credential.Password))
                 {
@@ -193,11 +189,13 @@ namespace System.Net
 
                     if (_packageType == Interop.NetSecurityNative.PackageType.NTLM)
                     {
+                        if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, SR.net_ntlm_not_possible_default_cred);
                         // NTLM authentication is not possible with default credentials which are no-op
                         throw new PlatformNotSupportedException(SR.net_ntlm_not_possible_default_cred);
                     }
                     if (string.IsNullOrEmpty(_spn))
                     {
+                        if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, SR.net_nego_not_supported_empty_target_with_defaultcreds);
                         throw new PlatformNotSupportedException(SR.net_nego_not_supported_empty_target_with_defaultcreds);
                     }
                 }

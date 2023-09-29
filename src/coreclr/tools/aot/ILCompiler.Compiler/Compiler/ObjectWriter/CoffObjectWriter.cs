@@ -32,11 +32,11 @@ namespace ILCompiler.ObjectWriter
         // Symbol table
         private List<CoffSymbolRecord> _symbols = new();
         private Dictionary<string, uint> _symbolNameToIndex = new();
-        private Dictionary<int, CoffSectionSymbol> _sectionNumberToComdatAuxRecord = new();
+        private Dictionary<int, CoffSectionSymbol> _sectionNumberToSectionSymbol = new();
         private HashSet<string> _referencedMethods = new();
 
         // Exception handling
-        private SectionWriter _xdataSectionWriter;
+        //private SectionWriter _xdataSectionWriter;
         private SectionWriter _pdataSectionWriter;
 
         // Debugging
@@ -208,7 +208,7 @@ namespace ILCompiler.ObjectWriter
                             CoffComdatSelect.IMAGE_COMDAT_SELECT_ASSOCIATIVE,
                     };
 
-                    _sectionNumberToComdatAuxRecord[sectionIndex] = auxRecord;
+                    _sectionNumberToSectionSymbol[sectionIndex] = auxRecord;
                     _symbols.Add(new CoffSymbol
                     {
                         Name = sectionHeader.Name,
@@ -230,6 +230,27 @@ namespace ILCompiler.ObjectWriter
                             StorageClass = 2 // IMAGE_SYM_CLASS_EXTERNAL
                         });
                     }
+                }
+                else
+                {
+                    var auxRecord = new CoffSectionSymbol
+                    {
+                        // SizeOfRawData, NumberOfRelocations, NumberOfLineNumbers
+                        // CheckSum will be filled later in EmitObjectFile
+
+                        Number = (uint)(1 + sectionIndex),
+                    };
+
+                    _symbols.Add(new CoffSymbol
+                    {
+                        Name = sectionHeader.Name,
+                        Value = 0,
+                        SectionIndex = (uint)(1 + sectionIndex),
+                        StorageClass = 3, // IMAGE_SYM_CLASS_STATIC
+                        NumberOfAuxiliaryRecords = 1
+                    });
+                    _sectionNumberToSectionSymbol[sectionIndex] = auxRecord;
+                    _symbols.Add(auxRecord);
                 }
                 sectionIndex++;
             }
@@ -381,7 +402,7 @@ namespace ILCompiler.ObjectWriter
 
                     string unwindSymbolName = $"_unwind{i}{currentSymbolName}";
 
-                    if (shareSymbol)
+                    //if (shareSymbol || true)
                     {
                         // Ideally we would use `currentSymbolName` here and produce an
                         // associative COMDAT symbol but link.exe cannot always handle that
@@ -390,10 +411,10 @@ namespace ILCompiler.ObjectWriter
                         // unwind symbol.
                         xdataSectionWriter = GetOrCreateSection(GetSharedSection(ObjectNodeSection.XDataSection, unwindSymbolName));
                     }
-                    else
+                    /*else
                     {
                         xdataSectionWriter = _xdataSectionWriter;
-                    }
+                    }*/
 
                     // Need to emit the UNWIND_INFO at 4-byte alignment to ensure that the
                     // pointer has the lower two bits in .pdata section set to zero. On ARM64
@@ -439,6 +460,7 @@ namespace ILCompiler.ObjectWriter
                         }
                     }
 
+                    pdataSectionWriter.EmitAlignment(4);
                     // Emit RUNTIME_FUNCTION
                     pdataSectionWriter.EmitSymbolReference(RelocType.IMAGE_REL_BASED_ADDR32NB, currentSymbolName, start);
                     // Only x64 has the End symbol
@@ -507,7 +529,7 @@ namespace ILCompiler.ObjectWriter
                 Debug.Assert(section.Header.VirtualAddress == 0);
 
                 // Update COMDAT section symbol
-                if (_sectionNumberToComdatAuxRecord.TryGetValue(sectionIndex, out var auxRecord))
+                if (_sectionNumberToSectionSymbol.TryGetValue(sectionIndex, out var auxRecord))
                 {
                     auxRecord.SizeOfRawData = section.Header.SizeOfRawData;
                     auxRecord.NumberOfRelocations = section.Header.NumberOfRelocations;
@@ -553,7 +575,7 @@ namespace ILCompiler.ObjectWriter
         protected override void CreateEhSections()
         {
             // Create .xdata and .pdata
-            _xdataSectionWriter = GetOrCreateSection(ObjectNodeSection.XDataSection);
+            //_xdataSectionWriter = GetOrCreateSection(ObjectNodeSection.XDataSection);
             _pdataSectionWriter = GetOrCreateSection(PDataSection);
         }
 

@@ -37,7 +37,7 @@ namespace ILCompiler.ObjectWriter
 
         // Exception handling
         //private SectionWriter _xdataSectionWriter;
-        private SectionWriter _pdataSectionWriter;
+        //private SectionWriter _pdataSectionWriter;
 
         // Debugging
         private SectionWriter _debugTypesSectionWriter;
@@ -183,6 +183,19 @@ namespace ILCompiler.ObjectWriter
             _referencedMethods.Add(symbolName);
         }
 
+        private sealed class CoffSymbolRecordComparer : IComparer<CoffSymbolRecord>
+        {
+            private Dictionary<string, int> _symbolOrder;
+
+            public CoffSymbolRecordComparer(Dictionary<string, int> symbolOrder)
+            {
+                _symbolOrder = symbolOrder;
+            }
+
+            public int Compare(CoffSymbolRecord x, CoffSymbolRecord y) =>
+                _symbolOrder[((CoffSymbol)x).Name] - _symbolOrder[((CoffSymbol)y).Name];
+        }
+
         protected override void EmitSymbolTable()
         {
             var definedSymbols = GetDefinedSymbols();
@@ -255,6 +268,8 @@ namespace ILCompiler.ObjectWriter
                 sectionIndex++;
             }
 
+            int baseIndex = _symbols.Count;
+
             foreach (var (symbolName, symbolDefinition) in definedSymbols)
             {
                 if (!_symbolNameToIndex.ContainsKey(symbolName))
@@ -279,6 +294,8 @@ namespace ILCompiler.ObjectWriter
                     StorageClass = 2 // IMAGE_SYM_CLASS_EXTERNAL
                 });
             }
+
+            _symbols.Sort(baseIndex, _symbols.Count - baseIndex, new CoffSymbolRecordComparer(_symbolOrder));
 
             if (_options.HasFlag(ObjectWritingOptions.ControlFlowGuard))
             {
@@ -390,7 +407,7 @@ namespace ILCompiler.ObjectWriter
                 Span<byte> tempBuffer = stackalloc byte[4];
                 bool shareSymbol = ShouldShareSymbol((ObjectNode)nodeWithCodeInfo);
 
-                pdataSectionWriter = shareSymbol ? GetOrCreateSection(GetSharedSection(PDataSection, currentSymbolName)) : _pdataSectionWriter;
+                //pdataSectionWriter = shareSymbol ? GetOrCreateSection(GetSharedSection(PDataSection, currentSymbolName)) : GetOrCreateSection(PDataSection);
 
                 for (int i = 0; i < frameInfos.Length; i++)
                 {
@@ -409,7 +426,7 @@ namespace ILCompiler.ObjectWriter
                         // and produces errors about duplicate symbols that point into the
                         // associative section, so we are stuck with one section per each
                         // unwind symbol.
-                        xdataSectionWriter = GetOrCreateSection(GetSharedSection(ObjectNodeSection.XDataSection, unwindSymbolName));
+                        xdataSectionWriter = GetOrCreateSection(ObjectNodeSection.XDataSection);//GetOrCreateSection(GetSharedSection(ObjectNodeSection.XDataSection, unwindSymbolName));
                     }
                     /*else
                     {
@@ -460,6 +477,7 @@ namespace ILCompiler.ObjectWriter
                         }
                     }
 
+                    pdataSectionWriter = GetOrCreateSection(PDataSection);
                     pdataSectionWriter.EmitAlignment(4);
                     // Emit RUNTIME_FUNCTION
                     pdataSectionWriter.EmitSymbolReference(RelocType.IMAGE_REL_BASED_ADDR32NB, currentSymbolName, start);
@@ -576,7 +594,7 @@ namespace ILCompiler.ObjectWriter
         {
             // Create .xdata and .pdata
             //_xdataSectionWriter = GetOrCreateSection(ObjectNodeSection.XDataSection);
-            _pdataSectionWriter = GetOrCreateSection(PDataSection);
+            //_pdataSectionWriter = GetOrCreateSection(PDataSection);
         }
 
         protected override ITypesDebugInfoWriter CreateDebugInfoBuilder()

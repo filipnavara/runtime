@@ -41,6 +41,8 @@ namespace ILCompiler.ObjectWriter
         private List<List<SymbolicRelocation>> _sectionIndexToRelocations = new();
 
         // Symbol table
+        private int symOrder;
+        protected Dictionary<string, int> _symbolOrder = new();
         private Dictionary<string, SymbolDefinition> _definedSymbols = new();
 
         // Debugging
@@ -120,7 +122,7 @@ namespace ILCompiler.ObjectWriter
             if (section == ObjectNodeSection.FoldableManagedCodeUnixContentSection ||
                 section == ObjectNodeSection.FoldableManagedCodeWindowsContentSection ||
                 section == ObjectNodeSection.FoldableReadOnlyDataSection)
-                return true;
+                return false;//true;
 
             if (_isSingleFileCompilation)
                 return false;
@@ -132,7 +134,7 @@ namespace ILCompiler.ObjectWriter
             if (node is ModulesSectionNode)
                 return false;
 
-            return true;
+            return false;//true;
         }
 
         protected static ObjectNodeSection GetSharedSection(ObjectNodeSection section, string key)
@@ -159,6 +161,10 @@ namespace ILCompiler.ObjectWriter
             string symbolName,
             int addend)
         {
+            if (symbolName == "_inlinedThreadStatics")
+                Debugger.Break();
+            if (!_symbolOrder.ContainsKey(symbolName))
+                _symbolOrder.Add(symbolName, symOrder++);
             _sectionIndexToRelocations[sectionIndex].Add(new SymbolicRelocation(offset, relocType, symbolName, addend));
         }
 
@@ -189,6 +195,10 @@ namespace ILCompiler.ObjectWriter
             int size = 0,
             bool global = false)
         {
+            if (symbolName == "_inlinedThreadStatics")
+                Debugger.Break();
+            if (!_symbolOrder.ContainsKey(symbolName))
+                _symbolOrder.Add(symbolName, symOrder++);
             _definedSymbols.Add(
                 symbolName,
                 new SymbolDefinition(sectionIndex, offset, size, global));
@@ -287,7 +297,9 @@ namespace ILCompiler.ObjectWriter
             GetOrCreateSection(ObjectNodeSection.TextSection);
             if (_nodeFactory.Target.OperatingSystem == TargetOS.Windows)
             {
-                GetOrCreateSection(ObjectNodeSection.ManagedCodeWindowsContentSection);
+                GetOrCreateSection(ObjectNodeSection.DataSection);
+                GetOrCreateSection(ObjectNodeSection.BssSection);
+                GetOrCreateSection(ObjectNodeSection.ReadOnlyDataSection);
             }
             else
             {
@@ -302,6 +314,8 @@ namespace ILCompiler.ObjectWriter
             {
                 _userDefinedTypeDescriptor = new UserDefinedTypeDescriptor(CreateDebugInfoBuilder(), _nodeFactory);
             }
+
+            List<(byte[] Data, int Position, Relocation[] Relocs, int SectionIndex)> savedRelocs = new();
 
             foreach (DependencyNode depNode in nodes)
             {
@@ -353,6 +367,15 @@ namespace ILCompiler.ObjectWriter
                     foreach (var reloc in nodeContents.Relocs)
                     {
                         string relocSymbolName = GetMangledName(reloc.Target);
+                        if (relocSymbolName == "_inlinedThreadStatics")
+                            Debugger.Break();
+                        if (!_symbolOrder.ContainsKey(relocSymbolName))
+                            _symbolOrder.Add(relocSymbolName, symOrder++);
+                    }
+                    savedRelocs.Add((nodeContents.Data, (int)sectionWriter.Stream.Position, nodeContents.Relocs, sectionWriter.SectionIndex));
+                    /*foreach (var reloc in nodeContents.Relocs)
+                    {
+                        string relocSymbolName = GetMangledName(reloc.Target);
 
                         sectionWriter.EmitRelocation(
                             reloc.Offset,
@@ -369,7 +392,7 @@ namespace ILCompiler.ObjectWriter
                             // reflection tables, EH tables, were actually address taken in code, or are referenced from vtables.
                             EmitReferencedMethod(relocSymbolName);
                         }
-                    }
+                    }*/
                 }
 
                 // Emit unwinding frames and LSDA
@@ -381,6 +404,76 @@ namespace ILCompiler.ObjectWriter
                 // Write the data. Note that this has to be done last as not to advance
                 // the section writer position.
                 sectionWriter.EmitData(nodeContents.Data);
+            }
+
+            foreach (var savedReloc in savedRelocs)
+            {
+                foreach (var reloc in savedReloc.Relocs)
+                {
+                    string relocSymbolName = GetMangledName(reloc.Target);
+                    bool emit = true;
+
+                    if (_definedSymbols.TryGetValue(relocSymbolName, out SymbolDefinition definedSymbol) &&
+                        definedSymbol.SectionIndex == savedReloc.SectionIndex)
+                    {
+                        int addend = reloc.Target.Offset;
+                        // Resolve the relocation to already defined symbol and write it into data
+                        switch (reloc.RelocType)
+                        {
+                            case RelocType.IMAGE_REL_BASED_REL32:
+                                addend += BinaryPrimitives.ReadInt32LittleEndian(savedReloc.Data.AsSpan(reloc.Offset));
+                                addend -= 4;
+                                BinaryPrimitives.WriteInt32LittleEndian(
+                                    savedReloc.Data.AsSpan(reloc.Offset),
+                                    (int)(definedSymbol.Value - (reloc.Offset + savedReloc.Position)) +
+                                    addend);
+                                emit = false;
+                                break;
+
+                            case RelocType.IMAGE_REL_BASED_RELPTR32:
+                                addend += BinaryPrimitives.ReadInt32LittleEndian(savedReloc.Data.AsSpan(reloc.Offset));
+                                BinaryPrimitives.WriteInt32LittleEndian(
+                                    savedReloc.Data.AsSpan(reloc.Offset),
+                                    (int)(definedSymbol.Value - (reloc.Offset + savedReloc.Position)) +
+                                    addend);
+                                emit = false;
+                                break;
+
+                            case RelocType.IMAGE_REL_BASED_ARM64_BRANCH26:
+                                var ins = BinaryPrimitives.ReadUInt32LittleEndian(savedReloc.Data.AsSpan(reloc.Offset)) & 0xFC000000;
+                                BinaryPrimitives.WriteUInt32LittleEndian(
+                                    savedReloc.Data.AsSpan(reloc.Offset),
+                                    ((uint)(int)(definedSymbol.Value - (reloc.Offset + savedReloc.Position)) & 0x3FFFFFF) |
+                                    ins);
+                                emit = false;
+                                break;
+
+                            default:
+                                //throw new NotSupportedException($"Unsupported relocation: {relocType}");
+                                break;
+                        }
+                    }
+
+                    if (emit)
+                    {
+                        EmitRelocation(
+                            savedReloc.SectionIndex,
+                            savedReloc.Position + reloc.Offset,
+                            savedReloc.Data.AsSpan(reloc.Offset),
+                            reloc.RelocType,
+                            relocSymbolName,
+                            reloc.Target.Offset);
+                    }
+
+                    if (_options.HasFlag(ObjectWritingOptions.ControlFlowGuard) &&
+                        reloc.Target is IMethodNode or AssemblyStubNode)
+                    {
+                        // For now consider all method symbols address taken.
+                        // We could restrict this in the future to those that are referenced from
+                        // reflection tables, EH tables, were actually address taken in code, or are referenced from vtables.
+                        EmitReferencedMethod(relocSymbolName);
+                    }
+                }
             }
 
             EmitSectionsAndLayout();

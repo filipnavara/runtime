@@ -86,8 +86,8 @@ namespace ILCompiler
             if ((_compilationOptions & RyuJitCompilationOptions.UseDwarf5) != 0)
                 options |= ObjectWritingOptions.UseDwarf5;
 
-            if (_debugInformationProvider is not NullDebugInformationProvider)
-                options |= ObjectWritingOptions.GenerateDebugInfo;
+            //if (_debugInformationProvider is not NullDebugInformationProvider)
+            //    options |= ObjectWritingOptions.GenerateDebugInfo;
 
             if ((_compilationOptions & RyuJitCompilationOptions.ControlFlowGuardAnnotations) != 0)
                 options |= ObjectWritingOptions.ControlFlowGuard;

@@ -546,7 +546,7 @@ namespace ILCompiler.ObjectWriter
 
                 byte[] blobSymbolName = _sb.Append(_currentNodeZeroTerminatedName).ToUtf8String().UnderlyingArray;
 
-                ObjectNodeSection section = GetSharedSection(ObjectNodeSection.XDataSection, _sb.ToString());
+                ObjectNodeSection section = ObjectNodeSection.XDataSection;//GetSharedSection(ObjectNodeSection.XDataSection, _sb.ToString());
                 SwitchSection(_nativeObjectWriter, section.Name, GetCustomSectionAttributes(section), section.ComdatName);
 
                 EmitAlignment(4);
@@ -966,7 +966,7 @@ namespace ILCompiler.ObjectWriter
             if (section == ObjectNodeSection.FoldableManagedCodeUnixContentSection ||
                 section == ObjectNodeSection.FoldableManagedCodeWindowsContentSection ||
                 section == ObjectNodeSection.FoldableReadOnlyDataSection)
-                return true;
+                return false;//true;
 
             if (_isSingleFileCompilation)
                 return false;
@@ -981,7 +981,7 @@ namespace ILCompiler.ObjectWriter
             if (node is ModulesSectionNode)
                 return false;
 
-            return true;
+            return false;//true;
         }
 
         private static ObjectNodeSection GetSharedSection(ObjectNodeSection section, string key)

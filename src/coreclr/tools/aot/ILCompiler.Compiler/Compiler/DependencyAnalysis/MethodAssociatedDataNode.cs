@@ -66,7 +66,8 @@ namespace ILCompiler.DependencyAnalysis
             Debug.Assert(MethodHasAssociatedData(factory, _methodNode));
 
             ObjectDataBuilder objData = new ObjectDataBuilder(factory, relocsOnly);
-            objData.RequireInitialAlignment(1);
+            //objData.RequireInitialAlignment(1);
+            objData.RequireInitialPointerAlignment();
             objData.AddSymbol(this);
 
             AssociatedDataFlags flags = AssociatedDataFlags.None;

@@ -129,10 +129,19 @@ namespace ILCompiler.ObjectWriter
             {
                 case RelocType.IMAGE_REL_BASED_ARM64_BRANCH26:
                 case RelocType.IMAGE_REL_BASED_ARM64_PAGEBASE_REL21:
-                case RelocType.IMAGE_REL_BASED_ARM64_PAGEOFFSET_12A:
                 case RelocType.IMAGE_REL_SECREL:
                 case RelocType.IMAGE_REL_SECTION:
                     Debug.Assert(addend == 0);
+                    break;
+
+                case RelocType.IMAGE_REL_BASED_ARM64_PAGEOFFSET_12A:
+                    if (addend != 0)
+                    {
+                        uint addInstr = BinaryPrimitives.ReadUInt32LittleEndian(data);
+                        addInstr &= 0xFFC003FF; // keep bits 31-22, 9-0
+                        addInstr |= (uint)(addend << 10); // Occupy 21-10.
+                        BinaryPrimitives.WriteUInt32LittleEndian(data, addInstr); // write the assembled instruction
+                    }
                     break;
 
                 case RelocType.IMAGE_REL_BASED_DIR64:
@@ -274,7 +283,7 @@ namespace ILCompiler.ObjectWriter
             {
                 if (!_symbolNameToIndex.ContainsKey(symbolName))
                 {
-                    _symbolNameToIndex.Add(symbolName, (uint)_symbols.Count);
+                    //_symbolNameToIndex.Add(symbolName, (uint)_symbols.Count);
                     _symbols.Add(new CoffSymbol
                     {
                         Name = symbolName,
@@ -287,7 +296,7 @@ namespace ILCompiler.ObjectWriter
 
             foreach (var symbolName in GetUndefinedSymbols())
             {
-                _symbolNameToIndex.Add(symbolName, (uint)_symbols.Count);
+                //_symbolNameToIndex.Add(symbolName, (uint)_symbols.Count);
                 _symbols.Add(new CoffSymbol
                 {
                     Name = symbolName,
@@ -296,6 +305,8 @@ namespace ILCompiler.ObjectWriter
             }
 
             _symbols.Sort(baseIndex, _symbols.Count - baseIndex, new CoffSymbolRecordComparer(_symbolOrder));
+            for (int i = baseIndex; i < _symbols.Count; i++)
+                _symbolNameToIndex.Add(((CoffSymbol)_symbols[i]).Name, (uint)i);
 
             if (_options.HasFlag(ObjectWritingOptions.ControlFlowGuard))
             {

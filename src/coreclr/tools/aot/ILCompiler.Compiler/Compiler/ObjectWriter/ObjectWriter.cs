@@ -439,14 +439,14 @@ namespace ILCompiler.ObjectWriter
                                 emit = false;
                                 break;
 
-                            case RelocType.IMAGE_REL_BASED_ARM64_BRANCH26:
+                            /*case RelocType.IMAGE_REL_BASED_ARM64_BRANCH26:
                                 var ins = BinaryPrimitives.ReadUInt32LittleEndian(savedReloc.Data.AsSpan(reloc.Offset)) & 0xFC000000;
                                 BinaryPrimitives.WriteUInt32LittleEndian(
                                     savedReloc.Data.AsSpan(reloc.Offset),
-                                    ((uint)(int)(definedSymbol.Value - (reloc.Offset + savedReloc.Position)) & 0x3FFFFFF) |
+                                    (((uint)(int)(definedSymbol.Value - (reloc.Offset + savedReloc.Position)) >> 2) & 0x3FFFFFF) |
                                     ins);
                                 emit = false;
-                                break;
+                                break;*/
 
                             default:
                                 //throw new NotSupportedException($"Unsupported relocation: {relocType}");

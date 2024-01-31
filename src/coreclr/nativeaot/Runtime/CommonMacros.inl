@@ -54,6 +54,9 @@ inline bool IS_ALIGNED(T* val, uintptr_t alignment)
 // Convert from a PCODE to the corresponding PINSTR.  On many architectures this will be the identity function;
 // on ARM, this will mask off the THUMB bit.
 inline TADDR PCODEToPINSTR(PCODE pc)
+#if __clang__
+    __attribute__ ((optnone))
+#endif
 {
 #ifdef TARGET_ARM
     return dac_cast<TADDR>(pc & ~THUMB_CODE);
@@ -65,6 +68,9 @@ inline TADDR PCODEToPINSTR(PCODE pc)
 // Convert from a PINSTR to the corresponding PCODE.  On many architectures this will be the identity function;
 // on ARM, this will raise the THUMB bit.
 inline PCODE PINSTRToPCODE(TADDR addr)
+#if __clang__
+    __attribute__ ((optnone))
+#endif
 {
 #ifdef TARGET_ARM
     return dac_cast<PCODE>(addr | THUMB_CODE);

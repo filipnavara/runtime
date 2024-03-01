@@ -4019,7 +4019,14 @@ namespace Internal.JitInterface
                     return (ushort)RelocType.IMAGE_REL_BASED_REL32;
 
                 case TargetArchitecture.ARM:
+#if READYTORUN
                     return (ushort)RelocType.IMAGE_REL_BASED_THUMB_BRANCH24;
+#else
+                    var targetObject = HandleToObject(target);
+                    if (targetObject is ExternSymbolNode)
+                        return (ushort)RelocType.IMAGE_REL_BASED_THUMB_BRANCH24;
+                    return ushort.MaxValue;
+#endif
 
                 default:
                     return ushort.MaxValue;

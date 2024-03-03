@@ -4022,9 +4022,6 @@ namespace Internal.JitInterface
 #if READYTORUN
                     return (ushort)RelocType.IMAGE_REL_BASED_THUMB_BRANCH24;
 #else
-                    var targetObject = HandleToObject(target);
-                    if (targetObject is ExternSymbolNode)
-                        return (ushort)RelocType.IMAGE_REL_BASED_THUMB_BRANCH24;
                     return ushort.MaxValue;
 #endif
 

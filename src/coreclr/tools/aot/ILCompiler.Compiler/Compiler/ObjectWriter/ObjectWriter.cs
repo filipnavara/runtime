@@ -184,9 +184,17 @@ namespace ILCompiler.ObjectWriter
                     adjustedAddend |= definedSymbol.Value & maskThumbBitIn;
                     adjustedAddend -= offset;
 
-                    if (relocType is IMAGE_REL_BASED_THUMB_BRANCH24 && !Relocation.FitsInThumb2BlRel24((int)adjustedAddend))
+                    if (relocType is IMAGE_REL_BASED_THUMB_BRANCH24)
                     {
-                        EmitRelocation(sectionIndex, offset, data, relocType, symbolName, addend);
+                        if (!Relocation.FitsInThumb2BlRel24((int)adjustedAddend))
+                        {
+                            Console.WriteLine($"Symbol: {symbolName} adjustedAddend: {adjustedAddend:x}");
+                            EmitRelocation(sectionIndex, offset, data, relocType, symbolName, addend);
+                        }
+                        else
+                        {
+                            Relocation.WriteValue(relocType, (void*)pData, adjustedAddend);
+                        }
                     }
                     else
                     {
@@ -349,16 +357,19 @@ namespace ILCompiler.ObjectWriter
 
         private void EmitObject(string objectFilePath, IReadOnlyCollection<DependencyNode> nodes, IObjectDumper dumper, Logger logger)
         {
+            SectionWriter managedCodeSectionWriter;
+
             // Pre-create some of the sections
             GetOrCreateSection(ObjectNodeSection.TextSection);
             if (_nodeFactory.Target.OperatingSystem == TargetOS.Windows)
             {
-                GetOrCreateSection(ObjectNodeSection.ManagedCodeWindowsContentSection);
+                managedCodeSectionWriter = GetOrCreateSection(ObjectNodeSection.ManagedCodeWindowsContentSection);
             }
             else
             {
-                GetOrCreateSection(ObjectNodeSection.ManagedCodeUnixContentSection);
+                managedCodeSectionWriter = GetOrCreateSection(ObjectNodeSection.ManagedCodeUnixContentSection);
             }
+            managedCodeSectionWriter.EmitSymbolDefinition(ExternCName("__managedCodeStart"), 0, 0);
 
             // Create sections for exception handling
             CreateEhSections();
@@ -475,6 +486,8 @@ namespace ILCompiler.ObjectWriter
                 }
             }
             blocksToRelocate.Clear();
+
+            managedCodeSectionWriter.EmitSymbolDefinition(ExternCName("__managedCodeEnd"), 0, 0);
 
             EmitSectionsAndLayout();
 

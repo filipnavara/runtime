@@ -79,10 +79,11 @@ extern "C" void * __stop___modules[];
 static void * (&__modules_a)[] = __start___modules;
 static void * (&__modules_z)[] = __stop___modules;
 
-extern "C" char __start___managedcode;
-extern "C" char __stop___managedcode;
-static char& __managedcode_a = __start___managedcode;
-static char& __managedcode_z = __stop___managedcode;
+// __managedCodeEnd and __managedCodeEnd symbols are produced by ObjectWriter
+extern "C" char __managedCodeStart;
+extern "C" char __managedCodeEnd;
+static char& __managedcode_a = __managedCodeStart;
+static char& __managedcode_z = __managedCodeEnd;
 
 extern "C" char __start___unbox;
 extern "C" char __stop___unbox;

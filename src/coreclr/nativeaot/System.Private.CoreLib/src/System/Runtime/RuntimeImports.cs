@@ -762,7 +762,7 @@ namespace System.Runtime
             ushort ClrInstanceID);
 
         [LibraryImport(RuntimeLibrary)]
-        internal static unsafe partial void NativeRuntimeEventSource_LogExceptionThrown(char* exceptionTypeName, char* exceptionMessage, IntPtr faultingIP, long hresult);
+        internal static unsafe partial void NativeRuntimeEventSource_LogExceptionThrown(char* exceptionTypeName, char* exceptionMessage, IntPtr faultingIP, int hresult);
 
         [LibraryImport(RuntimeLibrary)]
         internal static partial void NativeRuntimeEventSource_LogWaitHandleWaitStart(

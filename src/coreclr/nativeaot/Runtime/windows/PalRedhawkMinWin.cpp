@@ -326,10 +326,9 @@ typedef BOOL(WINAPI* PINITIALIZECONTEXT2)(PVOID Buffer, DWORD ContextFlags, PCON
 PINITIALIZECONTEXT2 pfnInitializeContext2 = NULL;
 
 #ifdef TARGET_X86
+EXTERN_C VOID __cdecl RtlRestoreContextFallback(PCONTEXT ContextRecord, struct _EXCEPTION_RECORD* ExceptionRecord);
 typedef VOID(__cdecl* PRTLRESTORECONTEXT)(PCONTEXT ContextRecord, struct _EXCEPTION_RECORD* ExceptionRecord);
 PRTLRESTORECONTEXT pfnRtlRestoreContext = NULL;
-typedef NTSTATUS(* PNTCONTINUE)(PCONTEXT ContextRecord, BOOLEAN RaiseAlert);
-PNTCONTINUE pfnNtContinue = NULL;
 
 #define CONTEXT_COMPLETE (CONTEXT_FULL | CONTEXT_FLOATING_POINT |       \
                           CONTEXT_DEBUG_REGISTERS | CONTEXT_EXTENDED_REGISTERS)
@@ -354,11 +353,15 @@ REDHAWK_PALEXPORT CONTEXT* PalAllocateCompleteOSContext(_Out_ uint8_t** contextB
     }
 
 #ifdef TARGET_X86
-    if (pfnRtlRestoreContext == NULL && pfnNtContinue == NULL)
+    if (pfnRtlRestoreContext == NULL)
     {
         HMODULE hm = GetModuleHandleW(_T("ntdll.dll"));
         pfnRtlRestoreContext = (PRTLRESTORECONTEXT)GetProcAddress(hm, "RtlRestoreContext");
-        pfnNtContinue = (PNTCONTINUE)GetProcAddress(hm, "NtContinue");
+        if (pfnRtlRestoreContext == NULL)
+        {
+            // Fallback to the internal implementation if OS doesn't provide one.
+            pfnRtlRestoreContext = RtlRestoreContextFallback;
+        }
     }
 #endif //TARGET_X86
 
@@ -442,15 +445,8 @@ REDHAWK_PALEXPORT void REDHAWK_PALAPI PalRestoreContext(CONTEXT * pCtx)
 {
     __asan_handle_no_return();
 #ifdef TARGET_X86
-    if (pfnRtlRestoreContext != NULL)
-    {
-        pfnRtlRestoreContext(pCtx, NULL);
-    }
-    else if (pfnNtContinue != NULL)
-    {
-        pfnNtContinue(pCtx, FALSE);
-    }
-    _ASSERTE(!"Neither RtlRestoreContext nor NtContinue is available");
+    _ASSERTE(pfnRtlRestoreContext != NULL);
+    pfnRtlRestoreContext(pCtx, NULL);
 #else
     RtlRestoreContext(pCtx, NULL);
 #endif //TARGET_X86

@@ -2,6 +2,7 @@
 ;; The .NET Foundation licenses this file to you under the MIT license.
 
         .586
+        .xmm
         .model  flat
         option  casemap:none
         .code
@@ -38,6 +39,54 @@ ProbeLoop:
     ret
 
 RhpStackProbe ENDP
+
+;; *********************************************************************/
+;; RtlRestoreContextFallback - Restore platform context
+;;
+;; Entry:
+;;    [ESP + 4] - context
+;;    [ESP + 8] - exception record (unused)
+;;
+;; NOTE: Adapted from RtlRestoreContext in CoreCLR PAL
+;;
+
+_RtlRestoreContextFallback PROC public
+    mov     eax, [esp + 4]
+    test    byte ptr [eax + OFFSETOF__CONTEXT__ContextFlags], CONTEXT_FLOATING_POINT
+    je      Done_Restore_CONTEXT_FLOATING_POINT
+    frstor  [eax + OFFSETOF__CONTEXT__FloatSave]
+Done_Restore_CONTEXT_FLOATING_POINT:
+
+    test    byte ptr [eax + OFFSETOF__CONTEXT__ContextFlags], CONTEXT_EXTENDED_REGISTERS
+    je      Done_Restore_CONTEXT_EXTENDED_REGISTERS
+    movdqu  xmm0, [eax + OFFSETOF__CONTEXT__Xmm0]
+    movdqu  xmm1, [eax + OFFSETOF__CONTEXT__Xmm1]
+    movdqu  xmm2, [eax + OFFSETOF__CONTEXT__Xmm2]
+    movdqu  xmm3, [eax + OFFSETOF__CONTEXT__Xmm3]
+    movdqu  xmm4, [eax + OFFSETOF__CONTEXT__Xmm4]
+    movdqu  xmm5, [eax + OFFSETOF__CONTEXT__Xmm5]
+    movdqu  xmm6, [eax + OFFSETOF__CONTEXT__Xmm6]
+    movdqu  xmm7, [eax + OFFSETOF__CONTEXT__Xmm7]
+Done_Restore_CONTEXT_EXTENDED_REGISTERS:
+
+    ; Restore Stack
+    mov     esp, [eax + OFFSETOF__CONTEXT__Esp]
+
+    ; Create a minimal frame
+    push    dword ptr [eax + OFFSETOF__CONTEXT__Eip]
+
+    ; Restore register(s)
+    mov     ebp, [eax + OFFSETOF__CONTEXT__Ebp]
+    mov     edi, [eax + OFFSETOF__CONTEXT__Edi]
+    mov     esi, [eax + OFFSETOF__CONTEXT__Esi]
+    mov     edx, [eax + OFFSETOF__CONTEXT__Edx]
+    mov     ecx, [eax + OFFSETOF__CONTEXT__Ecx]
+    mov     ebx, [eax + OFFSETOF__CONTEXT__Ebx]
+    mov     eax, [eax + OFFSETOF__CONTEXT__Eax]
+
+    ; Resume
+    ret
+_RtlRestoreContextFallback ENDP
 
 ;; *********************************************************************/
 ;; LLsh - long shift left

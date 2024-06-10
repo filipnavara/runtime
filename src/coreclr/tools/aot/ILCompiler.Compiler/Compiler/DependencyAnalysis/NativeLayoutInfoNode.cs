@@ -65,17 +65,20 @@ namespace ILCompiler.DependencyAnalysis
 
         public void SaveNativeLayoutInfoWriter(NodeFactory factory)
         {
-            if (_writerSavedBytes != null)
-                return;
+            lock (this)
+            {
+                if (_writerSavedBytes != null)
+                    return;
 
-            foreach (var vertexNode in _vertexNodesToWrite)
-                vertexNode.WriteVertex(factory);
+                foreach (var vertexNode in _vertexNodesToWrite)
+                    vertexNode.WriteVertex(factory);
 
-            _writerSavedBytes = _writer.Save();
+                _writerSavedBytes = _writer.Save();
 
-            // Zero out the native writer and vertex list so that we AV if someone tries to insert after we're done.
-            _writer = null;
-            _vertexNodesToWrite = null;
+                // Zero out the native writer and vertex list so that we AV if someone tries to insert after we're done.
+                _writer = null;
+                _vertexNodesToWrite = null;
+            }
         }
 
         public override ObjectData GetData(NodeFactory factory, bool relocsOnly = false)

@@ -55,11 +55,15 @@ namespace ILCompiler.DependencyAnalysis
             SymbolAndDelta key = new SymbolAndDelta(symbol, delta);
 
             uint index;
-            if (!_insertedSymbolsDictionary.TryGetValue(key, out index))
+            // TODO: This is not deterministic
+            lock (_insertedSymbolsDictionary)
             {
-                index = (uint)_insertedSymbols.Count;
-                _insertedSymbolsDictionary[key] = index;
-                _insertedSymbols.Add(key);
+                if (!_insertedSymbolsDictionary.TryGetValue(key, out index))
+                {
+                    index = (uint)_insertedSymbols.Count;
+                    _insertedSymbolsDictionary[key] = index;
+                    _insertedSymbols.Add(key);
+                }
             }
 
             return index;

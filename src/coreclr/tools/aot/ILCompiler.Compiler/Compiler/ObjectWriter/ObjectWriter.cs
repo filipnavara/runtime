@@ -347,7 +347,33 @@ namespace ILCompiler.ObjectWriter
 
         private protected abstract void EmitDebugSections(IDictionary<string, SymbolDefinition> definedSymbols);
 
-        private void EmitObject(string objectFilePath, IReadOnlyCollection<DependencyNode> nodes, IObjectDumper dumper, Logger logger)
+        private static IEnumerable<IEnumerable<ObjectNode>> ChunkByClassCode(IEnumerable<ObjectNode> input)
+        {
+            using (var enumerator = input.GetEnumerator())
+            {
+                if (enumerator.MoveNext())
+                {
+                    do
+                    {
+                        int classCode = enumerator.Current.ClassCode;
+                        yield return TakeWhileClassCodeMatches(enumerator, classCode);
+                    }
+                    while (enumerator.Current is not null);
+                }
+            }
+
+            static IEnumerable<ObjectNode> TakeWhileClassCodeMatches(IEnumerator<ObjectNode> enumerator, int classCode)
+            {
+                while (enumerator.Current.ClassCode == classCode)
+                {
+                    yield return enumerator.Current;
+                    if (!enumerator.MoveNext())
+                        yield break;
+                }
+            }
+        }
+
+        private void EmitObject(string objectFilePath, IReadOnlyCollection<DependencyNode> nodes, IObjectDumper dumper, Logger logger, int parallelism)
         {
             // Pre-create some of the sections
             GetOrCreateSection(ObjectNodeSection.TextSection);
@@ -382,20 +408,35 @@ namespace ILCompiler.ObjectWriter
                 progressReporter = new ProgressReporter(logger, count);
             }
 
-            List<BlockToRelocate> blocksToRelocate = new();
-            foreach (DependencyNode depNode in nodes)
-            {
-                ObjectNode node = depNode as ObjectNode;
-                if (node is null)
-                    continue;
+            IEnumerable<(ObjectNode, ObjectData)> objectNodesAndContents;
 
+            if (parallelism > 1)
+            {
+                objectNodesAndContents =
+                    ChunkByClassCode(
+                        nodes
+                        .OfType<ObjectNode>()
+                        .Where(node => !node.ShouldSkipEmittingObjectNode(_nodeFactory)))
+                    .SelectMany(chunk =>
+                        chunk
+                        .AsParallel()
+                        .AsOrdered()
+                        .WithDegreeOfParallelism(parallelism)
+                        .Select(node => (node, node.GetData(_nodeFactory))));
+            }
+            else
+            {
+                objectNodesAndContents = nodes
+                    .OfType<ObjectNode>()
+                    .Where(node => !node.ShouldSkipEmittingObjectNode(_nodeFactory))
+                    .Select(node => (node, node.GetData(_nodeFactory)));
+            }
+
+            List<BlockToRelocate> blocksToRelocate = new();
+            foreach ((ObjectNode node, ObjectData nodeContents) in objectNodesAndContents)
+            {
                 if (logger.IsVerbose)
                     progressReporter.LogProgress();
-
-                if (node.ShouldSkipEmittingObjectNode(_nodeFactory))
-                    continue;
-
-                ObjectData nodeContents = node.GetData(_nodeFactory);
 
                 dumper?.DumpObjectNode(_nodeFactory, node, nodeContents);
 
@@ -537,7 +578,7 @@ namespace ILCompiler.ObjectWriter
             EmitObjectFile(objectFilePath);
         }
 
-        public static void EmitObject(string objectFilePath, IReadOnlyCollection<DependencyNode> nodes, NodeFactory factory, ObjectWritingOptions options, IObjectDumper dumper, Logger logger)
+        public static void EmitObject(string objectFilePath, IReadOnlyCollection<DependencyNode> nodes, NodeFactory factory, ObjectWritingOptions options, IObjectDumper dumper, Logger logger, int parallelism)
         {
             var stopwatch = Stopwatch.StartNew();
 
@@ -545,7 +586,7 @@ namespace ILCompiler.ObjectWriter
                 factory.Target.IsApplePlatform ? new MachObjectWriter(factory, options) :
                 factory.Target.OperatingSystem == TargetOS.Windows ? new CoffObjectWriter(factory, options) :
                 new ElfObjectWriter(factory, options);
-            objectWriter.EmitObject(objectFilePath, nodes, dumper, logger);
+            objectWriter.EmitObject(objectFilePath, nodes, dumper, logger, parallelism);
 
             stopwatch.Stop();
             if (logger.IsVerbose)

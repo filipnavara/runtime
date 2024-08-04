@@ -125,7 +125,7 @@ namespace ILCompiler.DependencyAnalysis
             // At runtime, an instance of the GCStaticEEType will be created and a GCHandle to it
             // will be written in this location.
             builder.RequireInitialPointerAlignment();
-            builder.EmitPointerReloc(GetGCStaticEETypeNode(factory));
+            builder.EmitPointerReloc(GetGCStaticEETypeNode(factory), _type.RequiresAlign8() ? 1 : 0);
         }
 
         public MetadataType Type => _type;

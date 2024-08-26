@@ -784,6 +784,11 @@ namespace ILCompiler.ObjectWriter
                     // Frame-based encoding, no saved registers
                     encoding = 0x04000000;
                 }
+                else if (blob.Length == 0)
+                {
+                    // Frameless encoding, no saved registers
+                    encoding = 0x02000000;
+                }
             }
 
             _compactUnwindCodes.Add(new CompactUnwindCode(

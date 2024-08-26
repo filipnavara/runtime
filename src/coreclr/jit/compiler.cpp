@@ -4161,7 +4161,9 @@ _SetMinOpts:
         // noinline to ensure the show up on in a stack walk. But for AMD64, we don't need a frame
         // pointer for the frame to show up in stack walk.
         if (opts.jitFlags->IsSet(JitFlags::JIT_FLAG_FRAMED))
+        {
             codeGen->setFrameRequired(true);
+        }
 #endif
 
         if (opts.OptimizationDisabled() ||

@@ -5886,7 +5886,6 @@ void Compiler::lvaFixVirtualFrameOffsets()
     // so instead of dealing with skipping adjustment just for them we just set
     // them here always.
     // For LoongArch64 and RISCV64, the RA is always at fp+8.
-    assert(codeGen->isFramePointerUsed());
     if (lvaRetAddrVar != BAD_VAR_NUM)
     {
         lvaTable[lvaRetAddrVar].SetStackOffset(REGSIZE_BYTES);

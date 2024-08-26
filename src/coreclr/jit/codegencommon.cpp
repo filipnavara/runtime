@@ -4928,15 +4928,15 @@ void CodeGen::genFinalizeFrame()
         //
         maskCalleeRegsPushed |= RBM_FPBASE;
 
+        // we always push LR when FP is used.  See genPushCalleeSavedRegisters
+        //
+        maskCalleeRegsPushed |= RBM_LR;
+
         // This assert check that we are not using REG_FP
         // as both the frame pointer and as a codegen register
         //
         assert(!regSet.rsRegsModified(RBM_FPBASE));
     }
-
-    // we always push LR.  See genPushCalleeSavedRegisters
-    //
-    maskCalleeRegsPushed |= RBM_LR;
 
 #if defined(TARGET_ARM)
     // TODO-ARM64-Bug?: enable some variant of this for FP on ARM64?

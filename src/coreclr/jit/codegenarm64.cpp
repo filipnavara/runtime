@@ -41,9 +41,8 @@ void CodeGen::genPopCalleeSavedRegistersAndFreeLclFrame(bool jmpEpilog)
     if (isFramePointerUsed())
     {
         rsRestoreRegs |= RBM_FPBASE;
+        rsRestoreRegs |= RBM_LR;
     }
-
-    rsRestoreRegs |= RBM_LR; // We must save/restore the return address (in the LR register)
 
     regMaskTP regsToRestoreMask = rsRestoreRegs;
 
@@ -198,6 +197,9 @@ void CodeGen::genPopCalleeSavedRegistersAndFreeLclFrame(bool jmpEpilog)
             break;
         }
 
+        case 6:
+            break;
+
         default:
             unreached();
     }
@@ -237,6 +239,13 @@ void CodeGen::genPopCalleeSavedRegistersAndFreeLclFrame(bool jmpEpilog)
         case 5:
         {
             // Nothing to do after restoring callee-saved registers.
+            break;
+        }
+
+        case 6:
+        {
+            GetEmitter()->emitIns_R_R_I(INS_add, EA_PTRSIZE, REG_SPBASE, REG_SPBASE, compiler->compLclFrameSize);
+            compiler->unwindAllocStack(compiler->compLclFrameSize);
             break;
         }
 
@@ -900,7 +909,6 @@ void CodeGen::genSaveCalleeSavedRegisterGroup(regMaskTP regsMask, int spDelta, i
 //
 // Notes:
 //    The save set can contain LR in which case LR is saved along with the other callee-saved registers.
-//    But currently Jit doesn't use frames without frame pointer on arm64.
 //
 void CodeGen::genSaveCalleeSavedRegistersHelp(regMaskTP regsToSaveMask, int lowestCalleeSavedOffset, int spDelta)
 {
@@ -5155,6 +5163,8 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize, 
     emitter::EmitCallType callType = emitter::EC_FUNC_TOKEN;
     addr                           = compiler->compGetHelperFtn((CorInfoHelpFunc)helper, &pAddr);
     regNumber callTarget           = REG_NA;
+
+    assert(isFramePointerUsed());
 
     if (addr == nullptr)
     {

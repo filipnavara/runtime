@@ -3441,6 +3441,11 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
     emitAttr              retSize       = EA_PTRSIZE;
     emitAttr              secondRetSize = EA_UNKNOWN;
 
+    // Saving the LR register is currently paired with having a frame. We only generate
+    // frameless prolog/epilog for leaf methods, so ensure that the invariant is not
+    // violated.
+    assert(isFramePointerUsed());
+
     // unused values are of no interest to GC.
     if (!call->IsUnusedValue())
     {
@@ -4583,28 +4588,13 @@ void CodeGen::genPushCalleeSavedRegisters()
 
     // On ARM we push the FP (frame-pointer) here along with all other callee saved registers
     if (isFramePointerUsed())
+    {
         rsPushRegs |= RBM_FPBASE;
 
-    //
-    // It may be possible to skip pushing/popping lr for leaf methods. However, such optimization would require
-    // changes in GC suspension architecture.
-    //
-    // We would need to guarantee that a tight loop calling a virtual leaf method can be suspended for GC. Today, we
-    // generate partially interruptible code for both the method that contains the tight loop with the call and the leaf
-    // method. GC suspension depends on return address hijacking in this case. Return address hijacking depends
-    // on the return address to be saved on the stack. If we skipped pushing/popping lr, the return address would never
-    // be saved on the stack and the GC suspension would time out.
-    //
-    // So if we wanted to skip pushing pushing/popping lr for leaf frames, we would also need to do one of
-    // the following to make GC suspension work in the above scenario:
-    // - Make return address hijacking work even when lr is not saved on the stack.
-    // - Generate fully interruptible code for loops that contains calls
-    // - Generate fully interruptible code for leaf methods
-    //
-    // Given the limited benefit from this optimization (<10k for CoreLib NGen image), the extra complexity
-    // is not worth it.
-    //
-    rsPushRegs |= RBM_LR; // We must save the return address (in the LR register)
+        // We always push LR for FP-based frames, and we always generate FP based frames
+        // for non-leaf methods. See rpMustCreateEBPFrame
+        rsPushRegs |= RBM_LR;
+    }
 
     regSet.rsMaskCalleeSaved = rsPushRegs;
 
@@ -4968,13 +4958,20 @@ void CodeGen::genPushCalleeSavedRegisters()
     {
         // No frame pointer (no chaining).
         assert((maskSaveRegsInt & RBM_FP) == 0);
-        assert((maskSaveRegsInt & RBM_LR) != 0);
+        // If we need to save LR we should generate a frame (see rpMustCreateEBPFrame).
+        assert((maskSaveRegsInt & RBM_LR) == 0);
 
         // Note that there is no pre-indexed save_lrpair unwind code variant, so we can't allocate the frame using
         // 'stp' if we only have one callee-saved register plus LR to save.
 
-        NYI("Frame without frame pointer");
-        offset = 0;
+        if (compiler->compLclFrameSize > 0)
+        {
+            GetEmitter()->emitIns_R_R_I(INS_sub, EA_PTRSIZE, REG_SPBASE, REG_SPBASE, compiler->compLclFrameSize);
+            compiler->unwindAllocStack(compiler->compLclFrameSize);
+        }
+
+        offset = (int)compiler->compLclFrameSize;
+        frameType = 6;
     }
 
     assert(frameType != 0);
@@ -5112,6 +5109,10 @@ void CodeGen::genPushCalleeSavedRegisters()
             // Should only have picked this frame type for EnC.
             assert(compiler->opts.compDbgEnC);
         }
+    }
+    else if (frameType == 6)
+    {
+        establishFramePointer = false;
     }
     else
     {

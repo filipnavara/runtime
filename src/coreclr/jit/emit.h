@@ -2798,7 +2798,7 @@ private:
         }
         else
         {
-            return (curInsIG->igFlags & IGF_EXTEND) &&
+            return (prevInsIG->igFlags & IGF_EXTEND) && (curInsIG->igFlags & IGF_EXTEND) &&
                    ((prevInsIG->igFlags & IGF_NOGCINTERRUPT) == (curInsIG->igFlags & IGF_NOGCINTERRUPT));
         }
     }

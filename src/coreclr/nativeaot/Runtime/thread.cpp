@@ -765,7 +765,7 @@ void Thread::HijackReturnAddress(PAL_LIMITED_CONTEXT* pSuspendCtx, HijackFunc* p
         return;
     }
 
-    HijackReturnAddressWorker(&frameIterator, pfnHijackFunction);
+    HijackReturnAddressWorker(&frameIterator, NULL, pfnHijackFunction);
 }
 
 // This function is called in one of two scenarios:
@@ -780,10 +780,18 @@ void Thread::HijackReturnAddress(NATIVE_CONTEXT* pSuspendCtx, HijackFunc* pfnHij
     StackFrameIterator frameIterator(this, pSuspendCtx);
     ASSERT(frameIterator.IsValid());
 
-    HijackReturnAddressWorker(&frameIterator, pfnHijackFunction);
+#if defined(TARGET_ARM64) || defined(TARGET_ARM)
+    HijackReturnAddressWorker(&frameIterator, (PTR_VOID *)&pSuspendCtx->Lr(), pfnHijackFunction);
+#elif defined(TARGET_LOONGARCH64)
+    HijackReturnAddressWorker(&frameIterator, (PTR_VOID *)&pSuspendCtx->Ra(), pfnHijackFunction);
+#elif defined(TARGET_AMD64) || defined(TARGET_X86) || defined(TARGET_WASM)
+    HijackReturnAddressWorker(&frameIterator, NULL, pfnHijackFunction);
+#else
+    PORTABILITY_ASSERT("HijackReturnAddress");
+#endif
 }
 
-void Thread::HijackReturnAddressWorker(StackFrameIterator* frameIterator, HijackFunc* pfnHijackFunction)
+void Thread::HijackReturnAddressWorker(StackFrameIterator* frameIterator, PTR_VOID *returnAddressRegister, HijackFunc* pfnHijackFunction)
 {
     void** ppvRetAddrLocation;
     GCRefKind retValueKind;
@@ -791,14 +799,28 @@ void Thread::HijackReturnAddressWorker(StackFrameIterator* frameIterator, Hijack
     frameIterator->CalculateCurrentMethodState();
     if (frameIterator->GetCodeManager()->GetReturnAddressHijackInfo(frameIterator->GetMethodInfo(),
         frameIterator->GetRegisterSet(),
+        returnAddressRegister,
         &ppvRetAddrLocation,
         &retValueKind))
     {
         ASSERT(ppvRetAddrLocation != NULL);
 
-        // if the new hijack location is the same, we do nothing
-        if (m_ppvHijackedReturnAddressLocation == ppvRetAddrLocation)
-            return;
+        // For the purpose of bookkeeping in the Thread structure, we mark register
+        // hijacks with NULL pointer in m_ppvHijackedReturnAddressLocation. This makes
+        // it simpler to ignore in the unhijacking helpers both in assembly and C code.
+        if (ppvRetAddrLocation == returnAddressRegister &&
+            returnAddressRegister != NULL)
+        {
+            // Leaf method was already hijacked
+            if (*returnAddressRegister == (void*)pfnHijackFunction)
+                return;
+        }
+        else
+        {
+            // if the new hijack location is the same, we do nothing
+            if (m_ppvHijackedReturnAddressLocation == ppvRetAddrLocation)
+                return;
+        }
 
         // we only unhijack if we are going to install a new or better hijack.
         CrossThreadUnhijack();
@@ -807,7 +829,7 @@ void Thread::HijackReturnAddressWorker(StackFrameIterator* frameIterator, Hijack
         ASSERT(pvRetAddr != NULL);
         ASSERT(StackFrameIterator::IsValidReturnAddress(pvRetAddr));
 
-        m_ppvHijackedReturnAddressLocation = ppvRetAddrLocation;
+        m_ppvHijackedReturnAddressLocation = ppvRetAddrLocation == returnAddressRegister ? NULL : ppvRetAddrLocation;
         m_pvHijackedReturnAddress = pvRetAddr;
         m_uHijackedReturnValueFlags = ReturnKindToTransitionFrameFlags(retValueKind);
         *ppvRetAddrLocation = (void*)pfnHijackFunction;
@@ -859,6 +881,7 @@ bool Thread::Redirect()
 
     uintptr_t origIP = redirectionContext->GetIp();
     redirectionContext->SetIp((uintptr_t)RhpSuspendRedirected);
+    UnhijackLeafFrame(redirectionContext);
     if (!PalSetThreadContext(m_hPalThread, redirectionContext))
         return false;
 
@@ -878,6 +901,7 @@ bool Thread::InlineSuspend(NATIVE_CONTEXT* interruptedContext)
 {
     ASSERT(!IsDoNotTriggerGcSet());
 
+    UnhijackLeafFrame(interruptedContext);
     Unhijack();
 
     m_interruptedContext = interruptedContext;
@@ -897,6 +921,33 @@ void Thread::Unhijack()
 
     UnhijackWorker();
 }
+
+void Thread::UnhijackLeafFrame(NATIVE_CONTEXT* interruptedContext)
+{
+    ASSERT(ThreadStore::GetCurrentThread() == this);
+
+#if defined(TARGET_ARM64) || defined(TARGET_ARM)
+    UnhijackLeafFrameWorker((PTR_VOID *)&interruptedContext->Lr());
+#elif defined(TARGET_LOONGARCH64)
+    UnhijackLeafFrameWorker((PTR_VOID *)&interruptedContext->Ra());
+#elif !defined(TARGET_AMD64) && !defined(TARGET_X86) && !defined(TARGET_WASM)
+    PORTABILITY_ASSERT("UnhijackLeafFrame");
+#endif
+}
+
+void Thread::UnhijackLeafFrame(PAL_LIMITED_CONTEXT* pStackwalkCtx)
+{
+    ASSERT(ThreadStore::GetCurrentThread() == this);
+
+#if defined(TARGET_ARM64) || defined(TARGET_ARM)
+    UnhijackLeafFrameWorker((PTR_VOID *)&pStackwalkCtx->LR);
+#elif defined(TARGET_LOONGARCH64)
+    UnhijackLeafFrameWorker((PTR_VOID *)&pStackwalkCtx->RA);
+#elif !defined(TARGET_AMD64) && !defined(TARGET_X86) && !defined(TARGET_WASM)
+    PORTABILITY_ASSERT("UnhijackLeafFrame");
+#endif
+}
+
 
 // This unhijack routine is called to undo a hijack, that is potentially on a different thread.
 // 
@@ -944,6 +995,20 @@ void Thread::UnhijackWorker()
     m_ppvHijackedReturnAddressLocation  = NULL;
     m_pvHijackedReturnAddress           = NULL;
     m_uHijackedReturnValueFlags         = 0;
+}
+
+void Thread::UnhijackLeafFrameWorker(PTR_VOID *returnAddressRegister)
+{
+    if (*returnAddressRegister == PalGetHijackTarget(&RhpGcProbeHijack))
+    {
+        // Restore the original return address.
+        *returnAddressRegister = m_pvHijackedReturnAddress;
+
+        // Clear the hijack state.
+        m_ppvHijackedReturnAddressLocation  = NULL;
+        m_pvHijackedReturnAddress           = NULL;
+        m_uHijackedReturnValueFlags         = 0;
+    }
 }
 
 bool Thread::IsHijacked()

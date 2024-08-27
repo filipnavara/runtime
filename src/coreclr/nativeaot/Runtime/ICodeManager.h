@@ -273,6 +273,7 @@ public:
 
     virtual bool GetReturnAddressHijackInfo(MethodInfo *    pMethodInfo,
                                             REGDISPLAY *    pRegisterSet,           // in
+                                            PTR_VOID *      pReturnAddressRegister, // in
                                             PTR_PTR_VOID *  ppvRetAddrLocation,     // out
                                             GCRefKind *     pRetValueKind) PURE_VIRTUAL     // out
 

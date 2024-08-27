@@ -175,9 +175,10 @@ private:
 
     void HijackReturnAddress(PAL_LIMITED_CONTEXT* pSuspendCtx, HijackFunc* pfnHijackFunction);
     void HijackReturnAddress(NATIVE_CONTEXT* pSuspendCtx, HijackFunc* pfnHijackFunction);
-    void HijackReturnAddressWorker(StackFrameIterator* frameIterator, HijackFunc* pfnHijackFunction);
+    void HijackReturnAddressWorker(StackFrameIterator* frameIterator, PTR_VOID *returnAddressRegister, HijackFunc* pfnHijackFunction);
     void CrossThreadUnhijack();
     void UnhijackWorker();
+    void UnhijackLeafFrameWorker(PTR_VOID *returnAddressRegister);
 #else // FEATURE_HIJACK
     void CrossThreadUnhijack() { }
 #endif // FEATURE_HIJACK
@@ -224,11 +225,15 @@ public:
 #ifdef FEATURE_HIJACK
     void                Hijack();
     void                Unhijack();
+    void                UnhijackLeafFrame(NATIVE_CONTEXT* pStackwalkCtx);
+    void                UnhijackLeafFrame(PAL_LIMITED_CONTEXT* pStackwalkCtx);
     bool                IsHijacked();
     void*               GetHijackedReturnAddress();
     static bool         IsHijackTarget(void * address);
 #else // FEATURE_HIJACK
     void                Unhijack() { }
+    void                UnhijackLeafFrame(NATIVE_CONTEXT* pStackwalkCtx);
+    void                UnhijackLeafFrame(PAL_LIMITED_CONTEXT* pStackwalkCtx) { }
     bool                IsHijacked() { return false; }
     static bool         IsHijackTarget(void * address) { return false; }
 #endif // FEATURE_HIJACK

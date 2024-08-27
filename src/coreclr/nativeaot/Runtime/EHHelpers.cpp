@@ -477,6 +477,9 @@ int32_t __stdcall RhpHardwareExceptionHandler(uintptr_t faultCode, uintptr_t fau
         *arg1Reg = faultingIP;
         palContext->SetIp(PCODEToPINSTR((PCODE)&RhpThrowHwEx));
 
+        Thread * pThread = ThreadStore::GetCurrentThread();
+        pThread->UnhijackLeafFrame(palContext);
+
         return EXCEPTION_CONTINUE_EXECUTION;
     }
 
@@ -617,6 +620,9 @@ int32_t __stdcall RhpVectoredExceptionHandler(PEXCEPTION_POINTERS pExPtrs)
         pExPtrs->ContextRecord->SetIp(PCODEToPINSTR((PCODE)&RhpThrowHwEx));
         pExPtrs->ContextRecord->SetArg0Reg(faultCode);
         pExPtrs->ContextRecord->SetArg1Reg(faultingIP);
+
+        Thread * pThread = ThreadStore::GetCurrentThread();
+        pThread->UnhijackLeafFrame(palContext);
 
         return EXCEPTION_CONTINUE_EXECUTION;
     }

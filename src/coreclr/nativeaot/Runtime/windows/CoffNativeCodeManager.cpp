@@ -860,6 +860,7 @@ GCRefKind GetGcRefKind(ReturnKind returnKind)
 
 bool CoffNativeCodeManager::GetReturnAddressHijackInfo(MethodInfo *    pMethodInfo,
                                                 REGDISPLAY *    pRegisterSet,       // in
+                                                PTR_VOID *      pReturnAddressRegister, // in
                                                 PTR_PTR_VOID *  ppvRetAddrLocation, // out
                                                 GCRefKind *     pRetValueKind)      // out
 {
@@ -891,7 +892,7 @@ bool CoffNativeCodeManager::GetReturnAddressHijackInfo(MethodInfo *    pMethodIn
     // Decode the GC info for the current method to determine its return type
     GcInfoDecoderFlags flags = DECODE_RETURN_KIND;
 #if defined(TARGET_ARM64)
-    flags = (GcInfoDecoderFlags)(flags | DECODE_HAS_TAILCALLS);
+    flags = (GcInfoDecoderFlags)(flags | DECODE_HAS_TAILCALLS | DECODE_REVERSE_PINVOKE_VAR);
 #endif // TARGET_ARM64
     GcInfoDecoder decoder(GCInfoToken(p), flags);
 
@@ -965,6 +966,14 @@ bool CoffNativeCodeManager::GetReturnAddressHijackInfo(MethodInfo *    pMethodIn
         // 1) In a leaf method that does not push LR on stack, OR
         // 2) In the prolog/epilog of a non-leaf method that has not yet pushed LR on stack
         //    or has LR already popped off.
+
+        if (decoder.GetStackBaseRegister() == NO_STACK_BASE_REGISTER)
+        {
+            // Leaf method without a frame
+            *ppvRetAddrLocation = pReturnAddressRegister;
+            return pReturnAddressRegister != NULL;
+        }
+
         return false;
     }
 

@@ -69,6 +69,7 @@ public:
 
     bool GetReturnAddressHijackInfo(MethodInfo *    pMethodInfo,
                                     REGDISPLAY *    pRegisterSet,       // in
+                                    PTR_VOID *      pReturnAddressRegister, // in
                                     PTR_PTR_VOID *  ppvRetAddrLocation, // out
                                     GCRefKind *     pRetValueKind);     // out
 

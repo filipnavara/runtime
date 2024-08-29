@@ -4961,16 +4961,7 @@ void CodeGen::genPushCalleeSavedRegisters()
         // If we need to save LR we should generate a frame (see rpMustCreateEBPFrame).
         assert((maskSaveRegsInt & RBM_LR) == 0);
 
-        // Note that there is no pre-indexed save_lrpair unwind code variant, so we can't allocate the frame using
-        // 'stp' if we only have one callee-saved register plus LR to save.
-
-        if (compiler->compLclFrameSize > 0)
-        {
-            GetEmitter()->emitIns_R_R_I(INS_sub, EA_PTRSIZE, REG_SPBASE, REG_SPBASE, compiler->compLclFrameSize);
-            compiler->unwindAllocStack(compiler->compLclFrameSize);
-        }
-
-        offset = (int)compiler->compLclFrameSize;
+        offset = 0;
         frameType = 6;
     }
 
@@ -5113,6 +5104,13 @@ void CodeGen::genPushCalleeSavedRegisters()
     else if (frameType == 6)
     {
         establishFramePointer = false;
+
+        if (compiler->compLclFrameSize > 0)
+        {
+            GetEmitter()->emitIns_R_R_I(INS_sub, EA_PTRSIZE, REG_SPBASE, REG_SPBASE, compiler->compLclFrameSize);
+            compiler->unwindAllocStack(compiler->compLclFrameSize);
+            offset += (int)compiler->compLclFrameSize;
+        }
     }
     else
     {

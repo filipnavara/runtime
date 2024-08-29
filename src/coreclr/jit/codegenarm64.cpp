@@ -198,7 +198,11 @@ void CodeGen::genPopCalleeSavedRegistersAndFreeLclFrame(bool jmpEpilog)
         }
 
         case 6:
+        {
+            GetEmitter()->emitIns_R_R_I(INS_add, EA_PTRSIZE, REG_SPBASE, REG_SPBASE, compiler->compLclFrameSize);
+            compiler->unwindAllocStack(compiler->compLclFrameSize);
             break;
+        }
 
         default:
             unreached();
@@ -237,15 +241,9 @@ void CodeGen::genPopCalleeSavedRegistersAndFreeLclFrame(bool jmpEpilog)
         case 3:
         case 4:
         case 5:
-        {
-            // Nothing to do after restoring callee-saved registers.
-            break;
-        }
-
         case 6:
         {
-            GetEmitter()->emitIns_R_R_I(INS_add, EA_PTRSIZE, REG_SPBASE, REG_SPBASE, compiler->compLclFrameSize);
-            compiler->unwindAllocStack(compiler->compLclFrameSize);
+            // Nothing to do after restoring callee-saved registers.
             break;
         }
 

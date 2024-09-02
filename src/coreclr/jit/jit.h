@@ -630,6 +630,8 @@ const bool dspGCtbls = true;
 #define DOUBLE_ALIGN                                                                                                   \
     1 // permit the double alignment of ESP in prolog,
       //  and permit the double alignment of local offsets
+#elif defined(TARGET_ARM64)
+#define DOUBLE_ALIGN 1
 #else
 #define DOUBLE_ALIGN 0 // no special handling for double alignment
 #endif

@@ -4943,7 +4943,7 @@ void CodeGen::genFinalizeFrame()
     regMaskTP maskCalleeRegsPushed = regSet.rsGetModifiedCalleeSavedRegsMask();
 
 #ifdef TARGET_ARMARCH
-    if (isFramePointerUsed())
+    if (doubleAlignOrFramePointerUsed())
     {
         // For a FP based frame we have to push/pop the FP register
         //

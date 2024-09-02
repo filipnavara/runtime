@@ -34,6 +34,7 @@ PhaseStatus Compiler::fgMorphInit()
 
     if (opts.compDbgEnC)
     {
+        JITDUMP("setFramePointerRequired (opts.compDbgEnC)");
         codeGen->setFramePointerRequired(true);
 
         // We don't care about localloc right now. If we do support it,
@@ -13904,6 +13905,7 @@ void Compiler::fgSetOptions()
 
     if (compLocallocUsed)
     {
+        JITDUMP("setFramePointerRequired (compLocallocUsed)\n");
         codeGen->setFramePointerRequired(true);
     }
 
@@ -13916,6 +13918,7 @@ void Compiler::fgSetOptions()
 
     if (!opts.genFPopt)
     {
+        JITDUMP("setFramePointerRequired (!opts.genFPopt)\n");
         codeGen->setFramePointerRequired(true);
     }
 
@@ -13953,6 +13956,7 @@ void Compiler::fgSetOptions()
 
     if (compHndBBtabCount > 0)
     {
+        JITDUMP("setFramePointerRequired (compHndBBtabCount > 0)\n");
         codeGen->setFramePointerRequiredEH(true);
     }
 
@@ -13960,27 +13964,32 @@ void Compiler::fgSetOptions()
 
     if (compMethodRequiresPInvokeFrame())
     {
+        JITDUMP("setFramePointerRequired (compMethodRequiresPInvokeFrame)\n");
         codeGen->setFramePointerRequired(true); // Setup of Pinvoke frame currently requires an EBP style frame
     }
 
     if (info.compPublishStubParam)
     {
+        JITDUMP("setFramePointerRequired (setFramePointerRequiredGCInfo)\n");
         codeGen->setFramePointerRequiredGCInfo(true);
     }
 
     if (compIsProfilerHookNeeded())
     {
+        JITDUMP("setFramePointerRequired (setFramePointerRequired)\n");
         codeGen->setFramePointerRequired(true);
     }
 
     if (info.compIsVarArgs)
     {
         // Code that initializes lvaVarargsBaseOfStkArgs requires this to be EBP relative.
+        JITDUMP("setFramePointerRequired (info.compIsVarArgs)\n");
         codeGen->setFramePointerRequiredGCInfo(true);
     }
 
     if (lvaReportParamTypeArg())
     {
+        JITDUMP("setFramePointerRequired (lvaReportParamTypeArg)\n");
         codeGen->setFramePointerRequiredGCInfo(true);
     }
 

@@ -6129,7 +6129,8 @@ void Compiler::lvaAssignVirtualFrameOffsetsToLocals()
 
     if (opts.compJitSaveFpLrWithCalleeSavedRegisters == 0)
     {
-        if (IsTargetAbi(CORINFO_NATIVEAOT_ABI) && TargetOS::IsApplePlatform)
+        if (IsTargetAbi(CORINFO_NATIVEAOT_ABI) && TargetOS::IsApplePlatform &&
+            !compMethodRequiresPInvokeFrame() && compHndBBtabCount == 0)
         {
             codeGen->SetSaveFpLrWithAllCalleeSavedRegisters(true);
             codeGen->SetReverseAndPairCalleeSavedRegisters(true);
@@ -6193,7 +6194,9 @@ void Compiler::lvaAssignVirtualFrameOffsetsToLocals()
 #if DOUBLE_ALIGN
     if (genDoubleAlign())
     {
+#ifdef TARGET_X86
         mustDoubleAlign = true; // X86 only
+#endif
     }
 #endif
 #endif // !TARGET_ARM
@@ -6212,8 +6215,8 @@ void Compiler::lvaAssignVirtualFrameOffsetsToLocals()
         stkOffs -= initialStkOffs;
     }
 
-    if (codeGen->IsSaveFpLrWithAllCalleeSavedRegisters() || !isFramePointerUsed()) // Note that currently we always have
-                                                                                   // a frame pointer
+    if (codeGen->IsSaveFpLrWithAllCalleeSavedRegisters() || !codeGen->doubleAlignOrFramePointerUsed()) // Note that currently we always have
+                                                                                                       // a frame pointer
     {
         stkOffs -= compCalleeRegsPushed * REGSIZE_BYTES;
     }
@@ -6893,8 +6896,8 @@ void Compiler::lvaAssignVirtualFrameOffsetsToLocals()
 #endif // TARGET_AMD64
 
 #ifdef TARGET_ARM64
-    if (!codeGen->IsSaveFpLrWithAllCalleeSavedRegisters() && isFramePointerUsed()) // Note that currently we always have
-                                                                                   // a frame pointer
+    if (!codeGen->IsSaveFpLrWithAllCalleeSavedRegisters() && codeGen->doubleAlignOrFramePointerUsed()) // Note that currently we always have
+                                                                                                       // a frame pointer
     {
         // Create space for saving FP and LR.
         stkOffs -= 2 * REGSIZE_BYTES;

@@ -38,7 +38,7 @@ void CodeGen::genPopCalleeSavedRegistersAndFreeLclFrame(bool jmpEpilog)
 
     regMaskTP rsRestoreRegs = regSet.rsGetModifiedCalleeSavedRegsMask();
 
-    if (isFramePointerUsed())
+    if (doubleAlignOrFramePointerUsed())
     {
         rsRestoreRegs |= RBM_FPBASE;
         rsRestoreRegs |= RBM_LR;
@@ -1751,7 +1751,7 @@ void CodeGen::genCaptureFuncletPrologEpilogInfo()
     if (!compiler->ehAnyFunclets())
         return;
 
-    assert(isFramePointerUsed());
+    assert(doubleAlignOrFramePointerUsed());
 
     // The frame size and offsets must be finalized
     assert(compiler->lvaDoneFrameLayout == Compiler::FINAL_FRAME_LAYOUT);
@@ -5206,7 +5206,7 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize, 
     addr                           = compiler->compGetHelperFtn((CorInfoHelpFunc)helper, &pAddr);
     regNumber callTarget           = REG_NA;
 
-    assert(isFramePointerUsed());
+    assert(doubleAlignOrFramePointerUsed());
 
     if (addr == nullptr)
     {

@@ -4206,7 +4206,7 @@ void GCInfo::gcMakeRegPtrTable(
                 }
 
                 unsigned const fieldOffset = i * TARGET_POINTER_SIZE;
-                int const      offset      = varDsc->GetStackOffset() + fieldOffset;
+                int            offset      = varDsc->GetStackOffset() + fieldOffset;
 
 #ifdef DEBUG
                 if (varDsc->lvPromoted)

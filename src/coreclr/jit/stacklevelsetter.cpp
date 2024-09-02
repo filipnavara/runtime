@@ -426,7 +426,7 @@ void StackLevelSetter::CheckArgCnt()
             printf("Too many pushed arguments for an ESP based encoding, forcing an EBP frame\n");
         }
 #endif
-        comp->codeGen->setFramePointerRequired(true);
+        comp->codeGen->setFrameRequired(true);
     }
 }
 

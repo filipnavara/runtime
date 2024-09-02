@@ -3444,7 +3444,7 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
     // Saving the LR register is currently paired with having a frame. We only generate
     // frameless prolog/epilog for leaf methods, so ensure that the invariant is not
     // violated.
-    assert(isFramePointerUsed());
+    assert(doubleAlignOrFramePointerUsed());
 
     // unused values are of no interest to GC.
     if (!call->IsUnusedValue())
@@ -4580,14 +4580,14 @@ void CodeGen::genPushCalleeSavedRegisters()
     regMaskTP rsPushRegs = regSet.rsGetModifiedCalleeSavedRegsMask();
 
 #if ETW_EBP_FRAMED
-    if (!isFramePointerUsed() && regSet.rsRegsModified(RBM_FPBASE))
+    if (!doubleAlignOrFramePointerUsed() && regSet.rsRegsModified(RBM_FPBASE))
     {
         noway_assert(!"Used register RBM_FPBASE as a scratch register!");
     }
 #endif
 
     // On ARM we push the FP (frame-pointer) here along with all other callee saved registers
-    if (isFramePointerUsed())
+    if (doubleAlignOrFramePointerUsed())
     {
         rsPushRegs |= RBM_FPBASE;
 
@@ -4740,7 +4740,7 @@ void CodeGen::genPushCalleeSavedRegisters()
     // first save instruction as a "predecrement" amount, if possible.
     int calleeSaveSpDelta = 0;
 
-    if (isFramePointerUsed())
+    if (doubleAlignOrFramePointerUsed())
     {
         // We need to save both FP and LR.
 

@@ -1977,12 +1977,14 @@ void LinearScan::identifyCandidates()
             else if (!isRegCandidate(varDsc) || varDsc->lvDoNotEnregister)
             {
                 refCntStk += varDsc->lvRefCnt();
+#ifndef TARGET_64BIT
                 if ((varDsc->lvType == TYP_DOUBLE) ||
                     ((varTypeIsStruct(varDsc) && varDsc->lvStructDoubleAlign &&
                       (compiler->lvaGetPromotionType(varDsc) != Compiler::PROMOTION_TYPE_INDEPENDENT))))
                 {
                     refCntWtdStkDbl += varDsc->lvRefCntWtd();
                 }
+#endif
             }
             else
             {
@@ -2128,6 +2130,10 @@ void LinearScan::identifyCandidates()
 #if DOUBLE_ALIGN
     if (checkDoubleAlign)
     {
+#ifdef TARGET_ARM64
+        doDoubleAlign = compiler->IsTargetAbi(CORINFO_NATIVEAOT_ABI) && TargetOS::IsApplePlatform;
+        JITDUMP("checkDoubleAlign -> %s\n", dspBool(doDoubleAlign));
+#else
         // TODO-CQ: Fine-tune this:
         // In the legacy reg predictor, this runs after allocation, and then demotes any lclVars
         // allocated to the frame pointer, which is probably the wrong order.
@@ -2140,6 +2146,7 @@ void LinearScan::identifyCandidates()
 
         doDoubleAlign =
             compiler->shouldDoubleAlign(refCntStk, refCntEBP, refCntWtdEBP, refCntStkParam, refCntWtdStkDbl);
+#endif
     }
 #endif // DOUBLE_ALIGN
 

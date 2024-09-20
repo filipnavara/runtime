@@ -4,7 +4,9 @@
 #ifndef _MONO_SGEN_BRIDGE_TYPES_H
 #define _MONO_SGEN_BRIDGE_TYPES_H
 
+#ifndef NO_MONO_PUBLIB_TYPES
 #include <mono/utils/details/mono-publib-types.h>
+#endif
 
 MONO_BEGIN_DECLS
 

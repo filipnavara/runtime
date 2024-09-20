@@ -14,14 +14,18 @@
 
 #include "config.h"
 
-#if defined (HAVE_SGEN_GC) && !defined (DISABLE_SGEN_GC_BRIDGE)
+#if (defined (HAVE_SGEN_GC) && !defined (DISABLE_SGEN_GC_BRIDGE)) || defined (FEATURE_GC_BRIDGE)
 
 #include <stdlib.h>
 
+#ifndef FEATURE_GC_BRIDGE
 #include "sgen/sgen-gc.h"
+#endif
 #include "sgen-bridge-internals.h"
+#ifndef FEATURE_GC_BRIDGE
 #include "tabledefs.h"
 #include "utils/mono-logger-internals.h"
+#endif
 
 #include "sgen-dynarray.h"
 
@@ -39,38 +43,6 @@
  *     "color". We compute the set of colors and which colors contain links to
  *     which colors. The color graph then becomes the reduced SCC graph.
  */
-
-// Is this class bridged or not, and should its dependencies be scanned or not?
-// The result of this callback will be cached for use by is_opaque_object later.
-static MonoGCBridgeObjectKind
-class_kind (MonoClass *klass)
-{
-	MonoGCBridgeObjectKind res = mono_bridge_callbacks.bridge_class_kind (klass);
-
-	/* If it's a bridge, nothing we can do about it. */
-	if (res == GC_BRIDGE_TRANSPARENT_BRIDGE_CLASS || res == GC_BRIDGE_OPAQUE_BRIDGE_CLASS)
-		return res;
-
-	/* Non bridge classes with no pointers will never point to a bridge, so we can savely ignore them. */
-	if (!m_class_has_references (klass)) {
-		SGEN_LOG (6, "class %s is opaque\n", m_class_get_name (klass));
-		return GC_BRIDGE_OPAQUE_CLASS;
-	}
-
-	/* Some arrays can be ignored */
-	if (m_class_get_rank (klass) == 1) {
-		MonoClass *elem_class = m_class_get_element_class (klass);
-
-		/* FIXME the bridge check can be quite expensive, cache it at the class level. */
-		/* An array of a sealed type that is not a bridge will never get to a bridge */
-		if ((mono_class_get_flags (elem_class) & TYPE_ATTRIBUTE_SEALED) && !m_class_has_references (elem_class) && !mono_bridge_callbacks.bridge_class_kind (elem_class)) {
-			SGEN_LOG (6, "class %s is opaque\n", m_class_get_name (klass));
-			return GC_BRIDGE_OPAQUE_CLASS;
-		}
-	}
-
-	return GC_BRIDGE_TRANSPARENT_CLASS;
-}
 
 //enable usage logging
 // #define DUMP_GRAPH 1
@@ -340,20 +312,27 @@ free_color_buckets (void)
 
 
 static ScanData*
-create_data (GCObject *obj)
+create_data (GCObject *obj, BOOL is_bridge)
 {
+	printf("create_data %p [is_bridge: %d]\n", obj, is_bridge);
 	mword *o = (mword*)obj;
 	ScanData *res = alloc_object_data ();
 	res->obj = obj;
 	res->color = NULL;
 	res->index = res->low_index = -1;
 	res->state = INITIAL;
-	res->is_bridge = FALSE;
+	res->is_bridge = is_bridge;
+#ifdef FEATURE_GC_BRIDGE
+	res->lock_word = o [-1];
+	assert((obj->GetHeader()->GetBits() & BIT_SBLK_UNUSED) == 0);
+	o [-1] = BIT_SBLK_UNUSED_MW | ((mword)res & ~BIT_SBLK_UNUSED_MW) | (!!((mword)res & BIT_SBLK_UNUSED_MW));
+#else
 	res->obj_state = o [0] & SGEN_VTABLE_BITS_MASK;
 	res->lock_word = o [1];
 
 	o [0] |= SGEN_VTABLE_BITS_MASK;
 	o [1] = (mword)res;
+#endif
 	return res;
 }
 
@@ -362,8 +341,18 @@ find_data (GCObject *obj)
 {
 	ScanData *a = NULL;
 	mword *o = (mword*)obj;
+#ifdef FEATURE_GC_BRIDGE
+	if ((obj->GetHeader()->GetBits() & BIT_SBLK_UNUSED) == BIT_SBLK_UNUSED)
+	{
+		mword ptr = o [-1];
+		if ((ptr & 1) == 0)
+			ptr &= ~BIT_SBLK_UNUSED_MW;
+		a = (ScanData*)ptr;
+	}
+#else
 	if ((o [0] & SGEN_VTABLE_BITS_MASK) == SGEN_VTABLE_BITS_MASK)
 		a = (ScanData*)o [1];
+#endif
 	return a;
 }
 
@@ -376,9 +365,13 @@ clear_after_processing (void)
 		ScanData *sd;
 		for (sd = &cur->data [0]; sd < cur->next_data; ++sd) {
 			mword *o = (mword*)sd->obj;
+#ifdef FEATURE_GC_BRIDGE
+			o [-1] = sd->lock_word;
+#else
 			o [0] &= ~SGEN_VTABLE_BITS_MASK;
 			o [0] |= sd->obj_state;
 			o [1] = sd->lock_word;
+#endif
 		}
 	}
 }
@@ -386,6 +379,9 @@ clear_after_processing (void)
 static GCObject*
 bridge_object_forward (GCObject *obj)
 {
+#ifdef FEATURE_GC_BRIDGE
+	return obj;
+#else
 	GCObject *fwd;
 	mword *o = (mword*)obj;
 	if ((o [0] & SGEN_VTABLE_BITS_MASK) == SGEN_VTABLE_BITS_MASK)
@@ -393,14 +389,19 @@ bridge_object_forward (GCObject *obj)
 
 	fwd = SGEN_OBJECT_IS_FORWARDED (obj);
 	return fwd ? fwd : obj;
+#endif
 }
 
 #ifdef DUMP_GRAPH
 static const char*
 safe_name_bridge (GCObject *obj)
 {
+#ifdef FEATURE_GC_BRIDGE
+	return m_class_get_name(obj->GetGCSafeMethodTable());
+#else
 	GCVTable vt = SGEN_LOAD_VTABLE (obj);
 	return vt->klass->name;
+#endif
 }
 
 static ScanData*
@@ -408,7 +409,7 @@ find_or_create_data (GCObject *obj)
 {
 	ScanData *entry = find_data (obj);
 	if (!entry)
-		entry = create_data (obj);
+		entry = create_data (obj, FALSE);
 	return entry;
 }
 #endif
@@ -606,18 +607,32 @@ new_color (gboolean has_bridges)
 static void
 register_bridge_object (GCObject *obj)
 {
-	create_data (obj)->is_bridge = TRUE;
+	create_data (obj, TRUE);
 }
 
 static gboolean
 is_opaque_object (GCObject *obj)
 {
+#ifndef FEATURE_GC_BRIDGE
 	MonoVTable *vt = SGEN_LOAD_VTABLE (obj);
 	if ((vt->gc_bits & SGEN_GC_BIT_BRIDGE_OPAQUE_OBJECT) == SGEN_GC_BIT_BRIDGE_OPAQUE_OBJECT) {
 		SGEN_LOG (6, "ignoring %s\n", m_class_get_name (vt->klass));
 		++ignored_objects;
 		return TRUE;
 	}
+#else
+	MethodTable *pMethodTable = obj->GetGCSafeMethodTable();
+	if (pMethodTable->IsJavaPeerable())
+		return FALSE;
+	if (!pMethodTable->ContainsGCPointers())
+		return TRUE;
+	if (pMethodTable->IsParameterizedType())
+	{
+		pMethodTable = pMethodTable->GetRelatedParameterType();
+		if (!pMethodTable->ContainsGCPointers() && !pMethodTable->IsJavaPeerable()) // && sealed?/value type
+			return TRUE;
+	}
+#endif
 	return FALSE;
 }
 
@@ -663,23 +678,36 @@ push_object (GCObject *obj)
 #endif
 
 	if (!data)
-		data = create_data (obj);
+		data = create_data (obj, FALSE);
 	g_assert (data->state == INITIAL);
 	g_assert (data->index == -1);
 	dyn_array_ptr_push (&scan_stack, data);
 }
 
+#ifdef FEATURE_GC_BRIDGE
+static bool
+push_all_callback (Object *obj, uint8_t **ptr, void *context)
+{
+	ScanData *sd = (ScanData *)context;
+	push_object(*((GCObject**)ptr));
+	return true;
+}
+#else
 #undef HANDLE_PTR
 #define HANDLE_PTR(ptr,obj)	do {					\
 		GCObject *dst = (GCObject*)*(ptr);			\
 		if (dst) push_object (dst); 			\
 	} while (0)
+#endif
 
 // dfs () function's queue-children-of-object operation.
 static void
 push_all (ScanData *data)
 {
 	GCObject *obj = data->obj;
+#ifdef FEATURE_GC_BRIDGE
+	GCHeapUtilities::GetGCHeap()->DiagWalkObject2(obj, push_all_callback, data);
+#else
 	char *start = (char*)obj;
 	SgenDescriptor desc = sgen_obj_get_descriptor_safe (obj);
 
@@ -688,6 +716,7 @@ push_all (ScanData *data)
 #endif
 
 	#include "sgen/sgen-scan-object.h"
+#endif
 }
 
 
@@ -701,7 +730,7 @@ compute_low_index (ScanData *data, GCObject *obj)
 	other = find_data (obj);
 
 #if DUMP_GRAPH
-	printf ("\tcompute low %p ->%p (%s) %p (%d / %d, color %p)\n", data->obj, obj, safe_name_bridge (obj), other, other ? other->index : -2, other ? other->low_index : -2, other->color);
+	printf ("\tcompute low %p ->%p (%s) %p (%d / %d, color %p)\n", data->obj, obj, safe_name_bridge (obj), other, other ? other->index : -2, other ? other->low_index : -2, other ? other->color : NULL);
 #endif
 	if (!other)
 		return;
@@ -730,20 +759,34 @@ compute_low_index (ScanData *data, GCObject *obj)
 	}
 }
 
+#ifdef FEATURE_GC_BRIDGE
+static bool
+compute_low_callback (Object *obj, uint8_t **ptr, void *context)
+{
+	ScanData *sd = (ScanData *)context;
+	compute_low_index(sd, *((GCObject**)ptr));
+	return true;
+}
+#else
 #undef HANDLE_PTR
 #define HANDLE_PTR(ptr,obj)	do {					\
 		GCObject *dst = (GCObject*)*(ptr);			\
 		if (dst) compute_low_index (data, dst); 			\
 	} while (0)
+#endif
 
 static void
 compute_low (ScanData *data)
 {
 	GCObject *obj = data->obj;
+#ifdef FEATURE_GC_BRIDGE
+	GCHeapUtilities::GetGCHeap()->DiagWalkObject2(obj, compute_low_callback, data);
+#else
 	char *start = (char*)obj;
 	SgenDescriptor desc = sgen_obj_get_descriptor_safe (obj);
 
 	#include "sgen/sgen-scan-object.h"
+#endif
 }
 
 // A non-bridged object needs a single color describing the current merge array.
@@ -795,7 +838,7 @@ create_scc (ScanData *data)
 	printf ("|SCC %p rooted in %s (%p) has bridge %d\n", color_data, safe_name_bridge (data->obj), data->obj, found_bridge);
 	printf ("\tloop stack: ");
 	for (int i = 0; i < dyn_array_ptr_size (&loop_stack); ++i) {
-		ScanData *other = dyn_array_ptr_get (&loop_stack, i);
+		ScanData *other = (ScanData *)dyn_array_ptr_get (&loop_stack, i);
 		printf ("(%d/%d)", other->index, other->low_index);
 	}
 	printf ("\n");
@@ -965,7 +1008,7 @@ dump_color_table (const char *why, gboolean do_index)
 			if (dyn_array_ptr_size (&cd->bridges)) {
 				printf (" bridges: ");
 				for (j = 0; j < dyn_array_ptr_size (&cd->bridges); ++j) {
-					GCObject *obj = dyn_array_ptr_get (&cd->bridges, j);
+					GCObject *obj = (GCObject *)dyn_array_ptr_get (&cd->bridges, j);
 					ScanData *data = find_or_create_data (obj);
 					printf ("%d ", data->index);
 				}
@@ -1008,12 +1051,28 @@ processing_stw_step (void)
 
 	bridge_count = dyn_array_ptr_size (&registered_bridges);
 	for (i = 0; i < bridge_count ; ++i)
-		register_bridge_object ((GCObject *)dyn_array_ptr_get (&registered_bridges, i));
+	{
+		GCObject *bridge_object = (GCObject *)dyn_array_ptr_get (&registered_bridges, i);
+#ifdef FEATURE_GC_BRIDGE
+		// We collect the finalizable objects early, so there can be few false positives
+		// that were resurrected by GCHandles.
+		if (sgen_object_is_live (bridge_object))
+			continue;
+#endif
+		register_bridge_object (bridge_object);
+	}
 
 	setup_time = GINT64_TO_SIZE (step_timer (&curtime));
 
 	for (i = 0; i < bridge_count; ++i) {
-		ScanData *sd = find_data ((GCObject *)dyn_array_ptr_get (&registered_bridges, i));
+		GCObject *bridge_object = (GCObject *)dyn_array_ptr_get (&registered_bridges, i);
+#ifdef FEATURE_GC_BRIDGE
+		// We collect the finalizable objects early, so there can be few false positives
+		// that were resurrected by GCHandles.
+		if (sgen_object_is_live (bridge_object))
+			continue;
+#endif
+		ScanData *sd = find_data (bridge_object);
 		if (sd->state == INITIAL) {
 			dyn_array_ptr_push (&scan_stack, sd);
 			dfs ();
@@ -1028,7 +1087,14 @@ processing_stw_step (void)
 	printf ("----summary----\n");
 	printf ("bridges:\n");
 	for (int i = 0; i < bridge_count; ++i) {
-		ScanData *sd = find_data (dyn_array_ptr_get (&registered_bridges, i));
+		GCObject *bridge_object = (GCObject *)dyn_array_ptr_get (&registered_bridges, i);
+#ifdef FEATURE_GC_BRIDGE
+		// We collect the finalizable objects early, so there can be few false positives
+		// that were resurrected by GCHandles.
+		if (sgen_object_is_live (bridge_object))
+			continue;
+#endif
+		ScanData *sd = find_data (bridge_object);
 		printf ("\t%s (%p) index %d color %p\n", safe_name_bridge (sd->obj), sd->obj, sd->index, sd->color);
 	}
 
@@ -1149,7 +1215,9 @@ processing_build_callback_data (int generation)
 
 #if defined (DUMP_GRAPH)
 	printf ("TOTAL XREFS %d\n", xref_count);
-	dump_color_table (" after xref pass", TRUE);
+	// NOTE: Calling dump_color_table destroys object header we already fixed in 
+	// clear_after_processing.
+	//dump_color_table (" after xref pass", TRUE);
 #endif
 
 	// Write out xrefs array
@@ -1260,7 +1328,6 @@ sgen_tarjan_bridge_init (SgenBridgeProcessor *collector)
 	collector->processing_stw_step = processing_stw_step;
 	collector->processing_build_callback_data = processing_build_callback_data;
 	collector->processing_after_callback = processing_after_callback;
-	collector->class_kind = class_kind;
 	collector->register_finalized_object = register_finalized_object;
 	collector->describe_pointer = describe_pointer;
 	collector->set_config = set_config;

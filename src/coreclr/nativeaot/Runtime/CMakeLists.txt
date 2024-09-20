@@ -17,6 +17,7 @@ set(COMMON_RUNTIME_SOURCES
     GCMemoryHelpers.cpp
     gcenv.ee.cpp
     GcStressControl.cpp
+    gcbridge.cpp
     HandleTableHelpers.cpp
     MathHelpers.cpp
     MiscHelpers.cpp

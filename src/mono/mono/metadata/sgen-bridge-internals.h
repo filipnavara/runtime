@@ -14,6 +14,7 @@
 
 #ifdef HAVE_SGEN_GC
 
+#ifndef FEATURE_GC_BRIDGE
 #include "mono/utils/mono-compiler.h"
 
 #include "mono/sgen/sgen-gc.h"
@@ -37,6 +38,7 @@ void sgen_mark_bridge_object (GCObject *obj);
 gboolean sgen_bridge_handle_gc_param (const char *opt);
 gboolean sgen_bridge_handle_gc_debug (const char *opt);
 void sgen_bridge_print_gc_debug_usage (void);
+#endif
 
 typedef struct {
 	char *dump_prefix;
@@ -52,7 +54,6 @@ typedef struct {
 	void (*processing_stw_step) (void);
 	void (*processing_build_callback_data) (int generation);
 	void (*processing_after_callback) (int generation);
-	MonoGCBridgeObjectKind (*class_kind) (MonoClass *klass);
 	void (*register_finalized_object) (GCObject *object);
 	void (*describe_pointer) (GCObject *object);
 

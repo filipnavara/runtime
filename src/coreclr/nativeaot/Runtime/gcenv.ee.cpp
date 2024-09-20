@@ -7,6 +7,7 @@
 #include "gcenv.ee.h"
 #include "gcheaputilities.h"
 #include "gchandleutilities.h"
+#include "gcbridge.h"
 
 #include "RestrictedCallouts.h"
 
@@ -73,6 +74,8 @@ void GCToEEInterface::RestartEE(bool /*bFinishedGC*/)
     GetThreadStore()->UnlockThreadStore();
 
     FireEtwGCRestartEEEnd_V1(GetClrInstanceId());
+
+    JavaInteropNative::AfterRestartEE();
 }
 
 void GCToEEInterface::GcStartWork(int condemned, int /*max_gen*/)
@@ -89,6 +92,7 @@ void GCToEEInterface::BeforeGcScanRoots(int condemned, bool is_bgc, bool is_conc
         ObjCMarshalNative::BeforeRefCountedHandleCallbacks();
     }
 #endif
+    JavaInteropNative::BeforeGcScanRoots(condemned, is_bgc, is_concurrent);
 }
 
 void GCToEEInterface::GcScanRoots(ScanFunc* fn, int condemned, int max_gen, ScanContext* sc)
@@ -130,6 +134,8 @@ void GCToEEInterface::GcScanRoots(ScanFunc* fn, int condemned, int max_gen, Scan
     END_FOREACH_THREAD
 
     sc->thread_under_crawl = NULL;
+
+    JavaInteropNative::GcScanRoots(fn, condemned, max_gen, sc);
 }
 
 void GCToEEInterface::GcEnumAllocContexts(enum_alloc_context_func* fn, void* param)
@@ -152,6 +158,7 @@ void GCToEEInterface::AfterGcScanRoots(int condemned, int /*max_gen*/, ScanConte
         ObjCMarshalNative::AfterRefCountedHandleCallbacks();
     }
 #endif
+    JavaInteropNative::AfterGcScanRoots(sc);
 }
 
 void GCToEEInterface::GcDone(int condemned)
@@ -167,6 +174,8 @@ bool GCToEEInterface::RefCountedHandleCallbacks(Object * pObject)
     if (ObjCMarshalNative::IsTrackedReference(pObject, &isReferenced))
         return isReferenced;
 #endif // FEATURE_OBJCMARSHAL
+    if (pObject->GetGCSafeMethodTable()->IsJavaPeerable())
+        return JavaInteropNative::IsTrackedReference(pObject);
     return RestrictedCallouts::InvokeRefCountedHandleCallbacks(pObject);
 }
 

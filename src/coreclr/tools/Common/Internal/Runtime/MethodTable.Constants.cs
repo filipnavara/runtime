@@ -95,6 +95,8 @@ namespace Internal.Runtime
         /// </summary>
         NullableValueOffsetMask = 0x0700,
 
+        IsJavaPeerableFlag = 0x800,
+
         /// <summary>
         /// This type requires 8-byte alignment for its fields on certain platforms (ARM32, WASM)
         /// </summary>

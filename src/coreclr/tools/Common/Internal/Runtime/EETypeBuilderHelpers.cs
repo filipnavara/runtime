@@ -203,6 +203,11 @@ namespace Internal.Runtime
                 flagsEx |= (ushort)EETypeFlagsEx.IsTrackedReferenceWithFinalizerFlag;
             }
 
+            if (IsJavaPeerable(type))
+            {
+                flagsEx |= (ushort)EETypeFlagsEx.IsJavaPeerableFlag;
+            }
+
             if (type.IsIDynamicInterfaceCastable)
             {
                 flagsEx |= (ushort)EETypeFlagsEx.IDynamicInterfaceCastableFlag;
@@ -292,6 +297,27 @@ namespace Internal.Runtime
                     return false;
 
                 if (((MetadataType)type).HasCustomAttribute("System.Runtime.InteropServices.ObjectiveC", "ObjectiveCTrackedTypeAttribute"))
+                    return true;
+
+                type = type.BaseType;
+            }
+            while (type != null);
+
+            return false;
+        }
+
+        private static bool IsJavaPeerable(TypeDesc type)
+        {
+            do
+            {
+                if (!type.HasFinalizer)
+                    return false;
+
+                // TODO: We want to use a new attribute for this
+                if (type is MetadataType mdType &&
+                    //mdType.Module == mdType.Context.SystemModule &&
+                    mdType.Namespace == "Java.Interop" &&
+                    (mdType.Name == "JavaException" || mdType.Name == "JavaObject"))
                     return true;
 
                 type = type.BaseType;

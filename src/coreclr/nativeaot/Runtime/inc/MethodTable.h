@@ -161,6 +161,8 @@ private:
         // This MethodTable is for a Byref-like class (TypedReference, Span<T>, ...)
         IsByRefLikeFlag = 0x0010,
 
+        IsJavaPeerableFlag = 0x800,
+
         // This type requires 8-byte alignment for its fields on certain platforms (ARM32, WASM)
         RequiresAlign8Flag = 0x1000
     };
@@ -218,6 +220,11 @@ public:
     bool IsTrackedReferenceWithFinalizer()
     {
         return (m_uFlags & IsTrackedReferenceWithFinalizerFlag) && !HasComponentSize();
+    }
+
+    bool IsJavaPeerable()
+    {
+        return (m_uFlags & IsJavaPeerableFlag) && !HasComponentSize();
     }
 
     bool  HasComponentSize()

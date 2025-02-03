@@ -1,6 +1,11 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+// Workaround for https://github.com/dotnet/runtime/issues/111665
+#if !defined(HOST_64BIT) && defined(__ANDROID__) && __ANDROID_API__ < 24
+#undef _FILE_OFFSET_BITS
+#endif
+
 #include <iostream>
 #include <fstream>
 #include <pal.h>

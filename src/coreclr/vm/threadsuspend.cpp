@@ -4836,6 +4836,7 @@ StackWalkAction SWCB_GetExecutionState(CrawlFrame *pCF, VOID *pData)
         }
 #else
         // PORTABILITY_ASSERT("Platform NYI");
+        _ASSERTE(!"NYI");
 #endif
     }
 

@@ -5942,6 +5942,8 @@ void FixupDispatcherContext(DISPATCHER_CONTEXT* pDispatcherContext, CONTEXT* pCo
                                                                &(pDispatcherContext->ImageBase),
                                                                NULL
                                                                );
+    #else
+    _ASSERTE(!"NYI");
     #endif
 
     _ASSERTE(((PT_RUNTIME_FUNCTION)INVALID_POINTER_CD) != pDispatcherContext->FunctionEntry);
@@ -5970,6 +5972,8 @@ void FixupDispatcherContext(DISPATCHER_CONTEXT* pDispatcherContext, CONTEXT* pCo
 
     pDispatcherContext->HandlerData     = NULL;
     pDispatcherContext->HistoryTable    = NULL;
+    #else
+    _ASSERTE(!"NYI");
     #endif
 
 
@@ -6034,6 +6038,8 @@ BOOL FirstCallToHandler (
         MODE_ANY;
     }
     CONTRACTL_END;
+
+    _ASSERTE(!"NYI");
 
     FaultingExceptionFrame *pFrame = NULL; // !!! GetFrameFromRedirectedStubStackFrame(pDispatcherContext);
 
@@ -6314,6 +6320,7 @@ UMThunkStubUnwindFrameChainHandler(
     // and we can landup here even when thread creation (within the thunk) fails.
     if (GetThreadNULLOk() != NULL)
     {
+        _ASSERTE(!"NYI");
 //        SetReversePInvokeEscapingUnhandledExceptionStatus(IS_UNWINDING(pExceptionRecord->ExceptionFlags),
 //            pEstablisherFrame
 //            );

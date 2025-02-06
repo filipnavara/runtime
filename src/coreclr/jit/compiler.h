@@ -8607,7 +8607,7 @@ public:
     bool eeIsNativeAotAbi = false;
     bool UsesFunclets() const
     {
-        return eeIsNativeAotAbi;
+        return true;//eeIsNativeAotAbi;
     }
 
     bool UsesCallFinallyThunks() const

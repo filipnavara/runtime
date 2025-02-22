@@ -25,6 +25,13 @@
 
 #include "sgen-dynarray.h"
 
+#if defined (HOST_ANDROID)
+#include <android/log.h>
+FILE *flog;
+//#define printf(...) __android_log_print(ANDROID_LOG_INFO, "GCBRIDGE", __VA_ARGS__)
+#define printf(...) fprintf(flog, __VA_ARGS__), fflush(flog)
+#endif
+
 /*
  * See comments in sgen-bridge.h
  *
@@ -73,7 +80,7 @@ class_kind (MonoClass *klass)
 }
 
 //enable usage logging
-// #define DUMP_GRAPH 1
+#define DUMP_GRAPH 1
 
 /* Used in bridgeless_color_is_heavy:
  * The idea here is as long as the reference fanin and fanout on a node are both 2 or greater, then
@@ -400,7 +407,7 @@ static const char*
 safe_name_bridge (GCObject *obj)
 {
 	GCVTable vt = SGEN_LOAD_VTABLE (obj);
-	return vt->klass->name;
+	return m_class_get_name (vt->klass);
 }
 
 static ScanData*
@@ -701,7 +708,7 @@ compute_low_index (ScanData *data, GCObject *obj)
 	other = find_data (obj);
 
 #if DUMP_GRAPH
-	printf ("\tcompute low %p ->%p (%s) %p (%d / %d, color %p)\n", data->obj, obj, safe_name_bridge (obj), other, other ? other->index : -2, other ? other->low_index : -2, other->color);
+	printf ("\tcompute low %p ->%p (%s) %p (%d / %d, color %p)\n", data->obj, obj, safe_name_bridge (obj), other, other ? other->index : -2, other ? other->low_index : -2, other ? other->color : NULL);
 #endif
 	if (!other)
 		return;
@@ -838,10 +845,10 @@ create_scc (ScanData *data)
 	g_assert (found);
 
 #if DUMP_GRAPH
-	printf ("\tpoints-to-colors: ");
+	/*printf ("\tpoints-to-colors: ");
 	for (int i = 0; i < dyn_array_ptr_size (&color_data->other_colors); i++)
 		printf ("%p ", dyn_array_ptr_get (&color_data->other_colors, i));
-	printf ("\n");
+	printf ("\n");*/
 #endif
 }
 
@@ -1149,7 +1156,9 @@ processing_build_callback_data (int generation)
 
 #if defined (DUMP_GRAPH)
 	printf ("TOTAL XREFS %d\n", xref_count);
-	dump_color_table (" after xref pass", TRUE);
+	// NOTE: Calling dump_color_table destroys object header we already fixed in 
+	// clear_after_processing.
+	//	dump_color_table (" after xref pass", TRUE);
 #endif
 
 	// Write out xrefs array
@@ -1256,6 +1265,10 @@ set_config (const SgenBridgeProcessorConfig *config)
 void
 sgen_tarjan_bridge_init (SgenBridgeProcessor *collector)
 {
+#if defined(HOST_ANDROID)
+	flog = fopen("/sdcard/Download/log.txt", "w");
+#endif
+
 	collector->reset_data = reset_data;
 	collector->processing_stw_step = processing_stw_step;
 	collector->processing_build_callback_data = processing_build_callback_data;

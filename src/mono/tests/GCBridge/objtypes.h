@@ -16,6 +16,7 @@ typedef struct {
 typedef struct _MonoObject {
     MonoVTable *vtable;
     size_t lock_word;
+    MonoVTable *vtable_copy;
     int is_alive;
     int ref_count;
     struct _MonoObject **refs;

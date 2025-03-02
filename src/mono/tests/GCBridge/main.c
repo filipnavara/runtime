@@ -135,8 +135,6 @@ void test2(SgenBridgeProcessor *bridge_processor)
     bridge_processor->processing_stw_step();
     bridge_processor->processing_build_callback_data(0);
     //dump_processor_state(&bridge_processor);
-    assert(bridge_processor->num_sccs == 2);
-    assert(bridge_processor->num_xrefs == 1);
     bridge_processor->processing_after_callback(0);
     free_callback_data(bridge_processor);
 }

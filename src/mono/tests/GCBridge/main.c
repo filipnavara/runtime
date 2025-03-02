@@ -8,8 +8,8 @@ static MonoClass klass_AsyncStateMachineBox = { .name = "AsyncStateMachineBox`1"
 static MonoClass klass_Action = { .name = "Action" };
 static MonoClass klass_DisplayClass = { .name = "<>c__DisplayClass2_0" };
 
-static MonoClass klass_Bridagable = { .name = "Bridagble" };
-static MonoClass klass_NonBridagable = { .name = "NonBridagble" };
+static MonoClass klass_Bridgeable = { .name = "Bridgeable" };
+static MonoClass klass_NonBridgeable = { .name = "NonBridgeable" };
 
 MonoObject *alloc_object(MonoClass *klass, int ref_count)
 {
@@ -91,7 +91,7 @@ void test1(SgenBridgeProcessor *bridge_processor)
     bridge_processor->register_finalized_object(o_runnableImplementor);
     bridge_processor->processing_stw_step();
     bridge_processor->processing_build_callback_data(0);
-    //dump_processor_state(&bridge_processor);
+    //dump_processor_state(bridge_processor);
     assert(bridge_processor->num_sccs == 2);
     assert(bridge_processor->num_xrefs == 1);
     bridge_processor->processing_after_callback(0);
@@ -103,15 +103,15 @@ void test2(SgenBridgeProcessor *bridge_processor)
 {
     bridge_processor->reset_data();
 
-    MonoObject *o_fanin1 = alloc_object(&klass_Bridagable, 1);
-    MonoObject *o_fanin2 = alloc_object(&klass_Bridagable, 1);
-    MonoObject *o_fanin3 = alloc_object(&klass_Bridagable, 1);
-    MonoObject *o_fanout = alloc_object(&klass_Bridagable, 0);
+    MonoObject *o_fanin1 = alloc_object(&klass_Bridgeable, 1);
+    MonoObject *o_fanin2 = alloc_object(&klass_Bridgeable, 1);
+    MonoObject *o_fanin3 = alloc_object(&klass_Bridgeable, 1);
+    MonoObject *o_fanout = alloc_object(&klass_Bridgeable, 0);
 
-    MonoObject *o_heavyNode = alloc_object(&klass_NonBridagable, 100);
+    MonoObject *o_heavyNode = alloc_object(&klass_NonBridgeable, 100);
     for (int i = 0; i < 100; i++)
     {
-        MonoObject *o_cycle = alloc_object(&klass_NonBridagable, 2);
+        MonoObject *o_cycle = alloc_object(&klass_NonBridgeable, 2);
         o_cycle->refs[0] = o_fanout;
         o_cycle->refs[1] = o_heavyNode;
         o_heavyNode->refs[i] = o_cycle;
@@ -128,7 +128,7 @@ void test2(SgenBridgeProcessor *bridge_processor)
 
     bridge_processor->processing_stw_step();
     bridge_processor->processing_build_callback_data(0);
-    //dump_processor_state(&bridge_processor);
+    dump_processor_state(bridge_processor);
     bridge_processor->processing_after_callback(0);
     free_callback_data(bridge_processor);
 }

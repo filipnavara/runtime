@@ -1,0 +1,1 @@
+clang gc-bridge-impl.c main.c -I . -D_CRT_SECURE_NO_WARNINGS

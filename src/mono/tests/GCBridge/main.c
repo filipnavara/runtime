@@ -108,18 +108,18 @@ void test2(SgenBridgeProcessor *bridge_processor)
     MonoObject *o_fanin3 = alloc_object(&klass_Bridagable, 1);
     MonoObject *o_fanout = alloc_object(&klass_Bridagable, 0);
 
-    MonoObject *o_action = alloc_object(&klass_NonBridagable, 100);
+    MonoObject *o_heavyNode = alloc_object(&klass_NonBridagable, 100);
     for (int i = 0; i < 100; i++)
     {
-        MonoObject *o_asyncStateMachineBox = alloc_object(&klass_NonBridagable, 2);
-        o_asyncStateMachineBox->refs[0] = o_fanout;
-        o_asyncStateMachineBox->refs[1] = o_action;
-        o_action->refs[i] = o_asyncStateMachineBox;
+        MonoObject *o_cycle = alloc_object(&klass_NonBridagable, 2);
+        o_cycle->refs[0] = o_fanout;
+        o_cycle->refs[1] = o_heavyNode;
+        o_heavyNode->refs[i] = o_cycle;
     }
 
-    o_fanin1->refs[0] = o_action;
-    o_fanin2->refs[0] = o_action;
-    o_fanin3->refs[0] = o_action;
+    o_fanin1->refs[0] = o_heavyNode;
+    o_fanin2->refs[0] = o_heavyNode;
+    o_fanin3->refs[0] = o_heavyNode;
 
     bridge_processor->register_finalized_object(o_fanout);
     bridge_processor->register_finalized_object(o_fanin1);

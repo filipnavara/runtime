@@ -1,13 +1,6 @@
 #include <assert.h>
 #include "sgen-bridge-types.h"
 
-static MonoClass klass_RunnableImplementor = { .name = "RunnableImplementor" };
-static MonoClass klass_ByteArrayOutputStream = { .name = "ByteArrayOutputStream" };
-static MonoClass klass_AsyncStreamWriter = { .name = "<AsyncStreamWriter>d__2" };
-static MonoClass klass_AsyncStateMachineBox = { .name = "AsyncStateMachineBox`1" };
-static MonoClass klass_Action = { .name = "Action" };
-static MonoClass klass_DisplayClass = { .name = "<>c__DisplayClass2_0" };
-
 static MonoClass klass_Bridgeable = { .name = "Bridgeable" };
 static MonoClass klass_NonBridgeable = { .name = "NonBridgeable" };
 
@@ -72,12 +65,12 @@ void test1(SgenBridgeProcessor *bridge_processor)
 {
     bridge_processor->reset_data();
 
-    MonoObject *o_runnableImplementor = alloc_object(&klass_RunnableImplementor, 1);
-    MonoObject *o_byteArrayOutputStream = alloc_object(&klass_ByteArrayOutputStream, 0);
-    MonoObject *o_action = alloc_object(&klass_Action, 2);
-    MonoObject *o_displayClass = alloc_object(&klass_DisplayClass, 1);
-    MonoObject *o_asyncStateMachineBox = alloc_object(&klass_AsyncStateMachineBox, 2);
-    MonoObject *o_asyncStreamWriter = alloc_object(&klass_AsyncStreamWriter, 2);
+    MonoObject *o_runnableImplementor = alloc_object(&klass_Bridgeable, 1);
+    MonoObject *o_byteArrayOutputStream = alloc_object(&klass_Bridgeable, 0);
+    MonoObject *o_action = alloc_object(&klass_NonBridgeable, 2);
+    MonoObject *o_displayClass = alloc_object(&klass_NonBridgeable, 1);
+    MonoObject *o_asyncStateMachineBox = alloc_object(&klass_NonBridgeable, 2);
+    MonoObject *o_asyncStreamWriter = alloc_object(&klass_NonBridgeable, 2);
     o_runnableImplementor->refs[0] = o_action;
     o_action->refs[0] = o_displayClass;
     o_action->refs[1] = o_asyncStateMachineBox;

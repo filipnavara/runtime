@@ -8407,11 +8407,6 @@ public:
         return false;
     }
 
-    bool UsesCallFinallyThunks() const
-    {
-        return true;
-    }
-    
     bool generateCFIUnwindCodes()
     {
 #if defined(FEATURE_CFI_SUPPORT)

@@ -967,16 +967,7 @@ unsigned Compiler::ehGetCallFinallyRegionIndex(unsigned finallyIndex, bool* inTr
 {
     assert(finallyIndex != EHblkDsc::NO_ENCLOSING_INDEX);
     assert(ehGetDsc(finallyIndex)->HasFinallyHandler());
-
-    if (UsesCallFinallyThunks())
-    {
-        return ehGetDsc(finallyIndex)->ebdGetEnclosingRegionIndex(inTryRegion);
-    }
-    else
-    {
-        *inTryRegion = true;
-        return finallyIndex;
-    }
+    return ehGetDsc(finallyIndex)->ebdGetEnclosingRegionIndex(inTryRegion);
 }
 
 void Compiler::ehGetCallFinallyBlockRange(unsigned finallyIndex, BasicBlock** startBlock, BasicBlock** lastBlock)
@@ -986,37 +977,28 @@ void Compiler::ehGetCallFinallyBlockRange(unsigned finallyIndex, BasicBlock** st
     assert(startBlock != nullptr);
     assert(lastBlock != nullptr);
 
-    if (UsesCallFinallyThunks())
+    bool     inTryRegion;
+    unsigned callFinallyRegionIndex = ehGetCallFinallyRegionIndex(finallyIndex, &inTryRegion);
+
+    if (callFinallyRegionIndex == EHblkDsc::NO_ENCLOSING_INDEX)
     {
-        bool     inTryRegion;
-        unsigned callFinallyRegionIndex = ehGetCallFinallyRegionIndex(finallyIndex, &inTryRegion);
-
-        if (callFinallyRegionIndex == EHblkDsc::NO_ENCLOSING_INDEX)
-        {
-            *startBlock = fgFirstBB;
-            *lastBlock  = fgLastBBInMainFunction();
-        }
-        else
-        {
-            EHblkDsc* ehDsc = ehGetDsc(callFinallyRegionIndex);
-
-            if (inTryRegion)
-            {
-                *startBlock = ehDsc->ebdTryBeg;
-                *lastBlock  = ehDsc->ebdTryLast;
-            }
-            else
-            {
-                *startBlock = ehDsc->ebdHndBeg;
-                *lastBlock  = ehDsc->ebdHndLast;
-            }
-        }
+        *startBlock = fgFirstBB;
+        *lastBlock  = fgLastBBInMainFunction();
     }
     else
     {
-        EHblkDsc* ehDsc = ehGetDsc(finallyIndex);
-        *startBlock     = ehDsc->ebdTryBeg;
-        *lastBlock      = ehDsc->ebdTryLast;
+        EHblkDsc* ehDsc = ehGetDsc(callFinallyRegionIndex);
+
+        if (inTryRegion)
+        {
+            *startBlock = ehDsc->ebdTryBeg;
+            *lastBlock  = ehDsc->ebdTryLast;
+        }
+        else
+        {
+            *startBlock = ehDsc->ebdHndBeg;
+            *lastBlock  = ehDsc->ebdHndLast;
+        }
     }
 }
 
@@ -4248,7 +4230,7 @@ bool Compiler::fgIsIntraHandlerPred(BasicBlock* predBlock, BasicBlock* block)
 
     EHblkDsc* xtab = ehGetDsc(block->getHndIndex());
 
-    if (UsesCallFinallyThunks() && xtab->HasFinallyHandler())
+    if (xtab->HasFinallyHandler())
     {
         assert((xtab->ebdHndBeg == block) || // The normal case
                (xtab->ebdHndBeg->NextIs(block) &&

@@ -495,10 +495,10 @@ void CodeGen::genMarkLabelsForCodegen()
             case BBJ_CALLFINALLY:
                 // The finally target itself will get marked by walking the EH table, below, and marking
                 // all handler begins.
-                if (compiler->UsesCallFinallyThunks())
+
+                // For callfinally thunks, we need to mark the block following the callfinally/callfinallyret pair,
+                // as that's needed for identifying the range of the "duplicate finally" region in EH data.
                 {
-                    // For callfinally thunks, we need to mark the block following the callfinally/callfinallyret pair,
-                    // as that's needed for identifying the range of the "duplicate finally" region in EH data.
                     BasicBlock* bbToLabel = block->Next();
                     if (block->isBBCallFinallyPair())
                     {

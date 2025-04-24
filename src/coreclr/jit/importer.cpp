@@ -4686,7 +4686,7 @@ void Compiler::impImportLeave(BasicBlock* block)
 
             BasicBlock* callBlock;
 
-            if (step == nullptr && UsesCallFinallyThunks())
+            if (step == nullptr)
             {
                 // Put the call to the finally in the enclosing region.
                 unsigned callFinallyTryIndex =
@@ -4719,24 +4719,6 @@ void Compiler::impImportLeave(BasicBlock* block)
                 }
 #endif
             }
-            else if (step == nullptr) // && !UsesCallFinallyThunks()
-            {
-                callBlock = block;
-
-                // callBlock calls the finally handler
-                assert(callBlock->HasInitializedTarget());
-                fgRedirectTargetEdge(callBlock, HBtab->ebdHndBeg);
-                callBlock->SetKind(BBJ_CALLFINALLY);
-
-#ifdef DEBUG
-                if (verbose)
-                {
-                    printf("impImportLeave - jumping out of a finally-protected try (EH#%u), convert block " FMT_BB
-                           " to BBJ_CALLFINALLY block\n",
-                           XTnum, callBlock->bbNum);
-                }
-#endif
-            }
             else
             {
                 // Calling the finally block. We already have a step block that is either the call-to-finally from a
@@ -4758,7 +4740,7 @@ void Compiler::impImportLeave(BasicBlock* block)
                 assert(step->KindIs(BBJ_ALWAYS, BBJ_CALLFINALLYRET, BBJ_EHCATCHRET));
                 assert((step == block) || !step->HasInitializedTarget());
 
-                if (UsesCallFinallyThunks() && step->KindIs(BBJ_EHCATCHRET))
+                if (step->KindIs(BBJ_EHCATCHRET))
                 {
                     // Need to create another step block in the 'try' region that will actually branch to the
                     // call-to-finally thunk.
@@ -4794,20 +4776,12 @@ void Compiler::impImportLeave(BasicBlock* block)
                 unsigned callFinallyTryIndex;
                 unsigned callFinallyHndIndex;
 
-                if (UsesCallFinallyThunks())
-                {
-                    callFinallyTryIndex = (HBtab->ebdEnclosingTryIndex == EHblkDsc::NO_ENCLOSING_INDEX)
-                                              ? 0
-                                              : HBtab->ebdEnclosingTryIndex + 1;
-                    callFinallyHndIndex = (HBtab->ebdEnclosingHndIndex == EHblkDsc::NO_ENCLOSING_INDEX)
-                                              ? 0
-                                              : HBtab->ebdEnclosingHndIndex + 1;
-                }
-                else
-                {
-                    callFinallyTryIndex = XTnum + 1;
-                    callFinallyHndIndex = 0; // don't care
-                }
+                callFinallyTryIndex = (HBtab->ebdEnclosingTryIndex == EHblkDsc::NO_ENCLOSING_INDEX)
+                                            ? 0
+                                            : HBtab->ebdEnclosingTryIndex + 1;
+                callFinallyHndIndex = (HBtab->ebdEnclosingHndIndex == EHblkDsc::NO_ENCLOSING_INDEX)
+                                            ? 0
+                                            : HBtab->ebdEnclosingHndIndex + 1;
 
                 assert(step->KindIs(BBJ_ALWAYS, BBJ_CALLFINALLYRET, BBJ_EHCATCHRET));
                 assert((step == block) || !step->HasInitializedTarget());

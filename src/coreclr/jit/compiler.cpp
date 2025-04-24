@@ -5212,16 +5212,14 @@ bool Compiler::shouldAlignLoop(FlowGraphNaturalLoop* loop, BasicBlock* top)
 
     assert(!top->IsFirst());
 
-    if (UsesCallFinallyThunks() && top->Prev()->KindIs(BBJ_CALLFINALLY))
+    if (top->Prev()->KindIs(BBJ_CALLFINALLY))
     {
         // It must be a retless BBJ_CALLFINALLY if we get here.
         assert(!top->Prev()->isBBCallFinallyPair());
 
-        // If the block before the loop start is a retless BBJ_CALLFINALLY
-        // with UsesCallFinallyThunks, we can't add alignment
-        // because it will affect reported EH region range. For x86 (where
-        // !UsesCallFinallyThunks), we can allow this.
-
+        // If the block before the loop start is a retless BBJ_CALLFINALLY,
+        // we can't add alignment because it will affect reported EH region
+        // range.
         JITDUMP("Skipping alignment for " FMT_LP "; its top block follows a CALLFINALLY block\n", loop->GetIndex());
         return false;
     }
@@ -5230,8 +5228,8 @@ bool Compiler::shouldAlignLoop(FlowGraphNaturalLoop* loop, BasicBlock* top)
     {
         // If the previous block is the BBJ_CALLFINALLYRET of a
         // BBJ_CALLFINALLY/BBJ_CALLFINALLYRET pair, then we can't add alignment
-        // because we can't add instructions in that block. In the
-        // UsesCallFinallyThunks case, it would affect the reported EH, as above.
+        // because we can't add instructions in that block. It would affect
+        // the reported EH, as above.
         JITDUMP("Skipping alignment for " FMT_LP "; its top block follows a CALLFINALLY/ALWAYS pair\n",
                 loop->GetIndex());
         return false;

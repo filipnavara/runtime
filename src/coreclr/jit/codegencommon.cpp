@@ -1586,7 +1586,7 @@ void CodeGen::genJumpToThrowHlpBlk(emitJumpKind jumpKind, SpecialCodeKind codeKi
 {
     bool useThrowHlpBlk = compiler->fgUseThrowHelperBlocks();
 #if defined(UNIX_X86_ABI)
-    // TODO: Is this really UNIX_X86_ABI specific? Should we guard with compiler->UsesFunclets() instead?
+    // TODO: Is this really UNIX_X86_ABI specific?
     // Inline exception-throwing code in funclet to make it possible to unwind funclet frames.
     useThrowHlpBlk = useThrowHlpBlk && (compiler->funCurrentFunc()->funKind == FUNC_ROOT);
 #endif // UNIX_X86_ABI
@@ -4440,7 +4440,6 @@ void CodeGen::genReserveEpilog(BasicBlock* block)
 
 void CodeGen::genReserveFuncletProlog(BasicBlock* block)
 {
-    assert(compiler->UsesFunclets());
     assert(block != nullptr);
 
     /* Currently, no registers are live on entry to the prolog, except maybe
@@ -4471,7 +4470,6 @@ void CodeGen::genReserveFuncletProlog(BasicBlock* block)
 
 void CodeGen::genReserveFuncletEpilog(BasicBlock* block)
 {
-    assert(compiler->UsesFunclets());
     assert(block != nullptr);
 
     JITDUMP("Reserving funclet epilog IG for block " FMT_BB "\n", block->bbNum);
@@ -5319,31 +5317,6 @@ void CodeGen::genFnProlog()
 
     genZeroInitFrame(untrLclHi, untrLclLo, initReg, &initRegZeroed);
 
-#if defined(FEATURE_EH_WINDOWS_X86)
-    if (!compiler->UsesFunclets())
-    {
-        // when compInitMem is true the genZeroInitFrame will zero out the shadow SP slots
-        if (compiler->ehNeedsShadowSPslots() && !compiler->info.compInitMem)
-        {
-            // The last slot is reserved for ICodeManager::FixContext(ppEndRegion)
-            unsigned filterEndOffsetSlotOffs =
-                compiler->lvaLclStackHomeSize(compiler->lvaShadowSPslotsVar) - TARGET_POINTER_SIZE;
-
-            // Zero out the slot for nesting level 0
-            unsigned firstSlotOffs = filterEndOffsetSlotOffs - TARGET_POINTER_SIZE;
-
-            if (!initRegZeroed)
-            {
-                instGen_Set_Reg_To_Zero(EA_PTRSIZE, initReg);
-                initRegZeroed = true;
-            }
-
-            GetEmitter()->emitIns_S_R(ins_Store(TYP_I_IMPL), EA_PTRSIZE, initReg, compiler->lvaShadowSPslotsVar,
-                                      firstSlotOffs);
-        }
-    }
-#endif // FEATURE_EH_WINDOWS_X86
-
     genReportGenericContextArg(initReg, &initRegZeroed);
 
 #ifdef JIT32_GCENCODER
@@ -5779,14 +5752,11 @@ void CodeGen::genGeneratePrologsAndEpilogs()
 
     // Generate all the prologs and epilogs.
 
-    if (compiler->UsesFunclets())
-    {
-        // Capture the data we're going to use in the funclet prolog and epilog generation. This is
-        // information computed during codegen, or during function prolog generation, like
-        // frame offsets. It must run after main function prolog generation.
+    // Capture the data we're going to use in the funclet prolog and epilog generation. This is
+    // information computed during codegen, or during function prolog generation, like
+    // frame offsets. It must run after main function prolog generation.
 
-        genCaptureFuncletPrologEpilogInfo();
-    }
+    genCaptureFuncletPrologEpilogInfo();
 
     // Walk the list of prologs and epilogs and generate them.
     // We maintain a list of prolog and epilog basic blocks in
@@ -6918,24 +6888,10 @@ void CodeGen::genReturn(GenTree* treeNode)
 #if defined(DEBUG) && defined(TARGET_XARCH)
     bool doStackPointerCheck = compiler->opts.compStackCheckOnRet;
 
-    if (compiler->UsesFunclets())
+    // Don't do stack pointer check at the return from a funclet; only for the main function.
+    if (compiler->funCurrentFunc()->funKind != FUNC_ROOT)
     {
-        // Don't do stack pointer check at the return from a funclet; only for the main function.
-        if (compiler->funCurrentFunc()->funKind != FUNC_ROOT)
-        {
-            doStackPointerCheck = false;
-        }
-    }
-    else
-    {
-#if defined(FEATURE_EH_WINDOWS_X86)
-        // Don't generate stack checks for x86 finally/filter EH returns: these are not invoked
-        // with the same SP as the main function. See also CodeGen::genEHFinallyOrFilterRet().
-        if (compiler->compCurBB->KindIs(BBJ_EHFINALLYRET, BBJ_EHFAULTRET, BBJ_EHFILTERRET))
-        {
-            doStackPointerCheck = false;
-        }
-#endif // FEATURE_EH_WINDOWS_X86
+        doStackPointerCheck = false;
     }
 
     genStackPointerCheck(doStackPointerCheck, compiler->lvaReturnSpCheck);

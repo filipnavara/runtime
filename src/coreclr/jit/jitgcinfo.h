@@ -291,7 +291,7 @@ public:
 #ifdef JIT32_GCENCODER
     void gcCountForHeader(UNALIGNED unsigned int* pUntrackedCount, UNALIGNED unsigned int* pVarPtrTableSize);
 
-    bool gcIsUntrackedLocalOrNonEnregisteredArg(unsigned varNum, bool* pThisKeptAliveIsInUntracked = nullptr);
+    bool gcIsUntrackedLocalOrNonEnregisteredArg(unsigned varNum);
 
     size_t gcMakeRegPtrTable(BYTE* dest, int mask, const InfoHdr& header, unsigned codeSize, size_t* pArgTabOffset);
 #else

@@ -2303,10 +2303,7 @@ void emitter::emitGeneratePrologEpilog()
     if (emitComp->verbose)
     {
         printf("%d prologs, %d epilogs", prologCnt, epilogCnt);
-        if (emitComp->UsesFunclets())
-        {
-            printf(", %d funclet prologs, %d funclet epilogs", funcletPrologCnt, funcletEpilogCnt);
-        }
+        printf(", %d funclet prologs, %d funclet epilogs", funcletPrologCnt, funcletEpilogCnt);
         printf("\n");
 
         // prolog/epilog code doesn't use this yet
@@ -2517,7 +2514,6 @@ void emitter::emitEndFnEpilog()
 
 void emitter::emitBegFuncletProlog(insGroup* igPh)
 {
-    assert(emitComp->UsesFunclets());
     emitBegPrologEpilog(igPh);
 }
 
@@ -2528,7 +2524,6 @@ void emitter::emitBegFuncletProlog(insGroup* igPh)
 
 void emitter::emitEndFuncletProlog()
 {
-    assert(emitComp->UsesFunclets());
     emitEndPrologEpilog();
 }
 
@@ -2539,7 +2534,6 @@ void emitter::emitEndFuncletProlog()
 
 void emitter::emitBegFuncletEpilog(insGroup* igPh)
 {
-    assert(emitComp->UsesFunclets());
     emitBegPrologEpilog(igPh);
 }
 
@@ -2550,7 +2544,6 @@ void emitter::emitBegFuncletEpilog(insGroup* igPh)
 
 void emitter::emitEndFuncletEpilog()
 {
-    assert(emitComp->UsesFunclets());
     emitEndPrologEpilog();
 }
 
@@ -6694,7 +6687,7 @@ unsigned emitter::emitEndCodeGen(Compiler*         comp,
     emitFullGCinfo = fullPtrMap;
 #if TARGET_X86
     // On x86 with funclets we emit full ptr map even for EBP frames
-    emitFullArgInfo = comp->UsesFunclets() ? fullPtrMap : !emitHasFramePtr;
+    emitFullArgInfo = fullPtrMap;
 #else
     emitFullArgInfo = !emitHasFramePtr;
 #endif
@@ -7096,16 +7089,6 @@ unsigned emitter::emitEndCodeGen(Compiler*         comp,
                 assert(indx < emitComp->lvaTrackedCount);
 
                 // printf("Variable #%2u/%2u is at stack offset %d\n", num, indx, offs);
-
-#if defined(JIT32_GCENCODER) && defined(FEATURE_EH_WINDOWS_X86)
-                // Remember the frame offset of the "this" argument for synchronized methods.
-                if (!emitComp->UsesFunclets() && emitComp->lvaIsOriginalThisArg(num) &&
-                    emitComp->lvaKeepAliveAndReportThis())
-                {
-                    emitSyncThisObjOffs = offs;
-                    offs |= this_OFFSET_FLAG;
-                }
-#endif // JIT32_GCENCODER && FEATURE_EH_WINDOWS_X86
 
                 if (dsc->TypeGet() == TYP_BYREF)
                 {
@@ -8627,13 +8610,6 @@ void emitter::emitGCvarLiveSet(int offs, GCtype gcType, BYTE* addr, ssize_t disp
     desc->vpdNext = nullptr;
 
     /* the lower 2 bits encode props about the stk ptr */
-
-#if defined(JIT32_GCENCODER) && defined(FEATURE_EH_WINDOWS_X86)
-    if (!emitComp->UsesFunclets() && offs == emitSyncThisObjOffs)
-    {
-        desc->vpdVarNum |= this_OFFSET_FLAG;
-    }
-#endif
 
     if (gcType == GCT_BYREF)
     {

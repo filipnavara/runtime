@@ -181,9 +181,6 @@ PhaseStatus Compiler::fgRemoveEmptyFinally()
                         postTryFinallyBlock->increaseBBProfileWeight(currentBlock->bbWeight);
                     }
 
-                    // Cleanup the postTryFinallyBlock
-                    fgCleanupContinuation(postTryFinallyBlock);
-
                     // Make sure iteration isn't going off the deep end.
                     assert(leaveBlock != endCallFinallyRangeBlock);
                 }
@@ -683,10 +680,7 @@ PhaseStatus Compiler::fgRemoveEmptyTry()
         callFinally->SetKind(BBJ_ALWAYS);
         callFinally->RemoveFlags(BBF_RETLESS_CALL); // no longer a BBJ_CALLFINALLY
 
-        // (4) Cleanup the continuation
-        fgCleanupContinuation(continuation);
-
-        // (5) Update the directly contained handler blocks' handler index.
+        // (4) Update the directly contained handler blocks' handler index.
         // Handler index of any nested blocks will update when we
         // remove the EH table entry.  Change handler exits to jump to
         // the continuation.  Clear catch type on handler entry.
@@ -729,17 +723,17 @@ PhaseStatus Compiler::fgRemoveEmptyTry()
             }
         }
 
-        // (6) Update any impacted ACDs.
+        // (5) Update any impacted ACDs.
         //
         fgUpdateACDsBeforeEHTableEntryRemoval(XTnum);
 
-        // (7) Remove the try-finally EH region. This will compact the
+        // (6) Remove the try-finally EH region. This will compact the
         // EH table so XTnum now points at the next entry and will update
         // the EH region indices of any nested EH in the (former) handler.
         //
         fgRemoveEHTableEntry(XTnum);
 
-        // (8) The handler entry has an artificial extra ref count. Remove it.
+        // (7) The handler entry has an artificial extra ref count. Remove it.
         // There also should be one normal ref, from the try, and the handler
         // may contain internal branches back to its start. So the ref count
         // should currently be at least 2.
@@ -1617,9 +1611,6 @@ PhaseStatus Compiler::fgCloneFinally()
         BasicBlock* firstClonedBlock = blockMap[firstBlock];
         firstClonedBlock->bbCatchTyp = BBCT_NONE;
 
-        // Cleanup the continuation
-        fgCleanupContinuation(normalCallFinallyReturn);
-
         // If we have profile data, compute how the weights split,
         // and update the weights in both the clone and the original.
         //
@@ -1863,45 +1854,6 @@ void Compiler::fgDebugCheckTryFinallyExits()
 #endif // DEBUG
 
 //------------------------------------------------------------------------
-// fgCleanupContinuation: cleanup a finally continuation after a
-// finally is removed or converted to normal control flow.
-//
-// Notes:
-//    The continuation is the block targeted by the second half of
-//    a callfinally pair.
-//
-//    Used by finally cloning, empty try removal, and empty
-//    finally removal.
-//
-void Compiler::fgCleanupContinuation(BasicBlock* continuation)
-{
-#if defined(FEATURE_EH_WINDOWS_X86)
-    if (!UsesFunclets())
-    {
-        // The continuation may be a finalStep block.
-        // It is now a normal block, so clear the special keep
-        // always flag.
-        continuation->RemoveFlags(BBF_KEEP_BBJ_ALWAYS);
-
-        // Remove the GT_END_LFIN from the continuation,
-        // Note we only expect to see one such statement.
-        bool foundEndLFin = false;
-        for (Statement* const stmt : continuation->Statements())
-        {
-            GenTree* expr = stmt->GetRootNode();
-            if (expr->gtOper == GT_END_LFIN)
-            {
-                assert(!foundEndLFin);
-                fgRemoveStmt(continuation, stmt);
-                foundEndLFin = true;
-            }
-        }
-        assert(foundEndLFin);
-    }
-#endif // FEATURE_EH_WINDOWS_X86
-}
-
-//------------------------------------------------------------------------
 // fgMergeFinallyChains: tail merge finally invocations
 //
 // Returns:
@@ -1941,18 +1893,6 @@ PhaseStatus Compiler::fgMergeFinallyChains()
     }
 
     bool enableMergeFinallyChains = true;
-
-#if defined(FEATURE_EH_WINDOWS_X86)
-    if (!UsesFunclets())
-    {
-        // For non-funclet models (x86) the callfinallys may contain
-        // statements and the continuations contain GT_END_LFINs.  So no
-        // merging is possible until the GT_END_LFIN blocks can be merged
-        // and merging is not safe unless the callfinally blocks are split.
-        JITDUMP("EH using non-funclet model; merging not yet implemented.\n");
-        enableMergeFinallyChains = false;
-    }
-#endif // FEATURE_EH_WINDOWS_X86
 
     if (!UsesCallFinallyThunks())
     {
@@ -2592,27 +2532,6 @@ BasicBlock* Compiler::fgCloneTryRegion(BasicBlock* tryEntry, CloneTryInfo& info,
                 else if (block->KindIs(BBJ_CALLFINALLYRET) && block->Prev()->TargetIs(ebd->ebdHndBeg))
                 {
                     addBlockToClone(block, "callfinallyret");
-
-#if defined(FEATURE_EH_WINDOWS_X86)
-
-                    // For non-funclet X86 we must also clone the next block after the callfinallyret.
-                    // (it will contain an END_LFIN). But if this block is also a CALLFINALLY we
-                    // bail out, since we can't clone it in isolation, but we need to clone it.
-                    // (a proper fix would be to split the block, perhaps).
-                    //
-                    if (!UsesFunclets())
-                    {
-                        BasicBlock* const lfin = block->GetTarget();
-
-                        if (lfin->KindIs(BBJ_CALLFINALLY))
-                        {
-                            JITDUMP("Can't clone, as an END_LFIN is contained in CALLFINALLY block " FMT_BB "\n",
-                                    lfin->bbNum);
-                            return nullptr;
-                        }
-                        addBlockToClone(lfin, "lfin-continuation");
-                    }
-#endif
                 }
             }
         }
@@ -3000,22 +2919,6 @@ BasicBlock* Compiler::fgCloneTryRegion(BasicBlock* tryEntry, CloneTryInfo& info,
                 newBlock->bbRefs++;
             }
         }
-
-#if defined(FEATURE_EH_WINDOWS_X86)
-        // Update the EH ID for any cloned GT_END_LFIN.
-        //
-        for (Statement* const stmt : newBlock->Statements())
-        {
-            GenTree* const rootNode = stmt->GetRootNode();
-            if (rootNode->OperIs(GT_END_LFIN))
-            {
-                GenTreeVal* const endNode = rootNode->AsVal();
-                EHblkDsc* const   oldEbd  = ehFindEHblkDscById((unsigned short)endNode->gtVal1);
-                EHblkDsc* const   newEbd  = oldEbd + indexShift;
-                endNode->gtVal1           = newEbd->ebdID;
-            }
-        }
-#endif
     }
     JITDUMP("Done fixing region indices\n");
 

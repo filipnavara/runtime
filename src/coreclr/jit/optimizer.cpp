@@ -2423,12 +2423,6 @@ PhaseStatus Compiler::optOptimizePreLayout()
     // Run a late pass of unconditional-to-conditional branch optimization, skipping handler blocks.
     for (BasicBlock* block = fgFirstBB; block != fgFirstFuncletBB; block = block->Next())
     {
-        if (!UsesFunclets() && block->hasHndIndex())
-        {
-            block = ehGetDsc(block->getHndIndex())->ebdHndLast;
-            continue;
-        }
-
         modified |= fgOptimizeBranch(block);
     }
 

@@ -3929,10 +3929,6 @@ void Compiler::fgFindBasicBlocks()
          *  try-finally blocks.
          */
 
-#if defined(FEATURE_EH_WINDOWS_X86)
-        HBtab->ebdHandlerNestingLevel = 0;
-#endif // FEATURE_EH_WINDOWS_X86
-
         HBtab->ebdEnclosingTryIndex = EHblkDsc::NO_ENCLOSING_INDEX;
         HBtab->ebdEnclosingHndIndex = EHblkDsc::NO_ENCLOSING_INDEX;
 
@@ -3941,13 +3937,6 @@ void Compiler::fgFindBasicBlocks()
 
         for (EHblkDsc* xtab = compHndBBtab; xtab < HBtab; xtab++)
         {
-#if defined(FEATURE_EH_WINDOWS_X86)
-            if (!UsesFunclets() && jitIsBetween(xtab->ebdHndBegOffs(), hndBegOff, hndEndOff))
-            {
-                xtab->ebdHandlerNestingLevel++;
-            }
-#endif // FEATURE_EH_WINDOWS_X86
-
             /* If we haven't recorded an enclosing try index for xtab then see
              *  if this EH region should be recorded.  We check if the
              *  first offset in the xtab lies within our region.  If so,
@@ -3979,21 +3968,8 @@ void Compiler::fgFindBasicBlocks()
 
     } // end foreach handler table entry
 
-#if defined(FEATURE_EH_WINDOWS_X86)
-    if (!UsesFunclets())
-    {
-        for (EHblkDsc* const HBtab : EHClauses(this))
-        {
-            if (ehMaxHndNestingCount <= HBtab->ebdHandlerNestingLevel)
-                ehMaxHndNestingCount = HBtab->ebdHandlerNestingLevel + 1;
-        }
-    }
-#endif // FEATURE_EH_WINDOWS_X86
-
-    {
-        // always run these checks for a debug build
-        verCheckNestingLevel(initRoot);
-    }
+    // always run these checks for a debug build
+    verCheckNestingLevel(initRoot);
 
 #ifndef DEBUG
     // fgNormalizeEH assumes that this test has been passed.  And Ssa assumes that fgNormalizeEHTable
@@ -4229,7 +4205,7 @@ void Compiler::fgCheckBasicBlockControlFlow()
                 }
                 break;
 
-            case BBJ_EHCATCHRET:  // block ends with a leave out of a catch (only if UsesFunclets() == true)
+            case BBJ_EHCATCHRET:  // block ends with a leave out of a catch
             case BBJ_CALLFINALLY: // block always calls the target finally
             default:
                 noway_assert(!"Unexpected bbKind"); // these blocks don't get created until importing
@@ -5033,16 +5009,13 @@ void Compiler::fgUnlinkRange(BasicBlock* bBeg, BasicBlock* bEnd)
     }
 
 #ifdef DEBUG
-    if (UsesFunclets())
+    // You can't unlink a range that includes the first funclet block. A range certainly
+    // can't cross the non-funclet/funclet region. And you can't unlink the first block
+    // of the first funclet with this, either. (If that's necessary, it could be allowed
+    // by updating fgFirstFuncletBB to bEnd->bbNext.)
+    for (BasicBlock* tempBB = bBeg; tempBB != bEnd->Next(); tempBB = tempBB->Next())
     {
-        // You can't unlink a range that includes the first funclet block. A range certainly
-        // can't cross the non-funclet/funclet region. And you can't unlink the first block
-        // of the first funclet with this, either. (If that's necessary, it could be allowed
-        // by updating fgFirstFuncletBB to bEnd->bbNext.)
-        for (BasicBlock* tempBB = bBeg; tempBB != bEnd->Next(); tempBB = tempBB->Next())
-        {
-            assert(tempBB != fgFirstFuncletBB);
-        }
+        assert(tempBB != fgFirstFuncletBB);
     }
 #endif // DEBUG
 }
@@ -5423,7 +5396,7 @@ BasicBlock* Compiler::fgRelocateEHRange(unsigned regionIndex, FG_RELOCATE_TYPE r
     BasicBlock* bPrev   = nullptr;
 
     // We don't support moving try regions... yet?
-    noway_assert(!UsesFunclets() || relocateType == FG_RELOCATE_HANDLER);
+    noway_assert(relocateType == FG_RELOCATE_HANDLER);
 
     HBtab = ehGetDsc(regionIndex);
 
@@ -5461,24 +5434,11 @@ BasicBlock* Compiler::fgRelocateEHRange(unsigned regionIndex, FG_RELOCATE_TYPE r
         goto FAILURE;
     }
 
-#if defined(FEATURE_EH_WINDOWS_X86)
-    // In the funclets case, we still need to set some information on the handler blocks
-    if (!UsesFunclets() && bLast->IsLast())
-    {
-        INDEBUG(reason = "region is already at the end of the method";)
-        goto FAILURE;
-    }
-#endif // FEATURE_EH_WINDOWS_X86
-
     // Walk the block list for this purpose:
     // 1. Verify that all the blocks in the range are either all rarely run or not rarely run.
     // When creating funclets, we ignore the run rarely flag, as we need to be able to move any blocks
     // in the range.
 
-#if defined(FEATURE_EH_WINDOWS_X86)
-    bool isRare;
-    isRare = bStart->isRunRarely();
-#endif // FEATURE_EH_WINDOWS_X86
     block = fgFirstBB;
     while (true)
     {
@@ -5496,15 +5456,6 @@ BasicBlock* Compiler::fgRelocateEHRange(unsigned regionIndex, FG_RELOCATE_TYPE r
 
         if (inTheRange)
         {
-#if defined(FEATURE_EH_WINDOWS_X86)
-            // Unless all blocks are (not) run rarely we must return false.
-            if (!UsesFunclets() && isRare != block->isRunRarely())
-            {
-                INDEBUG(reason = "this region contains both rarely run and non-rarely run blocks";)
-                goto FAILURE;
-            }
-#endif // FEATURE_EH_WINDOWS_X86
-
             validRange = true;
         }
 
@@ -5530,16 +5481,6 @@ BasicBlock* Compiler::fgRelocateEHRange(unsigned regionIndex, FG_RELOCATE_TYPE r
         fgDispBasicBlocks();
         fgDispHandlerTab();
     }
-
-#if defined(FEATURE_EH_WINDOWS_X86)
-    // This is really expensive, and quickly becomes O(n^n) with funclets
-    // so only do it once after we've created them (see fgCreateFunclets)
-    if (!UsesFunclets() && expensiveDebugCheckLevel >= 2)
-    {
-        fgDebugCheckBBlist();
-    }
-#endif
-
 #endif // DEBUG
 
     BasicBlock* bNext;
@@ -5551,134 +5492,58 @@ BasicBlock* Compiler::fgRelocateEHRange(unsigned regionIndex, FG_RELOCATE_TYPE r
     BasicBlock* insertAfterBlk;
     insertAfterBlk = fgLastBB;
 
-    if (UsesFunclets())
+    // There are several cases we need to consider when moving an EH range.
+    // If moving a range X, we must consider its relationship to every other EH
+    // range A in the table. Note that each entry in the table represents both
+    // a protected region and a handler region (possibly including a filter region
+    // that must live before and adjacent to the handler region), so we must
+    // consider try and handler regions independently. These are the cases:
+    // 1. A is completely contained within X (where "completely contained" means
+    //    that the 'begin' and 'last' parts of A are strictly between the 'begin'
+    //    and 'end' parts of X, and aren't equal to either, for example, they don't
+    //    share 'last' blocks). In this case, when we move X, A moves with it, and
+    //    the EH table doesn't need to change.
+    // 2. X is completely contained within A. In this case, X gets extracted from A,
+    //    and the range of A shrinks, but because A is strictly within X, the EH
+    //    table doesn't need to change.
+    // 3. A and X have exactly the same range. In this case, A is moving with X and
+    //    the EH table doesn't need to change.
+    // 4. A and X share the 'last' block. There are two sub-cases:
+    //    (a) A is a larger range than X (such that the beginning of A precedes the
+    //        beginning of X): in this case, we are moving the tail of A. We set the
+    //        'last' block of A to the block preceding the beginning block of X.
+    //    (b) A is a smaller range than X. Thus, we are moving the entirety of A along
+    //        with X. In this case, nothing in the EH record for A needs to change.
+    // 5. A and X share the 'beginning' block (but aren't the same range, as in #3).
+    //    This can never happen here, because we are only moving handler ranges (we don't
+    //    move try ranges), and handler regions cannot start at the beginning of a try
+    //    range or handler range and be a subset.
+    //
+    // Note that A and X must properly nest for the table to be well-formed. For example,
+    // the beginning of A can't be strictly within the range of X (that is, the beginning
+    // of A isn't shared with the beginning of X) and the end of A outside the range.
+
+    for (XTnum = 0, HBtab = compHndBBtab; XTnum < compHndBBtabCount; XTnum++, HBtab++)
     {
-        // There are several cases we need to consider when moving an EH range.
-        // If moving a range X, we must consider its relationship to every other EH
-        // range A in the table. Note that each entry in the table represents both
-        // a protected region and a handler region (possibly including a filter region
-        // that must live before and adjacent to the handler region), so we must
-        // consider try and handler regions independently. These are the cases:
-        // 1. A is completely contained within X (where "completely contained" means
-        //    that the 'begin' and 'last' parts of A are strictly between the 'begin'
-        //    and 'end' parts of X, and aren't equal to either, for example, they don't
-        //    share 'last' blocks). In this case, when we move X, A moves with it, and
-        //    the EH table doesn't need to change.
-        // 2. X is completely contained within A. In this case, X gets extracted from A,
-        //    and the range of A shrinks, but because A is strictly within X, the EH
-        //    table doesn't need to change.
-        // 3. A and X have exactly the same range. In this case, A is moving with X and
-        //    the EH table doesn't need to change.
-        // 4. A and X share the 'last' block. There are two sub-cases:
-        //    (a) A is a larger range than X (such that the beginning of A precedes the
-        //        beginning of X): in this case, we are moving the tail of A. We set the
-        //        'last' block of A to the block preceding the beginning block of X.
-        //    (b) A is a smaller range than X. Thus, we are moving the entirety of A along
-        //        with X. In this case, nothing in the EH record for A needs to change.
-        // 5. A and X share the 'beginning' block (but aren't the same range, as in #3).
-        //    This can never happen here, because we are only moving handler ranges (we don't
-        //    move try ranges), and handler regions cannot start at the beginning of a try
-        //    range or handler range and be a subset.
-        //
-        // Note that A and X must properly nest for the table to be well-formed. For example,
-        // the beginning of A can't be strictly within the range of X (that is, the beginning
-        // of A isn't shared with the beginning of X) and the end of A outside the range.
-
-        for (XTnum = 0, HBtab = compHndBBtab; XTnum < compHndBBtabCount; XTnum++, HBtab++)
+        if (XTnum != regionIndex) // we don't need to update our 'last' pointer
         {
-            if (XTnum != regionIndex) // we don't need to update our 'last' pointer
-            {
-                if (HBtab->ebdTryLast == bLast)
-                {
-                    // If we moved a set of blocks that were at the end of
-                    // a different try region then we may need to update ebdTryLast
-                    for (block = HBtab->ebdTryBeg; block != nullptr; block = block->Next())
-                    {
-                        if (block == bPrev)
-                        {
-                            // We were contained within it, so shrink its region by
-                            // setting its 'last'
-                            fgSetTryEnd(HBtab, bPrev);
-                            break;
-                        }
-                        else if (HBtab->ebdTryLast->NextIs(block))
-                        {
-                            // bPrev does not come after the TryBeg, thus we are larger, and
-                            // it is moving with us.
-                            break;
-                        }
-                    }
-                }
-                if (HBtab->ebdHndLast == bLast)
-                {
-                    // If we moved a set of blocks that were at the end of
-                    // a different handler region then we must update ebdHndLast
-                    for (block = HBtab->ebdHndBeg; block != nullptr; block = block->Next())
-                    {
-                        if (block == bPrev)
-                        {
-                            fgSetHndEnd(HBtab, bPrev);
-                            break;
-                        }
-                        else if (HBtab->ebdHndLast->NextIs(block))
-                        {
-                            // bPrev does not come after the HndBeg
-                            break;
-                        }
-                    }
-                }
-            }
-        } // end exception table iteration
-
-        // Insert the block(s) we are moving after fgLastBlock
-        fgMoveBlocksAfter(bStart, bLast, insertAfterBlk);
-
-        if (fgFirstFuncletBB == nullptr) // The funclet region isn't set yet
-        {
-            fgFirstFuncletBB = bStart;
-        }
-        else
-        {
-            assert(fgFirstFuncletBB != insertAfterBlk->Next()); // We insert at the end, not at the beginning, of the
-                                                                // funclet region.
-        }
-
-#ifdef DEBUG
-        if (verbose)
-        {
-            printf("Create funclets: moved region\n");
-            fgDispHandlerTab();
-        }
-
-// We have to wait to do this until we've created all the additional regions
-// Because this relies on ebdEnclosingTryIndex and ebdEnclosingHndIndex
-#endif // DEBUG
-    }
-    else
-    {
-#if defined(FEATURE_EH_WINDOWS_X86)
-        for (XTnum = 0, HBtab = compHndBBtab; XTnum < compHndBBtabCount; XTnum++, HBtab++)
-        {
-            if (XTnum == regionIndex)
-            {
-                // Don't update our handler's Last info
-                continue;
-            }
-
             if (HBtab->ebdTryLast == bLast)
             {
                 // If we moved a set of blocks that were at the end of
                 // a different try region then we may need to update ebdTryLast
-                for (block = HBtab->ebdTryBeg; block != NULL; block = block->Next())
+                for (block = HBtab->ebdTryBeg; block != nullptr; block = block->Next())
                 {
                     if (block == bPrev)
                     {
+                        // We were contained within it, so shrink its region by
+                        // setting its 'last'
                         fgSetTryEnd(HBtab, bPrev);
                         break;
                     }
                     else if (HBtab->ebdTryLast->NextIs(block))
                     {
-                        // bPrev does not come after the TryBeg
+                        // bPrev does not come after the TryBeg, thus we are larger, and
+                        // it is moving with us.
                         break;
                     }
                 }
@@ -5687,7 +5552,7 @@ BasicBlock* Compiler::fgRelocateEHRange(unsigned regionIndex, FG_RELOCATE_TYPE r
             {
                 // If we moved a set of blocks that were at the end of
                 // a different handler region then we must update ebdHndLast
-                for (block = HBtab->ebdHndBeg; block != NULL; block = block->Next())
+                for (block = HBtab->ebdHndBeg; block != nullptr; block = block->Next())
                 {
                     if (block == bPrev)
                     {
@@ -5701,12 +5566,32 @@ BasicBlock* Compiler::fgRelocateEHRange(unsigned regionIndex, FG_RELOCATE_TYPE r
                     }
                 }
             }
-        } // end exception table iteration
+        }
+    } // end exception table iteration
 
-        // We have decided to insert the block(s) after fgLastBlock
-        fgMoveBlocksAfter(bStart, bLast, insertAfterBlk);
-#endif // FEATURE_EH_WINDOWS_X86
+    // Insert the block(s) we are moving after fgLastBlock
+    fgMoveBlocksAfter(bStart, bLast, insertAfterBlk);
+
+    if (fgFirstFuncletBB == nullptr) // The funclet region isn't set yet
+    {
+        fgFirstFuncletBB = bStart;
     }
+    else
+    {
+        assert(fgFirstFuncletBB != insertAfterBlk->Next()); // We insert at the end, not at the beginning, of the
+                                                            // funclet region.
+    }
+
+#ifdef DEBUG
+    if (verbose)
+    {
+        printf("Create funclets: moved region\n");
+        fgDispHandlerTab();
+    }
+
+// We have to wait to do this until we've created all the additional regions
+// Because this relies on ebdEnclosingTryIndex and ebdEnclosingHndIndex
+#endif // DEBUG
 
     goto DONE;
 
@@ -6324,10 +6209,10 @@ BasicBlock* Compiler::fgNewBBinRegion(BBKinds     jumpKind,
 
         // Figure out the start and end block range to search for an insertion location. Pick the beginning and
         // ending blocks of the target EH region (the 'endBlk' is one past the last block of the EH region, to make
-        // loop iteration easier). Note that, after funclets have been created (for UsesFunclets() == true),
-        // this linear block range will not include blocks of handlers for try/handler clauses nested within
-        // this EH region, as those blocks have been extracted as funclets. That is ok, though, because we don't
-        // want to insert a block in any nested EH region.
+        // loop iteration easier). Note that, after funclets have been created, this linear block range will not
+        // include blocks of handlers for try/handler clauses nested within this EH region, as those blocks have
+        // been extracted as funclets. That is ok, though, because we don't want to insert a block in any nested
+        // EH region.
 
         if (putInTryRegion)
         {

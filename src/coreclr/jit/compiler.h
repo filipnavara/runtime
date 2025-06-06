@@ -9882,6 +9882,9 @@ public:
     bool compLongUsed                 = false; // Does the method use TYP_LONG
     bool compFloatingPointUsed        = false; // Does the method use TYP_FLOAT or TYP_DOUBLE
     bool compTailCallUsed             = false; // Does the method do a tailcall
+#ifdef TARGET_X86
+    bool compTailCallViaJitHelperUsed = false;
+#endif
     bool compTailPrefixSeen           = false; // Does the method IL have tail. prefix
     bool compLocallocSeen             = false; // Does the method IL have localloc opcode
     bool compLocallocUsed             = false; // Does the method use localloc.

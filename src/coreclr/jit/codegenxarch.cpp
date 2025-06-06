@@ -10599,7 +10599,8 @@ void CodeGen::genFnEpilog(BasicBlock* block)
             // Add 'compiler->compLclFrameSize' to ESP. Use "pop ECX" for that, except in cases
             // where ECX may contain some state.
 
-            if ((frameSize == TARGET_POINTER_SIZE) && !compiler->compJmpOpUsed && !compiler->compIsAsync())
+            if ((frameSize == TARGET_POINTER_SIZE) && !compiler->compJmpOpUsed && !compiler->compIsAsync() &&
+                !compiler->compTailCallUsed)
             {
                 inst_RV(INS_pop, REG_ECX, TYP_I_IMPL);
                 regSet.verifyRegUsed(REG_ECX);
@@ -10687,7 +10688,7 @@ void CodeGen::genFnEpilog(BasicBlock* block)
             }
 #ifdef TARGET_X86
             else if ((compiler->compLclFrameSize == REGSIZE_BYTES) && !compiler->compJmpOpUsed &&
-                     !compiler->compIsAsync())
+                     !compiler->compIsAsync() && !compiler->compTailCallUsed)
             {
                 // "pop ecx" will make ESP point to the callee-saved registers
                 inst_RV(INS_pop, REG_ECX, TYP_I_IMPL);

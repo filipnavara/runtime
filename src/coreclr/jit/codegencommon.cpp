@@ -4456,7 +4456,7 @@ void CodeGen::genFinalizeFrame()
 
 #if defined(TARGET_X86)
 
-    if (compiler->compTailCallUsed)
+    if (compiler->compTailCallViaJitHelperUsed)
     {
         // If we are generating a helper-based tailcall, we've set the tailcall helper "flags"
         // argument to "1", indicating to the tailcall helper that we've saved the callee-saved

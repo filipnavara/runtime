@@ -4290,14 +4290,6 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee, const char** failReason)
         reportFastTailCallDecision("Too many epilogs");
         return false;
     }
-
-    if (callee->IsVirtualStub() && (callee->gtCallType == CT_INDIRECT))
-    {
-        // Requires special codegen pattern that gets disassembled based on
-        // return address
-        reportFastTailCallDecision("Indirect VSD call");
-        return false;
-    }
 #endif
 
     // For Windows some struct parameters are copied on the local frame
@@ -4487,6 +4479,14 @@ GenTree* Compiler::fgMorphPotentialTailCall(GenTreeCall* call)
     if (call->gtCallMoreFlags & GTF_CALL_M_WRAPPER_DELEGATE_INV)
     {
         failTailCall("Non-standard calling convention");
+        return nullptr;
+    }
+#endif
+
+#ifdef TARGET_X86
+    if (call->IsVirtualStubRelativeIndir())
+    {
+        failTailCall("Cannot tailcall indirect VSD call");
         return nullptr;
     }
 #endif
@@ -4781,6 +4781,9 @@ GenTree* Compiler::fgMorphPotentialTailCall(GenTreeCall* call)
     call->gtCallMoreFlags |= GTF_CALL_M_TAILCALL;
     if (tailCallViaJitHelper)
     {
+#ifdef TARGET_X86
+        compTailCallViaJitHelperUsed = true;
+#endif
         call->gtCallMoreFlags |= GTF_CALL_M_TAILCALL_VIA_JIT_HELPER;
     }
 
@@ -6424,7 +6427,13 @@ GenTree* Compiler::fgMorphCall(GenTreeCall* call)
         if (call->gtCallType == CT_INDIRECT)
         {
             optCallCount++;
-            optIndirectCallCount++;
+            // Do not count the tailcall morphed from fgMorphCall ->
+            // fgMorphPotentialTailCall -> fgMorphCall as indirect call
+            // to prevent forcing EBP frame later.
+            if ((call->gtCallMoreFlags & GTF_CALL_M_TAILCALL) == 0)
+            {
+                optIndirectCallCount++;
+            }
         }
         else if (call->gtCallType == CT_USER_FUNC)
         {
@@ -13599,8 +13608,10 @@ void Compiler::fgSetOptions()
 
 #ifdef TARGET_X86
 
-    if (compTailCallUsed)
+    if (compTailCallViaJitHelperUsed)
+    {
         codeGen->setFramePointerRequired(true);
+    }
 
 #endif // TARGET_X86
 

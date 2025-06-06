@@ -4126,7 +4126,6 @@ void CodeGen::genStructPutArgPush(GenTreePutArgStk* putArgNode)
 }
 #endif // TARGET_X86
 
-#ifndef TARGET_X86
 //------------------------------------------------------------------------
 // genStructPutArgPartialRepMovs: Generates code for passing a struct arg by value on stack using
 //                                a mix of pointer-sized stores, "movsq" and "rep movsd".
@@ -4217,7 +4216,6 @@ void CodeGen::genStructPutArgPartialRepMovs(GenTreePutArgStk* putArgNode)
 
     assert(numGCSlotsCopied == layout->GetGCPtrCount());
 }
-#endif // !TARGET_X86
 
 //------------------------------------------------------------------------
 // If any Vector3 args are on stack and they are not pass-by-ref, the upper 32bits
@@ -8107,7 +8105,7 @@ bool CodeGen::genAdjustStackForPutArgStk(GenTreePutArgStk* putArgStk)
 }
 
 //---------------------------------------------------------------------
-// genPutArgStkFieldList - generate code for passing a GT_FIELD_LIST arg on the stack.
+// genPutArgStkPushFieldList - generate code for passing a GT_FIELD_LIST arg on the stack.
 //
 // Arguments
 //    treeNode      - the GT_PUTARG_STK node whose op1 is a GT_FIELD_LIST
@@ -8115,7 +8113,7 @@ bool CodeGen::genAdjustStackForPutArgStk(GenTreePutArgStk* putArgStk)
 // Return value:
 //    None
 //
-void CodeGen::genPutArgStkFieldList(GenTreePutArgStk* putArgStk)
+void CodeGen::genPutArgStkPushFieldList(GenTreePutArgStk* putArgStk)
 {
     GenTreeFieldList* const fieldList = putArgStk->gtOp1->AsFieldList();
     assert(fieldList != nullptr);
@@ -8332,28 +8330,63 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* putArgStk)
 
     if (data->OperIs(GT_FIELD_LIST))
     {
-        genPutArgStkFieldList(putArgStk);
+        if (putArgStk->putInIncomingArgArea())
+        {
+            genPutArgStkFieldList(putArgStk, getBaseVarForPutArgStk(putArgStk));
+        }
+        else
+        {
+            genPutArgStkPushFieldList(putArgStk);
+        }
         return;
     }
 
     if (varTypeIsStruct(targetType))
     {
-        genAdjustStackForPutArgStk(putArgStk);
-        genPutStructArgStk(putArgStk);
+        if (putArgStk->putInIncomingArgArea())
+        {
+            m_pushStkArg   = false;
+            m_stkArgVarNum = getBaseVarForPutArgStk(putArgStk);
+            m_stkArgOffset = putArgStk->getArgOffset();
+            genPutStructArgStk(putArgStk);
+            m_stkArgVarNum = BAD_VAR_NUM;
+        }
+        else
+        {
+            genAdjustStackForPutArgStk(putArgStk);
+            genPutStructArgStk(putArgStk);
+        }
         return;
     }
 
     genConsumeRegs(data);
 
-    if (data->isUsedFromReg())
+    if (putArgStk->putInIncomingArgArea())
     {
-        genPushReg(targetType, data->GetRegNum());
+        unsigned baseVarNum = getBaseVarForPutArgStk(putArgStk);
+        if (data->isContainedIntOrIImmed())
+        {
+            GetEmitter()->emitIns_S_I(ins_Store(targetType), emitTypeSize(targetType), baseVarNum, putArgStk->getArgOffset(),
+                                      (int)data->AsIntConCommon()->IconValue());
+        }
+        else
+        {
+            GetEmitter()->emitIns_S_R(ins_Store(targetType), emitTypeSize(targetType), data->GetRegNum(),
+                baseVarNum, putArgStk->getArgOffset());
+        }
     }
     else
     {
-        assert(genTypeSize(data) == TARGET_POINTER_SIZE);
-        inst_TT(INS_push, emitTypeSize(data), data);
-        AddStackLevel(TARGET_POINTER_SIZE);
+        if (data->isUsedFromReg())
+        {
+            genPushReg(targetType, data->GetRegNum());
+        }
+        else
+        {
+            assert(genTypeSize(data) == TARGET_POINTER_SIZE);
+            inst_TT(INS_push, emitTypeSize(data), data);
+            AddStackLevel(TARGET_POINTER_SIZE);
+        }
     }
 #else // !TARGET_X86
     {
@@ -8571,7 +8604,7 @@ void CodeGen::genPutStructArgStk(GenTreePutArgStk* putArgStk)
     var_types targetType = source->TypeGet();
 
 #if defined(TARGET_X86) && defined(FEATURE_SIMD)
-    if (putArgStk->isSIMD12())
+    if (putArgStk->isSIMD12() && !putArgStk->putInIncomingArgArea())
     {
         genPutArgStkSimd12(putArgStk);
         return;
@@ -8593,11 +8626,10 @@ void CodeGen::genPutStructArgStk(GenTreePutArgStk* putArgStk)
         case GenTreePutArgStk::Kind::RepInstr:
             genStructPutArgRepMovs(putArgStk);
             break;
-#ifndef TARGET_X86
+
         case GenTreePutArgStk::Kind::PartialRepInstr:
             genStructPutArgPartialRepMovs(putArgStk);
             break;
-#endif // !TARGET_X86
 
         case GenTreePutArgStk::Kind::Unroll:
             genStructPutArgUnroll(putArgStk);
@@ -10740,7 +10772,7 @@ void CodeGen::genFnEpilog(BasicBlock* block)
 
     /* Check if this a special return block i.e.
      * CEE_JMP instruction */
-
+     
     if (jmpEpilog)
     {
         noway_assert(block->KindIs(BBJ_RETURN));
@@ -10809,7 +10841,7 @@ void CodeGen::genFnEpilog(BasicBlock* block)
 #if FEATURE_FASTTAILCALL
         else
         {
-            genCallInstruction(jmpNode->AsCall());
+            genCallInstruction(jmpNode->AsCall() X86_ARG(0));
         }
 #endif // FEATURE_FASTTAILCALL
     }

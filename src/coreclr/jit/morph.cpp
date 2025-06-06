@@ -4229,7 +4229,7 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee, const char** failReason)
         return false;
     }
 
-#ifdef TARGET_AMD64
+#ifdef TARGET_XARCH
     // Needed for Jit64 compat.
     // In future, enabling fast tail calls from methods that need GS cookie
     // check would require codegen side work to emit GS cookie check before a
@@ -4259,6 +4259,7 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee, const char** failReason)
         }
     }
 
+#ifndef TARGET_X86
     // For a fast tail call the caller will use its incoming arg stack space to place
     // arguments, so if the callee requires more arg stack space than is available here
     // the fast tail call cannot be performed. This is common to all platforms.
@@ -4269,6 +4270,35 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee, const char** failReason)
         reportFastTailCallDecision("Not enough incoming arg space");
         return false;
     }
+#else
+    // x86 uses callee cleanup convention with "ret n" so bail out on any stack
+    // size mismatch or "ret n" vs "ret" mismatch.
+    if (IsCallerPop(info.compCallConv) != IsCallerPop(callee->GetUnmanagedCallConv()))
+    {
+        reportFastTailCallDecision("Caller/callee cleanup convention mismatch");
+        return false;
+    }
+
+    if (calleeArgStackSize != callerArgStackSize)
+    {
+        reportFastTailCallDecision("Mismatch in incoming arg space");
+        return false;
+    }
+
+    if (fgReturnCount >= SET_EPILOGCNT_MAX)
+    {
+        reportFastTailCallDecision("Too many epilogs");
+        return false;
+    }
+
+    if (callee->IsVirtualStub() && (callee->gtCallType == CT_INDIRECT))
+    {
+        // Requires special codegen pattern that gets disassembled based on
+        // return address
+        reportFastTailCallDecision("Indirect VSD call");
+        return false;
+    }
+#endif
 
     // For Windows some struct parameters are copied on the local frame
     // and then passed by reference. We cannot fast tail call in these situation

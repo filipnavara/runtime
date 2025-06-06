@@ -5895,10 +5895,22 @@ unsigned CodeGen::getFirstArgWithStackSlot()
     return BAD_VAR_NUM;
 #elif defined(TARGET_AMD64)
     return 0;
-#else  // TARGET_X86
-    // Not implemented for x86.
-    NYI_X86("getFirstArgWithStackSlot not yet implemented for x86.");
+#elif defined(TARGET_X86)
+    // On x86 args are passed on the stack in reverse, so the base is the last stack argument.
+    for (unsigned i = compiler->info.compArgsCount; i != 0; i--)
+    {
+        const ABIPassingInformation& abiInfo = compiler->lvaGetParameterABIInfo(i - 1);
+        assert(abiInfo.NumSegments == 1);
+        if (abiInfo.Segment(0).IsPassedOnStack())
+        {
+            return i - 1;
+        }
+    }
+
+    assert(!"Expected to find stack parameter");
     return BAD_VAR_NUM;
+#else
+#error Not implemented
 #endif // TARGET_X86
 }
 

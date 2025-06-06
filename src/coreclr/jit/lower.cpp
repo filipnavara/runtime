@@ -3503,7 +3503,7 @@ void Lowering::RehomeArgForFastTailCall(unsigned int lclNum,
 #endif // DEBUG
 
             GenTree* value;
-#ifdef TARGET_ARM
+#ifndef TARGET_64BIT
             if (tmpTyp == TYP_LONG)
             {
                 GenTree* loResult = comp->gtNewLclFldNode(lclNum, TYP_INT, 0);
@@ -3511,7 +3511,7 @@ void Lowering::RehomeArgForFastTailCall(unsigned int lclNum,
                 value             = new (comp, GT_LONG) GenTreeOp(GT_LONG, TYP_LONG, loResult, hiResult);
             }
             else
-#endif // TARGET_ARM
+#endif // TARGET_64BIT
             {
                 value = comp->gtNewLclvNode(lclNum, tmpTyp);
             }

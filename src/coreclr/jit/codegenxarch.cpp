@@ -8576,7 +8576,14 @@ void CodeGen::genStoreRegToStackArg(var_types type, regNumber srcReg, int offset
     }
     else
     {
-        GetEmitter()->emitIns_AR_R(ins, attr, srcReg, REG_SPBASE, offset);
+        if (m_stkArgVarNum != BAD_VAR_NUM)
+        {
+            GetEmitter()->emitIns_S_R(ins, attr, srcReg, m_stkArgVarNum, m_stkArgOffset + offset);
+        }
+        else
+        {
+            GetEmitter()->emitIns_AR_R(ins, attr, srcReg, REG_SPBASE, offset);
+        }
     }
 #else  // !TARGET_X86
     assert(m_stkArgVarNum != BAD_VAR_NUM);

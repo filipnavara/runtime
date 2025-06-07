@@ -1850,11 +1850,7 @@ void CodeGen::genPutArgStkFieldList(GenTreePutArgStk* putArgStk, unsigned outArg
 
     // Evaluate each of the GT_FIELD_LIST items into their register
     // and store their register into the outgoing argument area.
-#ifndef TARGET_X86
     const unsigned argOffset = putArgStk->getArgOffset();
-#else
-    const unsigned argOffset = compiler->lvaParameterStackSize - putArgStk->getArgOffset();
-#endif
     for (GenTreeFieldList::Use& use : putArgStk->gtOp1->AsFieldList()->Uses())
     {
         GenTree* nextArgNode = use.GetNode();

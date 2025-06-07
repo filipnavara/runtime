@@ -4285,27 +4285,24 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee, const char** failReason)
         return false;
     }
 
-    //if (fgReturnCount >= SET_EPILOGCNT_MAX)
-    //{
-    //    reportFastTailCallDecision("Too many epilogs");
-    //    return false;
-    //}
-
     // Allow only one fast tailcall per method since we have limited number of
-    // epilogs that we can encoded into GC info.
+    // epilogs that we can encoded into GC info. This is conservative but we
+    // don't currently track the number of used epilogs in this phase.
     if (compTailCallUsed && !compTailCallViaJitHelperUsed)
     {
         reportFastTailCallDecision("Fast tailcall already used");
         return false;
     }
 
+    // VM uses special convention for VSD that looks at the call site.
     if (callee->IsVirtualStubRelativeIndir())
     {
         reportFastTailCallDecision("Indirect VSD call");
         return false;
     }
 
-    // TODO: These have some special rules (see fgMorphTailCallViaJitHelper)
+    // See fgMorphTailCallViaJitHelper. We need to avoid the call address expression
+    // order problem on x86 and it's just easier to bail out.
     if (callee->IsDelegateInvoke() || callee->IsVirtualVtable())
     {
         reportFastTailCallDecision("Delegate or virtual invocation");
@@ -4990,11 +4987,11 @@ GenTree* Compiler::fgMorphPotentialTailCall(GenTreeCall* call)
         // etc.) for the JIT helper case.
         if (tailCallViaJitHelper)
         {
-            fgMorphTailCallViaJitHelper(call);
-
             // Force re-evaluating the argInfo. fgMorphTailCallViaJitHelper will modify the
             // argument list, invalidating the argInfo.
             call->gtArgs.ResetFinalArgsAndABIInfo();
+
+            fgMorphTailCallViaJitHelper(call);
         }
 
         // Tail call via JIT helper: The VM can't use return address hijacking

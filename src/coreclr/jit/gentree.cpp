@@ -1811,7 +1811,7 @@ void CallArgs::PushLateBack(CallArg* arg)
 //
 void CallArgs::Remove(CallArg* arg)
 {
-    //assert(!m_hasAddedFinalArgs && !m_argsComplete);
+    assert(!m_hasAddedFinalArgs && !m_argsComplete);
 
     CallArg** slot = &m_head;
     while (*slot != nullptr)

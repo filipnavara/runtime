@@ -4285,9 +4285,30 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee, const char** failReason)
         return false;
     }
 
-    if (fgReturnCount >= SET_EPILOGCNT_MAX)
+    //if (fgReturnCount >= SET_EPILOGCNT_MAX)
+    //{
+    //    reportFastTailCallDecision("Too many epilogs");
+    //    return false;
+    //}
+
+    // Allow only one fast tailcall per method since we have limited number of
+    // epilogs that we can encoded into GC info.
+    if (compTailCallUsed && !compTailCallViaJitHelperUsed)
     {
-        reportFastTailCallDecision("Too many epilogs");
+        reportFastTailCallDecision("Fast tailcall already used");
+        return false;
+    }
+
+    if (callee->IsVirtualStubRelativeIndir())
+    {
+        reportFastTailCallDecision("Indirect VSD call");
+        return false;
+    }
+
+    // TODO: These have some special rules (see fgMorphTailCallViaJitHelper)
+    if (callee->IsDelegateInvoke() || callee->IsVirtualVtable())
+    {
+        reportFastTailCallDecision("Delegate or virtual invocation");
         return false;
     }
 #endif
@@ -4479,14 +4500,6 @@ GenTree* Compiler::fgMorphPotentialTailCall(GenTreeCall* call)
     if (call->gtCallMoreFlags & GTF_CALL_M_WRAPPER_DELEGATE_INV)
     {
         failTailCall("Non-standard calling convention");
-        return nullptr;
-    }
-#endif
-
-#ifdef TARGET_X86
-    if (call->IsVirtualStubRelativeIndir())
-    {
-        failTailCall("Cannot tailcall indirect VSD call");
         return nullptr;
     }
 #endif

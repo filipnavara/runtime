@@ -62,6 +62,8 @@ namespace ILCompiler.ObjectWriter
         private readonly uint _cpuType;
         private readonly uint _cpuSubType;
         private readonly List<MachSection> _sections = new();
+        private readonly List<SymbolDefinition> _temporaryLabels = new();
+        private uint _temporaryLabelsBaseIndex;
 
         // Exception handling sections
         private MachSection _compactUnwindSection;
@@ -425,10 +427,30 @@ namespace ILCompiler.ObjectWriter
                         // subtraction and the PC offset is baked into the addend.
                         // On x64, ld64 requires X86_64_RELOC_SUBTRACTOR + X86_64_RELOC_UNSIGNED
                         // for DWARF .eh_frame section.
+
+                        // Apple ld-prime linker needs a quirk where we restrict the addend to
+                        // signed 24-bit integer. We generate temporary label every time the
+                        // addend would overflow and adjust the addend to be relative to that label.
+                        var temporaryLabelOffset = _sections[sectionIndex].TemporaryLabelOffset;
+                        var temporaryLabelIndex = _sections[sectionIndex].TemporaryLabelIndex;
+                        addend -= offset - temporaryLabelOffset;
+                        if ((int)addend != (((int)addend << 8) >> 8))
+                        {
+                            var oldAddend = addend;
+                            addend += offset - temporaryLabelOffset;
+                            temporaryLabelOffset = offset;
+                            _temporaryLabels.Add(new SymbolDefinition(sectionIndex, temporaryLabelOffset, 0, false));
+                            _sections[sectionIndex].TemporaryLabelOffset = temporaryLabelOffset;
+                            _sections[sectionIndex].TemporaryLabelIndex = (uint)_temporaryLabels.Count;
+                        }
+
                         BinaryPrimitives.WriteInt32LittleEndian(
                             data,
                             BinaryPrimitives.ReadInt32LittleEndian(data) +
-                            (int)(addend - offset));
+                            (int)addend);
+
+                        // Abuse the addend to store the temporary label index.
+                        addend = temporaryLabelIndex;
                     }
                     else
                     {
@@ -440,8 +462,8 @@ namespace ILCompiler.ObjectWriter
                                 BinaryPrimitives.ReadInt32LittleEndian(data) +
                                 (int)addend);
                         }
+                        addend = 0;
                     }
-                    addend = 0;
                     break;
 
                 default:
@@ -467,6 +489,20 @@ namespace ILCompiler.ObjectWriter
             // We already emitted symbols for all non-debug sections in EmitSectionsAndLayout,
             // these symbols are local and we need to account for them.
             uint symbolIndex = (uint)_symbolTable.Count;
+            _temporaryLabelsBaseIndex = symbolIndex;
+            foreach (SymbolDefinition definition in _temporaryLabels)
+            {
+                MachSection section = _sections[definition.SectionIndex];
+                _symbolTable.Add(new MachSymbol
+                {
+                    Name = $"Ltmp{symbolIndex - _temporaryLabelsBaseIndex}",
+                    Section = section,
+                    Value = section.VirtualAddress + (ulong)definition.Value,
+                    Descriptor = 0,
+                    Type = N_SECT,
+                });
+                symbolIndex++;
+            }
             _dySymbolTable.LocalSymbolsIndex = 0;
             _dySymbolTable.LocalSymbolsCount = symbolIndex;
 
@@ -560,11 +596,16 @@ namespace ILCompiler.ObjectWriter
                 }
                 else if (symbolicRelocation.Type == IMAGE_REL_BASED_RELPTR32 && sectionIndex == EhFrameSectionIndex)
                 {
+                    // Addend is used to encode the temporary label index for ld-prime quirk.
+                    uint baseSymbolIndex = (uint)sectionIndex;
+                    if (symbolicRelocation.Addend != 0)
+                        baseSymbolIndex = (uint)(_temporaryLabelsBaseIndex + symbolicRelocation.Addend - 1);
+
                     sectionRelocations.Add(
                         new MachRelocation
                         {
                             Address = (int)symbolicRelocation.Offset,
-                            SymbolOrSectionIndex = (uint)sectionIndex,
+                            SymbolOrSectionIndex = baseSymbolIndex,
                             Length = 4,
                             RelocationType = X86_64_RELOC_SUBTRACTOR,
                             IsExternal = true,
@@ -673,12 +714,17 @@ namespace ILCompiler.ObjectWriter
                 }
                 else if (symbolicRelocation.Type == IMAGE_REL_BASED_RELPTR32)
                 {
+                    // Addend is used to encode the temporary label index for ld-prime quirk.
+                    uint baseSymbolIndex = (uint)sectionIndex;
+                    if (symbolicRelocation.Addend != 0)
+                        baseSymbolIndex = (uint)(_temporaryLabelsBaseIndex + symbolicRelocation.Addend - 1);
+
                     // This one is tough... needs to be represented by ARM64_RELOC_SUBTRACTOR + ARM64_RELOC_UNSIGNED.
                     sectionRelocations.Add(
                         new MachRelocation
                         {
                             Address = (int)symbolicRelocation.Offset,
-                            SymbolOrSectionIndex = (uint)sectionIndex,
+                            SymbolOrSectionIndex = baseSymbolIndex,
                             Length = 4,
                             RelocationType = ARM64_RELOC_SUBTRACTOR,
                             IsExternal = true,
@@ -887,6 +933,9 @@ namespace ILCompiler.ObjectWriter
             public IList<MachRelocation> Relocations => relocationCollection ??= new List<MachRelocation>();
             public Stream Stream => dataStream;
             public byte SectionIndex { get; set; }
+
+            public long TemporaryLabelOffset { get; set; }
+            public uint TemporaryLabelIndex { get; set; }
 
             public static int HeaderSize => 80; // 64-bit section
 

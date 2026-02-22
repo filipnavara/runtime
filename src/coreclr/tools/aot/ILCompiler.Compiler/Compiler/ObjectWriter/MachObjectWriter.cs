@@ -493,10 +493,10 @@ namespace ILCompiler.ObjectWriter
                 MachSection section = _sections[definition.SectionIndex];
                 _symbolTable.Add(new MachSymbol
                 {
-                    Name = $"Ltmp{symbolIndex - _temporaryLabelsBaseIndex}",
+                    Name = $"ltmp{symbolIndex - _temporaryLabelsBaseIndex}",
                     Section = section,
                     Value = section.VirtualAddress + (ulong)definition.Value,
-                    Descriptor = 0,
+                    Descriptor = N_NO_DEAD_STRIP,
                     Type = N_SECT,
                 });
                 symbolIndex++;

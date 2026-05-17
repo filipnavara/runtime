@@ -937,6 +937,13 @@ void emitter::emitIns_Jump(instruction ins, BasicBlock* dst)
     id->idInsOpt(INS_OPTS_JUMP);
     id->idAddr()->iiaBBlabel = dst;
 
+#ifdef DEBUG
+    if ((ins == INS_bl) && m_compiler->compCurBB->KindIs(BBJ_CALLFINALLY))
+    {
+        id->idDebugOnlyInfo()->idFinallyCall = true;
+    }
+#endif // DEBUG
+
     id->idjKeepLong = m_compiler->fgInDifferentRegions(m_compiler->compCurBB, dst);
 #ifdef DEBUG
     if (m_compiler->opts.compLongAddress)

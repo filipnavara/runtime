@@ -1232,9 +1232,6 @@ void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* lclNode)
     LclVarDsc* varDsc     = m_compiler->lvaGetDesc(lclNode);
     regNumber  targetReg  = lclNode->GetRegNum();
     var_types  targetType = varDsc->GetRegisterType(lclNode);
-    regNumber  baseReg    = REG_NA;
-    int        offset     = ppcGetLclFrameOffset(m_compiler, lclNode, &baseReg);
-    bool       largeOffset = !emitter::isValidSimm16(offset);
 
     genConsumeRegs(data);
 
@@ -1247,11 +1244,6 @@ void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* lclNode)
 
         if (targetReg != REG_NA)
         {
-            if (largeOffset)
-            {
-                (void)internalRegisters.GetSingle(lclNode);
-            }
-
             instGen_Set_Reg_To_Imm(emitActualTypeSize(targetType), targetReg, 0);
             genProduceReg(lclNode);
             return;
@@ -1271,6 +1263,9 @@ void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* lclNode)
     {
         inst_set_SV_var(lclNode);
 
+        regNumber baseReg     = REG_NA;
+        int       offset      = ppcGetLclFrameOffset(m_compiler, lclNode, &baseReg);
+        bool      largeOffset = !emitter::isValidSimm16(offset);
         regNumber tmpReg = largeOffset ? internalRegisters.GetSingle(lclNode) : REG_NA;
         genInstrWithConstant(ins_StoreFromSrc(dataReg, targetType), emitActualTypeSize(targetType), dataReg, baseReg,
                              offset, tmpReg);
@@ -1280,11 +1275,6 @@ void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* lclNode)
     }
     else
     {
-        if (largeOffset)
-        {
-            (void)internalRegisters.GetSingle(lclNode);
-        }
-
         GetEmitter()->emitIns_Mov(emitActualTypeSize(targetType), targetReg, dataReg, true);
         genProduceReg(lclNode);
     }

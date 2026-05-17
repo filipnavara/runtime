@@ -225,6 +225,17 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genReturn(treeNode);
             break;
 
+        case GT_MEMORYBARRIER:
+        {
+            BarrierKind barrierKind =
+                treeNode->gtFlags & GTF_MEMORYBARRIER_LOAD
+                    ? BARRIER_LOAD_ONLY
+                    : (treeNode->gtFlags & GTF_MEMORYBARRIER_STORE ? BARRIER_STORE_ONLY : BARRIER_FULL);
+
+            instGen_MemoryBarrier(barrierKind);
+            break;
+        }
+
         default:
             NYI_POWERPC64("genCodeForTreeNode");
             break;
@@ -859,6 +870,18 @@ void CodeGen::genZeroInitFrameUsingBlockInit(int untrLclHi, int untrLclLo, regNu
 
 void CodeGen::genSetGSSecurityCookie(regNumber initReg, bool* pInitRegZeroed)
 {
+}
+
+void CodeGen::instGen_MemoryBarrier(BarrierKind barrierKind)
+{
+#ifdef DEBUG
+    if (JitConfig.JitNoMemoryBarriers() == 1)
+    {
+        return;
+    }
+#endif // DEBUG
+
+    GetEmitter()->emitIns(INS_sync);
 }
 
 #ifdef PROFILING_SUPPORTED

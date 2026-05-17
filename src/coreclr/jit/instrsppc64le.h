@@ -24,6 +24,7 @@
 INST(invalid,       "INVALID",        0,    BAD_CODE)
 INST(nop,           "nop",            0,    0x60000000)
 INST(trap,          "trap",           0,    0x7FE00008)
+INST(sync,          "sync",           0,    0x7C0004AC)
 
 INST(add,           "add",            0,    0x7C000214)
 INST(subf,          "subf",           0,    0x7C000050)

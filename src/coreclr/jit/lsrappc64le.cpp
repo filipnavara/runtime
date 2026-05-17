@@ -31,6 +31,10 @@ int LinearScan::BuildNode(GenTree* tree)
             BuildDef(tree);
             return 0;
 
+        case GT_LCL_ADDR:
+            BuildDef(tree);
+            return 0;
+
         case GT_STORE_LCL_VAR:
         case GT_STORE_LCL_FLD:
             return BuildStoreLoc(tree->AsLclVarCommon());

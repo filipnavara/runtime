@@ -344,11 +344,6 @@ void CodeGen::genCodeForDivMod(GenTreeOp* tree)
     assert(tree->OperIs(GT_DIV, GT_UDIV, GT_MOD, GT_UMOD));
     NYI_IF(varTypeIsFloating(tree), "floating point div/mod");
 
-    if (tree->OperExceptions(m_compiler) != ExceptionSetFlags::None)
-    {
-        NYI_POWERPC64("exception-checking integer div/mod");
-    }
-
     GenTree*  op1       = tree->gtGetOp1();
     GenTree*  op2       = tree->gtGetOp2();
     emitAttr  attr      = emitActualTypeSize(tree);
@@ -357,19 +352,66 @@ void CodeGen::genCodeForDivMod(GenTreeOp* tree)
     genConsumeRegs(op1);
     genConsumeRegs(op2);
 
+    regNumber dividendReg = op1->GetRegNum();
+    regNumber divisorReg  = op2->GetRegNum();
+
+    ExceptionSetFlags exceptions = tree->OperExceptions(m_compiler);
+    if ((exceptions & ExceptionSetFlags::DivideByZeroException) != ExceptionSetFlags::None)
+    {
+        genJumpToThrowHlpBlk_la(SCK_DIV_BY_ZERO, INS_beq, divisorReg);
+    }
+
+    regNumber tempReg = REG_NA;
+
+    if (tree->OperIs(GT_DIV, GT_MOD) &&
+        ((exceptions & ExceptionSetFlags::ArithmeticException) != ExceptionSetFlags::None))
+    {
+        tempReg = internalRegisters.GetSingle(tree);
+
+        instGen_Set_Reg_To_Imm(attr, tempReg, -1);
+        GetEmitter()->emitIns_R_R((attr == EA_4BYTE) ? INS_cmpw : INS_cmpd, attr, divisorReg, tempReg);
+
+        BasicBlock* divLabel = genCreateTempLabel();
+        GetEmitter()->emitIns_J(INS_bne, divLabel);
+
+        ssize_t minValue = (attr == EA_4BYTE) ? INT32_MIN : INT64_MIN;
+        instGen_Set_Reg_To_Imm(attr, tempReg, minValue);
+        GetEmitter()->emitIns_R_R((attr == EA_4BYTE) ? INS_cmpw : INS_cmpd, attr, dividendReg, tempReg);
+
+        if (m_compiler->fgUseThrowHelperBlocks())
+        {
+            Compiler::AddCodeDsc* add = m_compiler->fgGetExcptnTarget(SCK_ARITH_EXCPN, m_compiler->compCurBB);
+            assert((add != nullptr) && "failed to find arithmetic exception throw block");
+            assert(add->acdUsed);
+
+            GetEmitter()->emitIns_J(INS_beq, add->acdDstBlk);
+        }
+        else
+        {
+            BasicBlock* skipLabel = genCreateTempLabel();
+            GetEmitter()->emitIns_J(INS_bne, skipLabel);
+
+            genEmitHelperCall(m_compiler->acdHelper(SCK_ARITH_EXCPN), 0, EA_UNKNOWN);
+
+            genDefineTempLabel(skipLabel);
+        }
+
+        genDefineTempLabel(divLabel);
+    }
+
     instruction divIns = genGetInsForOper(tree);
     if (tree->OperIs(GT_DIV, GT_UDIV))
     {
-        GetEmitter()->emitIns_R_R_R(divIns, attr, targetReg, op1->GetRegNum(), op2->GetRegNum());
+        GetEmitter()->emitIns_R_R_R(divIns, attr, targetReg, dividendReg, divisorReg);
     }
     else
     {
-        regNumber quotientReg = internalRegisters.GetSingle(tree);
+        regNumber quotientReg = (tempReg != REG_NA) ? tempReg : internalRegisters.GetSingle(tree);
         instruction mulIns    = (attr == EA_4BYTE) ? INS_mullw : INS_mulld;
 
-        GetEmitter()->emitIns_R_R_R(divIns, attr, quotientReg, op1->GetRegNum(), op2->GetRegNum());
-        GetEmitter()->emitIns_R_R_R(mulIns, attr, quotientReg, quotientReg, op2->GetRegNum());
-        GetEmitter()->emitIns_R_R_R(INS_subf, attr, targetReg, quotientReg, op1->GetRegNum());
+        GetEmitter()->emitIns_R_R_R(divIns, attr, quotientReg, dividendReg, divisorReg);
+        GetEmitter()->emitIns_R_R_R(mulIns, attr, quotientReg, quotientReg, divisorReg);
+        GetEmitter()->emitIns_R_R_R(INS_subf, attr, targetReg, quotientReg, dividendReg);
     }
 
     genProduceReg(tree);

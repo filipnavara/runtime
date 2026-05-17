@@ -21,6 +21,37 @@ static bool ppc64leNeedsLargeLclOffsetTemp(Compiler* compiler, GenTreeLclVarComm
     return !emitter::isValidSimm16(offset);
 }
 
+static bool ppc64leOffsetRangeFitsSimm16(int offset, unsigned size)
+{
+    assert(size > 0);
+    ssize_t lastOffset = static_cast<ssize_t>(offset) + static_cast<ssize_t>(size) - 1;
+    return emitter::isValidSimm16(offset) && emitter::isValidSimm16(lastOffset);
+}
+
+static bool ppc64leContainedAddrNeedsLargeOffsetTemp(Compiler* compiler, GenTree* addr, unsigned size)
+{
+    if (!addr->isContained())
+    {
+        return false;
+    }
+
+    int offset = 0;
+    if (addr->OperIsAddrMode())
+    {
+        offset = addr->AsAddrMode()->Offset();
+    }
+    else
+    {
+        assert(addr->OperIs(GT_LCL_ADDR));
+
+        bool fpBased = false;
+        offset = compiler->lvaFrameAddress(addr->AsLclVarCommon()->GetLclNum(), &fpBased) +
+                 addr->AsLclVarCommon()->GetLclOffs();
+    }
+
+    return !ppc64leOffsetRangeFitsSimm16(offset, size);
+}
+
 int LinearScan::BuildNode(GenTree* tree)
 {
     assert(!tree->isContained());
@@ -559,6 +590,10 @@ int LinearScan::BuildBlockStore(GenTreeBlk* blkNode)
             case GenTreeBlk::BlkOpKindUnroll:
                 buildInternalIntRegisterDefForNode(blkNode);
                 if (size >= 2 * REGSIZE_BYTES)
+                {
+                    buildInternalIntRegisterDefForNode(blkNode);
+                }
+                if (ppc64leContainedAddrNeedsLargeOffsetTemp(m_compiler, dstAddr, size))
                 {
                     buildInternalIntRegisterDefForNode(blkNode);
                 }

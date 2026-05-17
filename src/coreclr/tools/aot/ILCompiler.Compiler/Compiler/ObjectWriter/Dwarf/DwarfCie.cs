@@ -93,6 +93,19 @@ namespace ILCompiler.ObjectWriter
                     InitialCFAOffset = 0;
                     break;
 
+                case TargetArchitecture.Ppc64le:
+                    CodeAlignFactor = 1;
+                    DataAlignFactor = -8;
+                    ReturnAddressRegister = 65; // LR
+                    Instructions = new byte[]
+                    {
+                        DW_CFA_def_cfa,
+                        1, // SP
+                        0, // Offset from SP
+                    };
+                    InitialCFAOffset = 0;
+                    break;
+
                 case TargetArchitecture.RiscV64:
                     CodeAlignFactor = 1;
                     DataAlignFactor = -8;

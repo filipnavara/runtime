@@ -4373,6 +4373,8 @@ namespace Internal.JitInterface
                     return (uint)CorInfoArch.CORINFO_ARCH_ARM64;
                 case TargetArchitecture.LoongArch64:
                     return (uint)CorInfoArch.CORINFO_ARCH_LOONGARCH64;
+                case TargetArchitecture.Ppc64le:
+                    return (uint)CorInfoArch.CORINFO_ARCH_PPC64LE;
                 case TargetArchitecture.RiscV64:
                     return (uint)CorInfoArch.CORINFO_ARCH_RISCV64;
                 case TargetArchitecture.Wasm32:

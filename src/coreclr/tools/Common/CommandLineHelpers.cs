@@ -103,6 +103,7 @@ namespace System.CommandLine
                     Architecture.Arm64 => TargetArchitecture.ARM64,
                     Architecture.Wasm => TargetArchitecture.Wasm32,
                     Architecture.LoongArch64 => TargetArchitecture.LoongArch64,
+                    Architecture.Ppc64le => TargetArchitecture.Ppc64le,
                     Architecture.RiscV64 => TargetArchitecture.RiscV64,
                     _ => throw new NotImplementedException()
                 };
@@ -117,6 +118,7 @@ namespace System.CommandLine
                     "arm64" => TargetArchitecture.ARM64,
                     "wasm" => TargetArchitecture.Wasm32,
                     "loongarch64" => TargetArchitecture.LoongArch64,
+                    "ppc64le" => TargetArchitecture.Ppc64le,
                     "riscv64" => TargetArchitecture.RiscV64,
                     _ => throw new CommandLineException($"Target architecture '{token}' is not supported")
                 };

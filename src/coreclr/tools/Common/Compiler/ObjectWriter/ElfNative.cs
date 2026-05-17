@@ -28,6 +28,7 @@ namespace ILCompiler.ObjectWriter
         public const ushort EM_AARCH64 = 183;
         public const ushort EM_RISCV = 243;
         public const ushort EM_LOONGARCH = 258;
+        public const ushort EM_PPC64 = 21;
 
         // Section header type
         public const uint SHT_NULL = 0;
@@ -438,6 +439,39 @@ namespace ILCompiler.ObjectWriter
         public const uint R_AARCH64_TLS_TPREL = 1030;
         public const uint R_AARCH64_TLSDESC = 1031;
         public const uint R_AARCH64_IRELATIVE = 1032;
+
+        // Relocations (ppc64)
+        public const uint R_PPC64_NONE = 0;
+        public const uint R_PPC64_ADDR32 = 1;
+        public const uint R_PPC64_ADDR24 = 2;
+        public const uint R_PPC64_ADDR16 = 3;
+        public const uint R_PPC64_ADDR16_LO = 4;
+        public const uint R_PPC64_ADDR16_HI = 5;
+        public const uint R_PPC64_ADDR16_HA = 6;
+        public const uint R_PPC64_ADDR14 = 7;
+        public const uint R_PPC64_ADDR14_BRTAKEN = 8;
+        public const uint R_PPC64_ADDR14_BRNTAKEN = 9;
+        public const uint R_PPC64_REL24 = 10;
+        public const uint R_PPC64_REL14 = 11;
+        public const uint R_PPC64_REL14_BRTAKEN = 12;
+        public const uint R_PPC64_REL14_BRNTAKEN = 13;
+        public const uint R_PPC64_GOT16 = 14;
+        public const uint R_PPC64_GOT16_LO = 15;
+        public const uint R_PPC64_GOT16_HI = 16;
+        public const uint R_PPC64_GOT16_HA = 17;
+        public const uint R_PPC64_COPY = 19;
+        public const uint R_PPC64_GLOB_DAT = 20;
+        public const uint R_PPC64_JMP_SLOT = 21;
+        public const uint R_PPC64_RELATIVE = 22;
+        public const uint R_PPC64_UADDR32 = 24;
+        public const uint R_PPC64_UADDR64 = 25;
+        public const uint R_PPC64_REL32 = 26;
+        public const uint R_PPC64_PLT32 = 27;
+        public const uint R_PPC64_PLTREL32 = 28;
+        public const uint R_PPC64_ADDR64 = 38;
+        public const uint R_PPC64_REL64 = 44;
+        public const uint R_PPC64_TOC = 51;
+        public const uint R_PPC64_REL24_NOTOC = 116;
 
         // Relocations (loongarch64)
         public const uint R_LARCH_NONE = 0;

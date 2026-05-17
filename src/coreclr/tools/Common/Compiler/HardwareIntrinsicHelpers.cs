@@ -52,6 +52,9 @@ namespace ILCompiler
                 case TargetArchitecture.RiscV64:
                     RiscV64IntrinsicConstants.AddToBuilder(builder, flags);
                     break;
+                case TargetArchitecture.LoongArch64:
+                case TargetArchitecture.Ppc64le:
+                    break;
                 default:
                     Debug.Fail("Probably unimplemented");
                     break;

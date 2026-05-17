@@ -225,6 +225,10 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genLeaInstruction(treeNode->AsAddrMode());
             break;
 
+        case GT_INDEX_ADDR:
+            genCodeForIndexAddr(treeNode->AsIndexAddr());
+            break;
+
         case GT_STORE_LCL_VAR:
             genCodeForStoreLclVar(treeNode->AsLclVar());
             break;
@@ -590,6 +594,100 @@ void CodeGen::genLeaInstruction(GenTreeAddrMode* lea)
     }
 
     genProduceReg(lea);
+}
+
+//------------------------------------------------------------------------
+// genCodeForIndexAddr: Produce code for a GT_INDEX_ADDR node.
+//
+// Arguments:
+//    node - the GT_INDEX_ADDR node
+//
+void CodeGen::genCodeForIndexAddr(GenTreeIndexAddr* node)
+{
+    GenTree* const base  = node->Arr();
+    GenTree* const index = node->Index();
+
+    regNumber baseReg  = genConsumeReg(base);
+    regNumber indexReg = genConsumeReg(index);
+
+    gcInfo.gcMarkRegPtrVal(baseReg, base->TypeGet());
+    assert(!varTypeIsGC(index->TypeGet()));
+    assert(index->isUsedFromReg());
+
+    regNumber tempReg = internalRegisters.GetSingle(node);
+
+    if (node->IsBoundsChecked())
+    {
+        GetEmitter()->emitIns_R_R_I(INS_lwz, EA_4BYTE, tempReg, baseReg, node->gtLenOffset);
+
+        instruction cmpIns = (genActualType(index) == TYP_INT) ? INS_cmplw : INS_cmpld;
+        GetEmitter()->emitIns_R_R(cmpIns, EA_PTRSIZE, indexReg, tempReg);
+
+        if (m_compiler->fgUseThrowHelperBlocks())
+        {
+            Compiler::AddCodeDsc* add = m_compiler->fgGetExcptnTarget(SCK_RNGCHK_FAIL, m_compiler->compCurBB);
+            assert((add != nullptr) && "failed to find range check throw block");
+            assert(add->acdUsed);
+
+            GetEmitter()->emitIns_J(INS_bge, add->acdDstBlk);
+        }
+        else
+        {
+            BasicBlock* skipLabel = genCreateTempLabel();
+            GetEmitter()->emitIns_J(INS_blt, skipLabel);
+
+            genEmitHelperCall(m_compiler->acdHelper(SCK_RNGCHK_FAIL), 0, EA_UNKNOWN);
+
+            genDefineTempLabel(skipLabel);
+        }
+    }
+
+    regNumber indexForAddrReg = indexReg;
+    if (genActualType(index) == TYP_INT)
+    {
+        GetEmitter()->emitIns_R_R_I(INS_clrldi, EA_PTRSIZE, tempReg, indexReg, 32);
+        indexForAddrReg = tempReg;
+    }
+
+    regNumber targetReg = node->GetRegNum();
+    emitAttr  attr      = EA_PTRSIZE;
+
+    if (isPow2(node->gtElemSize))
+    {
+        unsigned scale = genLog2(node->gtElemSize);
+        if (scale == 0)
+        {
+            GetEmitter()->emitIns_R_R_R(INS_add, attr, targetReg, baseReg, indexForAddrReg);
+        }
+        else
+        {
+            GetEmitter()->emitIns_R_R_I(INS_sldi, attr, tempReg, indexForAddrReg, scale);
+            GetEmitter()->emitIns_R_R_R(INS_add, attr, targetReg, baseReg, tempReg);
+        }
+    }
+    else
+    {
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, static_cast<ssize_t>(node->gtElemSize));
+        GetEmitter()->emitIns_R_R_R(INS_mulld, attr, tempReg, indexForAddrReg, REG_R0);
+        GetEmitter()->emitIns_R_R_R(INS_add, attr, targetReg, baseReg, tempReg);
+    }
+
+    if (node->gtElemOffset != 0)
+    {
+        if (emitter::isValidSimm16(node->gtElemOffset))
+        {
+            GetEmitter()->emitIns_R_R_I(INS_addi, attr, targetReg, targetReg, node->gtElemOffset);
+        }
+        else
+        {
+            instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, node->gtElemOffset);
+            GetEmitter()->emitIns_R_R_R(INS_add, attr, targetReg, targetReg, REG_R0);
+        }
+    }
+
+    gcInfo.gcMarkRegSetNpt(base->gtGetRegMask());
+
+    genProduceReg(node);
 }
 
 void CodeGen::genCodeForStoreLclFld(GenTreeLclFld* tree)

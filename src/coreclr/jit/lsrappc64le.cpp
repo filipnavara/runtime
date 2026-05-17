@@ -86,7 +86,16 @@ int LinearScan::BuildNode(GenTree* tree)
         case GT_UMOD:
         {
             int srcCount = BuildBinaryUses(tree->AsOp());
-            if (tree->OperIs(GT_MOD, GT_UMOD))
+
+            bool needsInternalReg = tree->OperIs(GT_MOD, GT_UMOD);
+            if (tree->OperIs(GT_DIV) &&
+                ((tree->OperExceptions(m_compiler) & ExceptionSetFlags::ArithmeticException) !=
+                 ExceptionSetFlags::None))
+            {
+                needsInternalReg = true;
+            }
+
+            if (needsInternalReg)
             {
                 buildInternalIntRegisterDefForNode(tree);
                 buildInternalRegisterUses();

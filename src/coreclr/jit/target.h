@@ -39,7 +39,7 @@ inline bool compAppleArm64Abi()
 inline bool compFeatureArgSplit()
 {
     return TargetArchitecture::IsLoongArch64 || TargetArchitecture::IsArm32 || TargetArchitecture::IsRiscV64 ||
-           (TargetOS::IsWindows && TargetArchitecture::IsArm64);
+           TargetArchitecture::IsPpc64le || (TargetOS::IsWindows && TargetArchitecture::IsArm64);
 }
 inline bool compUnixX86Abi()
 {
@@ -60,6 +60,8 @@ inline bool compUnixX86Abi()
 #define TARGET_READABLE_NAME "LOONGARCH64"
 #elif defined(TARGET_RISCV64)
 #define TARGET_READABLE_NAME "RISCV64"
+#elif defined(TARGET_POWERPC64)
+#define TARGET_READABLE_NAME "PPC64LE"
 #elif defined(TARGET_WASM32)
 #define TARGET_READABLE_NAME "WASM32"
 #else
@@ -93,6 +95,10 @@ inline bool compUnixX86Abi()
 #define REGMASK_BITS              64
 #define CSE_CONST_SHARED_LOW_BITS 12
 
+#elif defined(TARGET_POWERPC64)
+#define REGMASK_BITS              64
+#define CSE_CONST_SHARED_LOW_BITS 12
+
 #elif defined(TARGET_WASM)
 #define REGMASK_BITS              32
 #define CSE_CONST_SHARED_LOW_BITS 12
@@ -112,10 +118,11 @@ inline bool compUnixX86Abi()
 //                       be assigned during register allocation.
 //    REG_NA           - Used to indicate that a register is either not yet assigned or not required.
 //
-#if defined(TARGET_ARM) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_WASM)
+#if defined(TARGET_ARM) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64) ||      \
+    defined(TARGET_WASM)
 enum _regNumber_enum : unsigned
 {
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_WASM)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64) || defined(TARGET_WASM)
 // LA64 and RV64 don't require JITREG_ workaround for Android (see register.h)
 #define REGDEF(name, rnum, mask, sname) REG_##name = rnum,
 #define REGALIAS(alias, realname)       REG_##alias = REG_##realname,
@@ -423,7 +430,8 @@ public:
     }
 };
 
-#if defined(TARGET_ARM) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_WASM)
+#if defined(TARGET_ARM) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64) ||      \
+    defined(TARGET_WASM)
 
 #define REGDEF(name, rnum, mask, sname)                                                                                \
     static constexpr regMaskTP RBM_##name =                                                                            \
@@ -604,6 +612,8 @@ static uint32_t BitScanForward(const regMaskTP& mask)
 #include "targetloongarch64.h"
 #elif defined(TARGET_RISCV64)
 #include "targetriscv64.h"
+#elif defined(TARGET_POWERPC64)
+#include "targetppc64le.h"
 #elif defined(TARGET_WASM)
 #include "targetwasm.h"
 #else
@@ -929,7 +939,7 @@ extern const regMaskSmall regMasks[REG_COUNT];
 inline SingleTypeRegSet genSingleTypeFloatMask(regNumber reg ARM_ARG(var_types type /* = TYP_DOUBLE */))
 {
 #if defined(TARGET_AMD64) || defined(TARGET_ARM64) || defined(TARGET_X86) || defined(TARGET_LOONGARCH64) ||            \
-    defined(TARGET_RISCV64)
+    defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     assert(genIsValidFloatReg(reg));
     assert((unsigned)reg < ArrLen(regMasks));
     return regMasks[reg];

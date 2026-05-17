@@ -13,6 +13,8 @@
 #include "registerloongarch64.h"
 #elif defined(TARGET_RISCV64)
 #include "registerriscv64.h"
+#elif defined(TARGET_POWERPC64)
+#include "registerppc64le.h"
 #elif defined(TARGET_WASM)
 #include "registerwasm.h"
 #else

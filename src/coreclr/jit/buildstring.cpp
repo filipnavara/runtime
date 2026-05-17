@@ -26,6 +26,8 @@
 #define TARGET_ARCH_STRING "loongarch64"
 #elif defined(TARGET_RISCV64)
 #define TARGET_ARCH_STRING "riscv64"
+#elif defined(TARGET_POWERPC64)
+#define TARGET_ARCH_STRING "ppc64le"
 #else
 #define TARGET_ARCH_STRING "Unknown"
 #endif

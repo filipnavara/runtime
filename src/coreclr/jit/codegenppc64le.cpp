@@ -15,6 +15,7 @@
 
 static constexpr int PPC_LINK_REGISTER_SAVE_SIZE = REGSIZE_BYTES;
 static constexpr int PPC_FRAME_POINTER_SAVE_SIZE = REGSIZE_BYTES;
+static constexpr int PPC_MAX_UNWIND_SAVE_OFFSET  = 2047;
 
 static instruction ppcCompareInsForCondition(GenCondition cond, emitAttr cmpSize)
 {
@@ -126,6 +127,21 @@ static bool ppcOffsetRangeFitsSimm16(int offset, unsigned size)
     assert(size > 0);
     ssize_t lastOffset = static_cast<ssize_t>(offset) + static_cast<ssize_t>(size) - 1;
     return emitter::isValidSimm16(offset) && emitter::isValidSimm16(lastOffset);
+}
+
+static unsigned ppcGetDeferredFrameSizeForSaveArea(unsigned frameSize, unsigned saveAreaSize, unsigned maxDeferredSize)
+{
+    assert(saveAreaSize >= REGSIZE_BYTES);
+    assert(maxDeferredSize <= frameSize);
+
+    unsigned maxSaveOffset = frameSize + saveAreaSize - REGSIZE_BYTES;
+    if (maxSaveOffset <= PPC_MAX_UNWIND_SAVE_OFFSET)
+    {
+        return 0;
+    }
+
+    // Keep the fixed save area encodable by applying most of a large local frame after saving the registers.
+    return maxDeferredSize & ~(STACK_ALIGN - 1);
 }
 
 void CodeGen::genFnEpilog(BasicBlock* block)
@@ -3018,11 +3034,37 @@ void CodeGen::genPopCalleeSavedRegisters(bool jmpEpilog)
     int framePointerOffset = m_compiler->compLclFrameSize;
     int linkRegisterOffset = framePointerOffset;
     int calleeSaveOffset   = linkRegisterOffset + PPC_LINK_REGISTER_SAVE_SIZE;
+    int saveAreaSize       = PPC_LINK_REGISTER_SAVE_SIZE + (m_compiler->compCalleeRegsPushed * REGSIZE_BYTES);
 
     if (isFramePointerUsed())
     {
         linkRegisterOffset = framePointerOffset + PPC_FRAME_POINTER_SAVE_SIZE;
         calleeSaveOffset   = linkRegisterOffset + PPC_LINK_REGISTER_SAVE_SIZE;
+        saveAreaSize += PPC_FRAME_POINTER_SAVE_SIZE;
+    }
+
+    unsigned maxDeferredFrameSize = static_cast<unsigned>(framePointerOffset);
+    if (isFramePointerUsed())
+    {
+        maxDeferredFrameSize = min(maxDeferredFrameSize, static_cast<unsigned>(genSPtoFPdelta()));
+    }
+
+    unsigned deferredFrameSize = ppcGetDeferredFrameSizeForSaveArea(static_cast<unsigned>(framePointerOffset),
+                                                                    static_cast<unsigned>(saveAreaSize),
+                                                                    maxDeferredFrameSize);
+    if (deferredFrameSize != 0)
+    {
+        framePointerOffset -= static_cast<int>(deferredFrameSize);
+        linkRegisterOffset -= static_cast<int>(deferredFrameSize);
+        calleeSaveOffset -= static_cast<int>(deferredFrameSize);
+
+        if ((calleeSaveOffset + (genCountBits(regsToRestoreMask) * REGSIZE_BYTES) - REGSIZE_BYTES) >
+            PPC_MAX_UNWIND_SAVE_OFFSET)
+        {
+            NYI_POWERPC64("large callee-saved register offset");
+        }
+
+        genStackPointerAdjustment(deferredFrameSize, REG_TMP_0, nullptr, /* reportUnwindData */ true);
     }
 
     genRestoreCalleeSavedRegistersHelp(regsToRestoreMask, REG_SPBASE, calleeSaveOffset, /* reportUnwindData */ true);
@@ -3049,7 +3091,7 @@ void CodeGen::genPopCalleeSavedRegisters(bool jmpEpilog)
     int totalFrameSize = genTotalFrameSize();
     if (totalFrameSize != 0)
     {
-        genStackPointerAdjustment(totalFrameSize, REG_TMP_0, nullptr, /* reportUnwindData */ true);
+        genStackPointerAdjustment(totalFrameSize - deferredFrameSize, REG_TMP_0, nullptr, /* reportUnwindData */ true);
     }
 }
 
@@ -3066,9 +3108,20 @@ void CodeGen::genAllocLclFrame(unsigned frameSize, regNumber initReg, bool* pIni
 
     if (totalFrameSize != 0)
     {
-        genStackPointerAdjustment(-static_cast<ssize_t>(totalFrameSize), initReg, pInitRegZeroed, true);
+        unsigned saveAreaSize = framePointerSaveSize + PPC_LINK_REGISTER_SAVE_SIZE + calleeSaveSize;
 
-        unsigned framePointerOffset = frameSize;
+        unsigned maxDeferredFrameSize = frameSize;
+        if (isFramePointerUsed())
+        {
+            maxDeferredFrameSize = min(maxDeferredFrameSize, static_cast<unsigned>(genSPtoFPdelta()));
+        }
+
+        unsigned deferredFrameSize = ppcGetDeferredFrameSizeForSaveArea(frameSize, saveAreaSize, maxDeferredFrameSize);
+        unsigned initialFrameSize  = totalFrameSize - deferredFrameSize;
+
+        genStackPointerAdjustment(-static_cast<ssize_t>(initialFrameSize), initReg, pInitRegZeroed, true);
+
+        unsigned framePointerOffset = frameSize - deferredFrameSize;
         unsigned linkRegisterOffset = framePointerOffset + framePointerSaveSize;
         unsigned calleeSaveOffset   = linkRegisterOffset + PPC_LINK_REGISTER_SAVE_SIZE;
 
@@ -3091,7 +3144,14 @@ void CodeGen::genAllocLclFrame(unsigned frameSize, regNumber initReg, bool* pIni
 
         if (isFramePointerUsed())
         {
-            genEstablishFramePointer(genSPtoFPdelta(), /* reportUnwindData */ true);
+            genEstablishFramePointer(genSPtoFPdelta() - static_cast<int>(deferredFrameSize),
+                                     /* reportUnwindData */ true);
+        }
+
+        if (deferredFrameSize != 0)
+        {
+            genStackPointerAdjustment(-static_cast<ssize_t>(deferredFrameSize), initReg, pInitRegZeroed,
+                                      /* reportUnwindData */ !isFramePointerUsed());
         }
     }
 }

@@ -7189,9 +7189,9 @@ void CodeGen::genReturn(GenTree* treeNode)
             genConsumeReg(op1);
 
 #if HAS_FIXED_REGISTER_SET
-#if defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
             genSimpleReturn(treeNode);
-#else // !TARGET_ARM64 || !TARGET_LOONGARCH64 || !TARGET_RISCV64
+#else // !TARGET_ARM64 || !TARGET_LOONGARCH64 || !TARGET_RISCV64 || !TARGET_POWERPC64
 #if defined(TARGET_X86)
             if (varTypeUsesFloatReg(treeNode))
             {
@@ -7230,7 +7230,7 @@ void CodeGen::genReturn(GenTree* treeNode)
 
                 inst_Mov_Extend(targetType, /* srcInReg */ true, retReg, op1->GetRegNum(), /* canSkip */ true);
             }
-#endif // !TARGET_ARM64 || !TARGET_LOONGARCH64 || !TARGET_RISCV64
+#endif // !TARGET_ARM64 || !TARGET_LOONGARCH64 || !TARGET_RISCV64 || !TARGET_POWERPC64
 #endif // HAS_FIXED_REGISTER_SET
         }
     }

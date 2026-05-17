@@ -35,6 +35,20 @@ int LinearScan::BuildNode(GenTree* tree)
         case GT_STORE_LCL_FLD:
             return BuildStoreLoc(tree->AsLclVarCommon());
 
+        case GT_STOREIND:
+        {
+            int srcCount = BuildIndir(tree->AsIndir());
+            if (!tree->gtGetOp2()->isContained())
+            {
+                BuildUse(tree->gtGetOp2());
+                srcCount++;
+            }
+            return srcCount;
+        }
+
+        case GT_IND:
+            return BuildIndir(tree->AsIndir());
+
         case GT_CAST:
         {
             int srcCount = BuildCastUses(tree->AsCast(), RBM_NONE);
@@ -54,6 +68,20 @@ int LinearScan::BuildNode(GenTree* tree)
         default:
             return BuildSimple(tree);
     }
+}
+
+int LinearScan::BuildIndir(GenTreeIndir* indirTree)
+{
+    assert(!indirTree->TypeIs(TYP_STRUCT));
+
+    int srcCount = BuildIndirUses(indirTree);
+
+    if (!indirTree->OperIs(GT_STOREIND))
+    {
+        BuildDef(indirTree);
+    }
+
+    return srcCount;
 }
 
 #endif // TARGET_POWERPC64

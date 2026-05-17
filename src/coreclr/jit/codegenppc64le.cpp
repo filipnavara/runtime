@@ -189,6 +189,14 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genCodeForStoreLclFld(treeNode->AsLclFld());
             break;
 
+        case GT_IND:
+            genCodeForIndir(treeNode->AsIndir());
+            break;
+
+        case GT_STOREIND:
+            genCodeForStoreInd(treeNode->AsStoreInd());
+            break;
+
         case GT_JCMP:
             genCodeForJumpCompare(treeNode->AsOpCC());
             break;
@@ -366,6 +374,63 @@ void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* lclNode)
         GetEmitter()->emitIns_Mov(emitActualTypeSize(targetType), targetReg, dataReg, true);
         genProduceReg(lclNode);
     }
+}
+
+void CodeGen::genCodeForIndir(GenTreeIndir* tree)
+{
+    assert(tree->OperIs(GT_IND));
+    NYI_IF(tree->TypeIs(TYP_STRUCT), "GT_IND: struct load not supported");
+    NYI_IF((tree->gtFlags & GTF_IND_VOLATILE) != 0, "GT_IND: volatile load not supported");
+
+    GenTree* addr = tree->Addr();
+    assert(!addr->isContained());
+
+    ssize_t offset = tree->Offset();
+    if (!emitter::isValidSimm16(offset))
+    {
+        NYI_POWERPC64("GT_IND: large offset");
+    }
+
+    regNumber baseReg   = genConsumeReg(addr);
+    var_types targetType = tree->TypeGet();
+    regNumber targetReg  = tree->GetRegNum();
+
+    GetEmitter()->emitIns_R_AR(ins_Load(targetType), emitActualTypeSize(targetType), targetReg, baseReg,
+                               static_cast<int>(offset));
+
+    genProduceReg(tree);
+}
+
+void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
+{
+    NYI_IF(tree->TypeIs(TYP_STRUCT), "GT_STOREIND: struct store not supported");
+    NYI_IF((tree->gtFlags & GTF_IND_VOLATILE) != 0, "GT_STOREIND: volatile store not supported");
+    NYI_IF(gcInfo.gcIsWriteBarrierCandidate(tree) != GCInfo::WBF_NoBarrier, "GT_STOREIND: write barrier not supported");
+
+    GenTree* addr = tree->Addr();
+    GenTree* data = tree->Data();
+    assert(!addr->isContained());
+
+    ssize_t offset = tree->Offset();
+    if (!emitter::isValidSimm16(offset))
+    {
+        NYI_POWERPC64("GT_STOREIND: large offset");
+    }
+
+    regNumber baseReg = genConsumeReg(addr);
+
+    genConsumeRegs(data);
+    if (data->isContained())
+    {
+        NYI_POWERPC64("GT_STOREIND: contained data");
+    }
+
+    var_types type    = tree->TypeGet();
+    regNumber dataReg = data->GetRegNum();
+    assert(dataReg != REG_NA);
+
+    GetEmitter()->emitIns_AR_R(ins_StoreFromSrc(dataReg, type), emitActualTypeSize(type), dataReg, baseReg,
+                               static_cast<int>(offset));
 }
 
 void CodeGen::genCodeForJumpCompare(GenTreeOpCC* tree)

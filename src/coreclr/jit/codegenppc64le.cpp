@@ -209,6 +209,12 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             break;
         }
 
+        case GT_BITCAST:
+            NYI_IF(varTypeUsesFloatReg(treeNode) || varTypeUsesFloatReg(treeNode->gtGetOp1()),
+                   "floating-point bitcast");
+            genCodeForBitCast(treeNode->AsOp());
+            break;
+
         case GT_LCL_VAR:
             genCodeForLclVar(treeNode->AsLclVar());
             break;

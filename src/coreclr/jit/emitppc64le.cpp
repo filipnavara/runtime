@@ -413,6 +413,10 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_subf:
         case INS_mullw:
         case INS_mulld:
+        case INS_divw:
+        case INS_divd:
+        case INS_divwu:
+        case INS_divdu:
             code = ppcEncodeXForm(code, id->idReg1(), id->idReg2(), id->idReg3());
             break;
 

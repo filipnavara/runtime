@@ -145,6 +145,9 @@
 #if defined(TARGET_RISCV64)
 #error Cannot define both TARGET_X86 and TARGET_RISCV64
 #endif
+#if defined(TARGET_POWERPC64)
+#error Cannot define both TARGET_X86 and TARGET_POWERPC64
+#endif
 #if defined(TARGET_WASM32)
 #error Cannot define both TARGET_X86 and TARGET_WASM32
 #endif
@@ -163,6 +166,9 @@
 #endif
 #if defined(TARGET_RISCV64)
 #error Cannot define both TARGET_AMD64 and TARGET_RISCV64
+#endif
+#if defined(TARGET_POWERPC64)
+#error Cannot define both TARGET_AMD64 and TARGET_POWERPC64
 #endif
 #if defined(TARGET_WASM32)
 #error Cannot define both TARGET_AMD64 and TARGET_WASM32
@@ -183,6 +189,9 @@
 #if defined(TARGET_RISCV64)
 #error Cannot define both TARGET_ARM and TARGET_RISCV64
 #endif
+#if defined(TARGET_POWERPC64)
+#error Cannot define both TARGET_ARM and TARGET_POWERPC64
+#endif
 #if defined(TARGET_WASM32)
 #error Cannot define both TARGET_ARM and TARGET_WASM32
 #endif
@@ -201,6 +210,9 @@
 #endif
 #if defined(TARGET_RISCV64)
 #error Cannot define both TARGET_ARM64 and TARGET_RISCV64
+#endif
+#if defined(TARGET_POWERPC64)
+#error Cannot define both TARGET_ARM64 and TARGET_POWERPC64
 #endif
 #if defined(TARGET_WASM32)
 #error Cannot define both TARGET_ARM64 and TARGET_WASM32
@@ -221,6 +233,9 @@
 #if defined(TARGET_RISCV64)
 #error Cannot define both TARGET_LOONGARCH64 and TARGET_RISCV64
 #endif
+#if defined(TARGET_POWERPC64)
+#error Cannot define both TARGET_LOONGARCH64 and TARGET_POWERPC64
+#endif
 #if defined(TARGET_WASM32)
 #error Cannot define both TARGET_LOONGARCH64 and TARGET_WASM32
 #endif
@@ -240,8 +255,34 @@
 #if defined(TARGET_LOONGARCH64)
 #error Cannot define both TARGET_RISCV64 and TARGET_LOONGARCH64
 #endif
+#if defined(TARGET_POWERPC64)
+#error Cannot define both TARGET_RISCV64 and TARGET_POWERPC64
+#endif
 #if defined(TARGET_WASM32)
 #error Cannot define both TARGET_RISCV64 and TARGET_WASM32
+#endif
+
+#elif defined(TARGET_POWERPC64)
+#if defined(TARGET_X86)
+#error Cannot define both TARGET_POWERPC64 and TARGET_X86
+#endif
+#if defined(TARGET_AMD64)
+#error Cannot define both TARGET_POWERPC64 and TARGET_AMD64
+#endif
+#if defined(TARGET_ARM)
+#error Cannot define both TARGET_POWERPC64 and TARGET_ARM
+#endif
+#if defined(TARGET_ARM64)
+#error Cannot define both TARGET_POWERPC64 and TARGET_ARM64
+#endif
+#if defined(TARGET_LOONGARCH64)
+#error Cannot define both TARGET_POWERPC64 and TARGET_LOONGARCH64
+#endif
+#if defined(TARGET_RISCV64)
+#error Cannot define both TARGET_POWERPC64 and TARGET_RISCV64
+#endif
+#if defined(TARGET_WASM32)
+#error Cannot define both TARGET_POWERPC64 and TARGET_WASM32
 #endif
 
 #elif defined(TARGET_WASM32)
@@ -262,6 +303,9 @@
 #endif
 #if defined(TARGET_RISCV64)
 #error Cannot define both TARGET_WASM32 and TARGET_RISCV64
+#endif
+#if defined(TARGET_POWERPC64)
+#error Cannot define both TARGET_WASM32 and TARGET_POWERPC64
 #endif
 
 #else

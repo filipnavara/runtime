@@ -235,7 +235,7 @@ const char* getRegNameFloat(regNumber reg, var_types type)
 
     return regNamesFloat[reg];
 
-#elif defined(TARGET_LOONGARCH64)
+#elif defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
 
     static const char* regNamesFloat[] = {
 #define REGDEF(name, rnum, mask, sname) sname,
@@ -363,6 +363,13 @@ const char* dspRegRange(regMaskTP regMask, size_t& minSiz, const char* sep, regN
                         inRegRange = true;
                         sep        = "-";
                     }
+#elif defined(TARGET_POWERPC64)
+                    if ((REG_R3 <= regNum && regNum <= REG_R12) || (REG_R14 <= regNum && regNum <= REG_R30))
+                    {
+                        regHead    = regNum;
+                        inRegRange = true;
+                        sep        = "-";
+                    }
 #elif defined(TARGET_RISCV64)
                     if ((REG_A0 <= regNum && REG_A7 >= regNum) || REG_T0 == regNum || REG_T1 == regNum ||
                         (REG_T2 <= regNum && REG_T6 >= regNum))
@@ -387,6 +394,8 @@ const char* dspRegRange(regMaskTP regMask, size_t& minSiz, const char* sep, regN
                      || (regNum == REG_R28))                    // last register before FP
 #elif defined(TARGET_LOONGARCH64)
             else if ((regNum == regLast) || (regNum == REG_A7) || (regNum == REG_T8))
+#elif defined(TARGET_POWERPC64)
+            else if ((regNum == regLast) || (regNum == REG_R12))
 #else
             else if (regNum == regLast)
 #endif

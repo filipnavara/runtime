@@ -11,7 +11,7 @@ Param(
   [switch]$coverage,
   [string]$testscope,
   [switch]$testnobuild,
-  [ValidateSet("x86","x64","arm","arm64","wasm")][string[]][Alias('a')]$arch = @([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()),
+  [ValidateSet("x86","x64","arm","arm64","ppc64le","wasm")][string[]][Alias('a')]$arch = @([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()),
   [switch]$cross = $false,
   [string][Alias('s')]$subset,
   [ValidateSet("Debug","Release","Checked")][string][Alias('rc')]$runtimeConfiguration,
@@ -33,7 +33,7 @@ Param(
 
 function Get-Help() {
   Write-Host "Common settings:"
-  Write-Host "  -arch (-a)                     Target platform: x86, x64, arm, arm64, or wasm."
+  Write-Host "  -arch (-a)                     Target platform: x86, x64, arm, arm64, ppc64le, or wasm."
   Write-Host "                                 Pass a comma-separated list to build for multiple architectures."
   Write-Host "                                 [Default: Your machine's architecture.]"
   Write-Host "  -binaryLog (-bl)               Output binary log."

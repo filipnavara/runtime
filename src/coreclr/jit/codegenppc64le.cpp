@@ -265,6 +265,10 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genRangeCheck(treeNode);
             break;
 
+        case GT_RETURNTRAP:
+            genCodeForReturnTrap(treeNode->AsOp());
+            break;
+
         case GT_RETURN:
         case GT_RETFILT:
             genReturn(treeNode);
@@ -415,6 +419,30 @@ void CodeGen::genCodeForDivMod(GenTreeOp* tree)
     }
 
     genProduceReg(tree);
+}
+
+//------------------------------------------------------------------------
+// genCodeForReturnTrap: Produce code for a GT_RETURNTRAP node.
+//
+// Arguments:
+//    tree - the GT_RETURNTRAP node
+//
+void CodeGen::genCodeForReturnTrap(GenTreeOp* tree)
+{
+    assert(tree->OperIs(GT_RETURNTRAP));
+
+    GenTree* data = tree->gtOp1;
+    genConsumeRegs(data);
+
+    instGen_Set_Reg_To_Imm(EA_4BYTE, REG_R0, 0);
+    GetEmitter()->emitIns_R_R(INS_cmpw, EA_4BYTE, data->GetRegNum(), REG_R0);
+
+    BasicBlock* skipLabel = genCreateTempLabel();
+    GetEmitter()->emitIns_J(INS_beq, skipLabel);
+
+    genEmitHelperCall(CORINFO_HELP_STOP_FOR_GC, 0, EA_UNKNOWN);
+
+    genDefineTempLabel(skipLabel);
 }
 
 void CodeGen::genCodeForCompare(GenTreeOp* tree)

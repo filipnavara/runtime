@@ -12,6 +12,39 @@
 #include "lower.h"
 #include "gcinfo.h"
 
+static instruction ppcCompareInsForCondition(GenCondition cond, emitAttr cmpSize)
+{
+    assert((cmpSize == EA_4BYTE) || (cmpSize == EA_8BYTE));
+    return cond.IsUnsigned() ? ((cmpSize == EA_4BYTE) ? INS_cmplw : INS_cmpld)
+                             : ((cmpSize == EA_4BYTE) ? INS_cmpw : INS_cmpd);
+}
+
+static instruction ppcBranchInsForCondition(GenCondition cond)
+{
+    switch (cond.GetCode())
+    {
+        case GenCondition::EQ:
+            return INS_beq;
+        case GenCondition::NE:
+            return INS_bne;
+        case GenCondition::SLT:
+        case GenCondition::ULT:
+            return INS_blt;
+        case GenCondition::SLE:
+        case GenCondition::ULE:
+            return INS_ble;
+        case GenCondition::SGE:
+        case GenCondition::UGE:
+            return INS_bge;
+        case GenCondition::SGT:
+        case GenCondition::UGT:
+            return INS_bgt;
+        default:
+            NO_WAY("unexpected PPC64LE branch condition");
+            return INS_invalid;
+    }
+}
+
 void CodeGen::genFnEpilog(BasicBlock* block)
 {
     GetEmitter()->emitIns(INS_blr);
@@ -73,6 +106,15 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             break;
         }
 
+        case GT_EQ:
+        case GT_NE:
+        case GT_LT:
+        case GT_LE:
+        case GT_GE:
+        case GT_GT:
+            genCodeForCompare(treeNode->AsOp());
+            break;
+
         case GT_LCL_VAR:
             genCodeForLclVar(treeNode->AsLclVar());
             break;
@@ -102,6 +144,42 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             NYI_POWERPC64("genCodeForTreeNode");
             break;
     }
+}
+
+void CodeGen::genCodeForCompare(GenTreeOp* tree)
+{
+    assert(tree->OperIsCmpCompare());
+    assert(!tree->TypeIs(TYP_VOID));
+
+    GenTree* op1 = tree->gtOp1;
+    GenTree* op2 = tree->gtOp2;
+
+    assert(!op1->isUsedFromMemory());
+    assert(!op2->isUsedFromMemory());
+
+    var_types op1Type = genActualType(op1->TypeGet());
+    var_types op2Type = genActualType(op2->TypeGet());
+    assert(genTypeSize(op1Type) == genTypeSize(op2Type));
+    assert(varTypeIsIntegralOrI(op1Type));
+
+    genConsumeOperands(tree);
+
+    emitAttr     cmpSize   = emitActualTypeSize(op1Type);
+    GenCondition cond      = GenCondition::FromIntegralRelop(tree);
+    instruction  cmp       = ppcCompareInsForCondition(cond, cmpSize);
+    regNumber    targetReg = tree->GetRegNum();
+    assert(targetReg != REG_NA);
+
+    GetEmitter()->emitIns_R_R(cmp, cmpSize, op1->GetRegNum(), op2->GetRegNum());
+
+    BasicBlock* doneLabel = genCreateTempLabel();
+
+    instGen_Set_Reg_To_Imm(emitActualTypeSize(tree), targetReg, 0);
+    GetEmitter()->emitIns_J(ppcBranchInsForCondition(GenCondition::Reverse(cond)), doneLabel);
+    instGen_Set_Reg_To_Imm(emitActualTypeSize(tree), targetReg, 1);
+
+    genDefineTempLabel(doneLabel);
+    genProduceReg(tree);
 }
 
 void CodeGen::genCodeForLclVar(GenTreeLclVar* tree)
@@ -226,41 +304,10 @@ void CodeGen::genCodeForJumpCompare(GenTreeOpCC* tree)
     regNumber regOp2  = op2->GetRegNum();
 
     GenCondition cond = tree->gtCondition;
-    instruction  cmp  = cond.IsUnsigned() ? ((cmpSize == EA_4BYTE) ? INS_cmplw : INS_cmpld)
-                                          : ((cmpSize == EA_4BYTE) ? INS_cmpw : INS_cmpd);
+    instruction  cmp  = ppcCompareInsForCondition(cond, cmpSize);
     GetEmitter()->emitIns_R_R(cmp, cmpSize, regOp1, regOp2);
 
-    instruction branch = INS_invalid;
-    switch (cond.GetCode())
-    {
-        case GenCondition::EQ:
-            branch = INS_beq;
-            break;
-        case GenCondition::NE:
-            branch = INS_bne;
-            break;
-        case GenCondition::SLT:
-        case GenCondition::ULT:
-            branch = INS_blt;
-            break;
-        case GenCondition::SLE:
-        case GenCondition::ULE:
-            branch = INS_ble;
-            break;
-        case GenCondition::SGE:
-        case GenCondition::UGE:
-            branch = INS_bge;
-            break;
-        case GenCondition::SGT:
-        case GenCondition::UGT:
-            branch = INS_bgt;
-            break;
-        default:
-            NO_WAY("unexpected branch condition");
-            break;
-    }
-
-    GetEmitter()->emitIns_J(branch, m_compiler->compCurBB->GetTrueTarget());
+    GetEmitter()->emitIns_J(ppcBranchInsForCondition(cond), m_compiler->compCurBB->GetTrueTarget());
 
     BasicBlock* falseTarget = m_compiler->compCurBB->GetFalseTarget();
     if (!m_compiler->compCurBB->CanRemoveJumpToTarget(falseTarget, m_compiler))

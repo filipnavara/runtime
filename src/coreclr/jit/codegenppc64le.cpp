@@ -43,6 +43,36 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             break;
         }
 
+        case GT_SUB:
+        {
+            GenTree*  op1       = treeNode->gtGetOp1();
+            GenTree*  op2       = treeNode->gtGetOp2();
+            regNumber targetReg = treeNode->GetRegNum();
+
+            genConsumeRegs(op1);
+            genConsumeRegs(op2);
+            GetEmitter()->emitIns_R_R_R(INS_subf, emitActualTypeSize(treeNode), targetReg, op2->GetRegNum(),
+                                        op1->GetRegNum());
+            genProduceReg(treeNode);
+            break;
+        }
+
+        case GT_AND:
+        case GT_OR:
+        case GT_XOR:
+        {
+            GenTree*  op1       = treeNode->gtGetOp1();
+            GenTree*  op2       = treeNode->gtGetOp2();
+            regNumber targetReg = treeNode->GetRegNum();
+
+            genConsumeRegs(op1);
+            genConsumeRegs(op2);
+            GetEmitter()->emitIns_R_R_R(genGetInsForOper(treeNode), emitActualTypeSize(treeNode), targetReg,
+                                        op1->GetRegNum(), op2->GetRegNum());
+            genProduceReg(treeNode);
+            break;
+        }
+
         case GT_LCL_VAR:
             genCodeForLclVar(treeNode->AsLclVar());
             break;
@@ -279,6 +309,14 @@ instruction CodeGen::genGetInsForOper(GenTree* treeNode)
     {
         case GT_ADD:
             return INS_add;
+        case GT_SUB:
+            return INS_subf;
+        case GT_AND:
+            return INS_and;
+        case GT_OR:
+            return INS_or;
+        case GT_XOR:
+            return INS_xor;
         default:
             NYI_POWERPC64("genGetInsForOper");
             return INS_invalid;

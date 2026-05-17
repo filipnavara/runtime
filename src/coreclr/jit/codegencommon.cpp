@@ -7510,6 +7510,22 @@ void CodeGen::genStructReturn(GenTree* treeNode)
     genConsumeRegs(op1);
 
 #if FEATURE_MULTIREG_RET
+#ifdef TARGET_POWERPC64
+    auto ppc64leLoadReturnRegFromLocal = [this](var_types type, regNumber toReg, unsigned lclNum, unsigned lclOffs) {
+        if (varTypeUsesIntReg(type))
+        {
+            bool      fpBased     = false;
+            int       frameOffset = m_compiler->lvaFrameAddress(lclNum, &fpBased) + static_cast<int>(lclOffs);
+            regNumber baseReg     = fpBased ? REG_FPBASE : REG_SPBASE;
+            genInstrWithConstant(ins_Load(type), emitTypeSize(type), toReg, baseReg, frameOffset, toReg);
+        }
+        else
+        {
+            GetEmitter()->emitIns_R_S(ins_Load(type), emitTypeSize(type), toReg, lclNum, lclOffs);
+        }
+    };
+#endif // TARGET_POWERPC64
+
     // Right now the only enregisterable structs supported are SIMD vector types.
     if (genIsRegCandidateLocal(actualOp1))
     {
@@ -7535,7 +7551,11 @@ void CodeGen::genStructReturn(GenTree* treeNode)
         unsigned  offset = retTypeDesc.GetReturnFieldOffset(0);
         regNumber toReg  = retTypeDesc.GetABIReturnReg(0, m_compiler->info.compCallConv);
 
+#ifdef TARGET_POWERPC64
+        ppc64leLoadReturnRegFromLocal(type, toReg, lclNode->GetLclNum(), offset);
+#else
         GetEmitter()->emitIns_R_S(ins_Load(type), emitTypeSize(type), toReg, lclNode->GetLclNum(), offset);
+#endif
         if (regCount > 1)
         {
             assert(regCount == 2);
@@ -7544,7 +7564,11 @@ void CodeGen::genStructReturn(GenTree* treeNode)
             offset = retTypeDesc.GetReturnFieldOffset(1);
             toReg  = retTypeDesc.GetABIReturnReg(1, m_compiler->info.compCallConv);
 
+#ifdef TARGET_POWERPC64
+            ppc64leLoadReturnRegFromLocal(type, toReg, lclNode->GetLclNum(), offset);
+#else
             GetEmitter()->emitIns_R_S(ins_Load(type), emitTypeSize(type), toReg, lclNode->GetLclNum(), offset);
+#endif
         }
 #else // !TARGET_LOONGARCH64 && !TARGET_RISCV64
 
@@ -7603,7 +7627,11 @@ void CodeGen::genStructReturn(GenTree* treeNode)
                 unsigned fieldVarNum = varDsc->lvFieldLclStart + i;
                 assert(m_compiler->lvaGetDesc(fieldVarNum)->lvOnFrame);
 
+#ifdef TARGET_POWERPC64
+                ppc64leLoadReturnRegFromLocal(type, toReg, fieldVarNum, 0);
+#else
                 GetEmitter()->emitIns_R_S(ins_Load(type), emitTypeSize(type), toReg, fieldVarNum, 0);
+#endif
             }
             else
             {

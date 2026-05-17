@@ -448,6 +448,14 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
             code = ppcEncodeRldicl(code, id->idReg1(), id->idReg2(), 0, static_cast<unsigned>(emitGetInsSC(id)));
             break;
 
+        case INS_sldi:
+        {
+            unsigned shift = static_cast<unsigned>(emitGetInsSC(id));
+            assert(shift < 64);
+            code = ppcEncodeRldicl(code, id->idReg1(), id->idReg2(), shift, 63 - shift);
+            break;
+        }
+
         case INS_mr:
         case INS_mov:
             code = code | (ppcReg(id->idReg2()) << 21) | (ppcReg(id->idReg1()) << 16) | (ppcReg(id->idReg2()) << 11);

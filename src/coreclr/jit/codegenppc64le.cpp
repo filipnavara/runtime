@@ -11,6 +11,7 @@
 #include "codegen.h"
 #include "lower.h"
 #include "gcinfo.h"
+#include "patchpointinfo.h"
 
 static constexpr int PPC_LINK_REGISTER_SAVE_SIZE = REGSIZE_BYTES;
 
@@ -2550,6 +2551,33 @@ void CodeGen::genZeroInitFrameUsingBlockInit(int untrLclHi, int untrLclLo, regNu
 
 void CodeGen::genSetGSSecurityCookie(regNumber initReg, bool* pInitRegZeroed)
 {
+    assert(m_compiler->compGeneratingProlog);
+
+    if (!m_compiler->getNeedsGSSecurityCookie())
+    {
+        return;
+    }
+
+    if (m_compiler->opts.IsOSR() && m_compiler->info.compPatchpointInfo->HasSecurityCookie())
+    {
+        return;
+    }
+
+    if (m_compiler->gsGlobalSecurityCookieAddr == nullptr)
+    {
+        noway_assert(m_compiler->gsGlobalSecurityCookieVal != 0);
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, initReg, m_compiler->gsGlobalSecurityCookieVal);
+    }
+    else
+    {
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, initReg,
+                               reinterpret_cast<ssize_t>(m_compiler->gsGlobalSecurityCookieAddr));
+        GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, initReg, initReg, 0);
+    }
+
+    GetEmitter()->emitIns_S_R(INS_std, EA_PTRSIZE, initReg, m_compiler->lvaGSSecurityCookie, 0);
+
+    *pInitRegZeroed = false;
 }
 
 void CodeGen::instGen_MemoryBarrier(BarrierKind barrierKind)
@@ -2593,7 +2621,32 @@ void CodeGen::genCaptureFuncletPrologEpilogInfo()
 
 void CodeGen::genEmitGSCookieCheck(bool tailCall)
 {
-    NYI_POWERPC64("genEmitGSCookieCheck");
+    noway_assert(m_compiler->gsGlobalSecurityCookieAddr || m_compiler->gsGlobalSecurityCookieVal);
+
+    regMaskTP tmpRegs    = genGetGSCookieTempRegs(tailCall);
+    regNumber regGSConst = genFirstRegNumFromMaskAndToggle(tmpRegs);
+    regNumber regGSValue = genFirstRegNumFromMaskAndToggle(tmpRegs);
+
+    if (m_compiler->gsGlobalSecurityCookieAddr == nullptr)
+    {
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, regGSConst, m_compiler->gsGlobalSecurityCookieVal);
+    }
+    else
+    {
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, regGSConst,
+                               reinterpret_cast<ssize_t>(m_compiler->gsGlobalSecurityCookieAddr));
+        GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, regGSConst, regGSConst, 0);
+    }
+
+    GetEmitter()->emitIns_R_S(INS_ld, EA_PTRSIZE, regGSValue, m_compiler->lvaGSSecurityCookie, 0);
+
+    GetEmitter()->emitIns_R_R(INS_cmpd, EA_PTRSIZE, regGSConst, regGSValue);
+
+    BasicBlock* gsCheckBlk = genCreateTempLabel();
+    GetEmitter()->emitIns_J(INS_beq, gsCheckBlk);
+
+    genEmitHelperCall(CORINFO_HELP_FAIL_FAST, 0, EA_UNKNOWN);
+    genDefineTempLabel(gsCheckBlk);
 }
 
 void CodeGen::genJmpPlaceVarArgs()

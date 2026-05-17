@@ -2288,7 +2288,7 @@ instruction CodeGenInterface::ins_Load(var_types srcType, bool aligned /*=false*
     }
 #elif defined(TARGET_POWERPC64)
     assert(!varTypeIsSIMD(srcType));
-    return srcType == TYP_DOUBLE ? INS_ld : INS_lwz;
+    return srcType == TYP_DOUBLE ? INS_lfd : INS_lfs;
 #else
     NYI("ins_Load");
     return INS_none;
@@ -2667,7 +2667,7 @@ instruction CodeGenInterface::ins_Store(var_types dstType, bool aligned /*=false
     }
 #elif defined(TARGET_POWERPC64)
     assert(!varTypeIsSIMD(dstType));
-    return dstType == TYP_DOUBLE ? INS_std : INS_stw;
+    return dstType == TYP_DOUBLE ? INS_stfd : INS_stfs;
 #else
     NYI("ins_Store");
     return INS_none;

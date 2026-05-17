@@ -14,6 +14,7 @@
 #include "patchpointinfo.h"
 
 static constexpr int PPC_LINK_REGISTER_SAVE_SIZE = REGSIZE_BYTES;
+static constexpr int PPC_FRAME_POINTER_SAVE_SIZE = REGSIZE_BYTES;
 
 static instruction ppcCompareInsForCondition(GenCondition cond, emitAttr cmpSize)
 {
@@ -122,12 +123,46 @@ static bool ppcOffsetRangeFitsSimm16(int offset, unsigned size)
 
 void CodeGen::genFnEpilog(BasicBlock* block)
 {
+    ScopedSetVariable<bool> setGeneratingEpilog(&m_compiler->compGeneratingEpilog, true);
+
+    VarSetOps::Assign(m_compiler, gcInfo.gcVarPtrSetCur, GetEmitter()->emitInitGCrefVars);
+    gcInfo.gcRegGCrefSetCur = GetEmitter()->emitInitGCrefRegs;
+    gcInfo.gcRegByrefSetCur = GetEmitter()->emitInitByrefRegs;
+
+    m_compiler->unwindBegEpilog();
+
     genPopCalleeSavedRegisters(/* jmpEpilog */ false);
     GetEmitter()->emitIns(INS_blr);
+    m_compiler->unwindReturn(REG_NA);
+
+    m_compiler->unwindEndEpilog();
 }
 
 void CodeGen::genCodeForTreeNode(GenTree* treeNode)
 {
+#ifdef DEBUG
+    // Validate that all operands for the current node are consumed in order.
+    // LSRA relies on this order when it inserts copies for constrained uses.
+    lastConsumedNode = nullptr;
+    if (m_compiler->verbose)
+    {
+        unsigned seqNum = treeNode->gtSeqNum; // Useful for setting a conditional break in Visual Studio.
+        m_compiler->gtDispLIRNode(treeNode, "Generating: ");
+    }
+#endif // DEBUG
+
+    if (treeNode->IsReuseRegVal())
+    {
+        assert(treeNode->OperIs(GT_CNS_INT, GT_CNS_DBL));
+        JITDUMP("  TreeNode is marked ReuseReg\n");
+        return;
+    }
+
+    if (treeNode->isContained())
+    {
+        return;
+    }
+
     switch (treeNode->OperGet())
     {
         case GT_START_NONGC:
@@ -2257,6 +2292,30 @@ void CodeGen::genStackPointerAdjustment(ssize_t spAdjustment, regNumber tmpReg, 
     }
 }
 
+void CodeGen::genEstablishFramePointer(int delta, bool reportUnwindData)
+{
+    assert(m_compiler->compGeneratingProlog);
+
+    if (delta == 0)
+    {
+        GetEmitter()->emitIns_Mov(EA_PTRSIZE, REG_FPBASE, REG_SPBASE, /* canSkip */ false);
+    }
+    else
+    {
+        if (!emitter::isValidSimm16(delta))
+        {
+            NYI_POWERPC64("large frame pointer delta");
+        }
+
+        GetEmitter()->emitIns_R_R_I(INS_addi, EA_PTRSIZE, REG_FPBASE, REG_SPBASE, delta);
+    }
+
+    if (reportUnwindData)
+    {
+        m_compiler->unwindSetFrameReg(REG_FPBASE, delta);
+    }
+}
+
 void CodeGen::genSaveCalleeSavedRegistersHelp(regMaskTP regsToSaveMask, int lowestCalleeSavedOffset)
 {
     if (regsToSaveMask == RBM_NONE)
@@ -2427,25 +2486,41 @@ bool CodeGen::genEmitOptimizedGCWriteBarrier(GCInfo::WriteBarrierForm writeBarri
 int CodeGenInterface::genSPtoFPdelta() const
 {
     assert(isFramePointerUsed());
-    NYI_POWERPC64("frame pointer based frames");
-    return 0;
+
+    int delta = m_compiler->compLclFrameSize;
+    if ((m_compiler->lvaMonAcquired != BAD_VAR_NUM) && !m_compiler->opts.IsOSR())
+    {
+        delta -= TARGET_POINTER_SIZE;
+    }
+
+    assert(delta >= 0);
+    return delta;
 }
 
 int CodeGenInterface::genTotalFrameSize() const
 {
     assert(!IsUninitialized(m_compiler->compCalleeRegsPushed));
 
-    int totalFrameSize = PPC_LINK_REGISTER_SAVE_SIZE + (m_compiler->compCalleeRegsPushed * REGSIZE_BYTES) +
-                         m_compiler->compLclFrameSize;
-    assert(totalFrameSize >= 0);
-    return totalFrameSize;
+    int fixedFrameSize = PPC_LINK_REGISTER_SAVE_SIZE;
+    if (isFramePointerUsed())
+    {
+        fixedFrameSize += PPC_FRAME_POINTER_SAVE_SIZE;
+    }
+
+    unsigned totalFrameSize = fixedFrameSize + (m_compiler->compCalleeRegsPushed * REGSIZE_BYTES) +
+                              m_compiler->compLclFrameSize;
+    totalFrameSize          = roundUp(totalFrameSize, STACK_ALIGN);
+
+    assert(totalFrameSize <= INT_MAX);
+    return static_cast<int>(totalFrameSize);
 }
 
 int CodeGenInterface::genCallerSPtoFPdelta() const
 {
     assert(isFramePointerUsed());
-    NYI_POWERPC64("frame pointer based frames");
-    return 0;
+    int callerSPtoFPdelta = genCallerSPtoInitialSPdelta() + genSPtoFPdelta();
+    assert(callerSPtoFPdelta <= 0);
+    return callerSPtoFPdelta;
 }
 
 int CodeGenInterface::genCallerSPtoInitialSPdelta() const
@@ -2868,11 +2943,6 @@ void CodeGen::genPushCalleeSavedRegisters(regNumber initReg, bool* pInitRegZeroe
 
     regMaskTP rsPushRegs = regSet.rsGetModifiedCalleeSavedRegsMask();
 
-    if (isFramePointerUsed())
-    {
-        NYI_POWERPC64("frame pointer based frames");
-    }
-
     if ((rsPushRegs & RBM_FLT_CALLEE_SAVED) != RBM_NONE)
     {
         NYI_POWERPC64("floating-point callee-saved registers");
@@ -2908,8 +2978,16 @@ void CodeGen::genPopCalleeSavedRegisters(bool jmpEpilog)
         NYI_POWERPC64("floating-point callee-saved registers");
     }
 
-    int linkRegisterOffset = m_compiler->compLclFrameSize;
+    int framePointerOffset = m_compiler->compLclFrameSize;
+    int linkRegisterOffset = framePointerOffset;
     int calleeSaveOffset   = linkRegisterOffset + PPC_LINK_REGISTER_SAVE_SIZE;
+
+    if (isFramePointerUsed())
+    {
+        linkRegisterOffset = framePointerOffset + PPC_FRAME_POINTER_SAVE_SIZE;
+        calleeSaveOffset   = linkRegisterOffset + PPC_LINK_REGISTER_SAVE_SIZE;
+    }
+
     genRestoreCalleeSavedRegistersHelp(regsToRestoreMask, REG_SPBASE, calleeSaveOffset, /* reportUnwindData */ true);
 
     if (!emitter::isValidSimm16(linkRegisterOffset))
@@ -2919,6 +2997,17 @@ void CodeGen::genPopCalleeSavedRegisters(bool jmpEpilog)
 
     GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_R0, REG_SPBASE, linkRegisterOffset);
     GetEmitter()->emitIns_R_R(INS_mtlr, EA_PTRSIZE, REG_R0, REG_R0);
+
+    if (isFramePointerUsed())
+    {
+        if (!emitter::isValidSimm16(framePointerOffset))
+        {
+            NYI_POWERPC64("large frame pointer save offset");
+        }
+
+        GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_FPBASE, REG_SPBASE, framePointerOffset);
+        m_compiler->unwindSaveReg(REG_FPBASE, framePointerOffset);
+    }
 
     int totalFrameSize = genTotalFrameSize();
     if (totalFrameSize != 0)
@@ -2933,23 +3022,40 @@ void CodeGen::genOSRHandleTier0CalleeSavedRegistersAndFrame()
 
 void CodeGen::genAllocLclFrame(unsigned frameSize, regNumber initReg, bool* pInitRegZeroed, regMaskTP maskArgRegsLiveIn)
 {
-    unsigned calleeSaveSize = m_compiler->compCalleeRegsPushed * REGSIZE_BYTES;
-    unsigned totalFrameSize = frameSize + PPC_LINK_REGISTER_SAVE_SIZE + calleeSaveSize;
+    unsigned calleeSaveSize       = m_compiler->compCalleeRegsPushed * REGSIZE_BYTES;
+    unsigned framePointerSaveSize = isFramePointerUsed() ? PPC_FRAME_POINTER_SAVE_SIZE : 0;
+    unsigned totalFrameSize       = frameSize + framePointerSaveSize + PPC_LINK_REGISTER_SAVE_SIZE + calleeSaveSize;
+    totalFrameSize                = roundUp(totalFrameSize, STACK_ALIGN);
 
     if (totalFrameSize != 0)
     {
         genStackPointerAdjustment(-static_cast<ssize_t>(totalFrameSize), initReg, pInitRegZeroed, true);
 
-        if (!emitter::isValidSimm16(frameSize) || (frameSize > 2047))
+        unsigned framePointerOffset = frameSize;
+        unsigned linkRegisterOffset = framePointerOffset + framePointerSaveSize;
+        unsigned calleeSaveOffset   = linkRegisterOffset + PPC_LINK_REGISTER_SAVE_SIZE;
+
+        if (!emitter::isValidSimm16(calleeSaveOffset) || (calleeSaveOffset > 2047))
         {
             NYI_POWERPC64("large link register save offset");
         }
 
-        GetEmitter()->emitIns_R_R(INS_mflr, EA_PTRSIZE, REG_R0, REG_R0);
-        GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R0, REG_SPBASE, static_cast<int>(frameSize));
+        if (isFramePointerUsed())
+        {
+            GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_FPBASE, REG_SPBASE,
+                                        static_cast<int>(framePointerOffset));
+            m_compiler->unwindSaveReg(REG_FPBASE, static_cast<int>(framePointerOffset));
+        }
 
-        genSaveCalleeSavedRegistersHelp(regSet.rsMaskCalleeSaved,
-                                        static_cast<int>(frameSize + PPC_LINK_REGISTER_SAVE_SIZE));
+        GetEmitter()->emitIns_R_R(INS_mflr, EA_PTRSIZE, REG_R0, REG_R0);
+        GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R0, REG_SPBASE, static_cast<int>(linkRegisterOffset));
+
+        genSaveCalleeSavedRegistersHelp(regSet.rsMaskCalleeSaved, static_cast<int>(calleeSaveOffset));
+
+        if (isFramePointerUsed())
+        {
+            genEstablishFramePointer(genSPtoFPdelta(), /* reportUnwindData */ true);
+        }
     }
 }
 
@@ -3125,17 +3231,126 @@ void CodeGen::genProfilingLeaveCallback(unsigned helper)
 
 void CodeGen::genFuncletProlog(BasicBlock* block)
 {
-    NYI_POWERPC64("genFuncletProlog");
+    assert(block != nullptr);
+    assert(m_compiler->bbIsFuncletBeg(block));
+
+    ScopedSetVariable<bool> setGeneratingProlog(&m_compiler->compGeneratingProlog, true);
+
+    gcInfo.gcResetForBB();
+
+    m_compiler->unwindBegProlog();
+
+    int frameSize = genFuncletInfo.fiSpDelta;
+    assert(frameSize < 0);
+
+    regMaskTP maskSaveRegs       = genFuncletInfo.fiSaveRegs & RBM_CALLEE_SAVED;
+    int       calleeSavedOffset  = genFuncletInfo.fiSP_to_CalleeSaved_delta;
+    int       framePointerOffset = calleeSavedOffset - PPC_LINK_REGISTER_SAVE_SIZE - PPC_FRAME_POINTER_SAVE_SIZE;
+    int       linkRegisterOffset = framePointerOffset + PPC_FRAME_POINTER_SAVE_SIZE;
+
+    assert(framePointerOffset >= 0);
+
+    if (!emitter::isValidSimm16(calleeSavedOffset) || (calleeSavedOffset > 2047))
+    {
+        NYI_POWERPC64("large funclet callee-saved offset");
+    }
+
+    genStackPointerAdjustment(frameSize, REG_TMP_0, nullptr, /* reportUnwindData */ true);
+
+    GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_FPBASE, REG_SPBASE, framePointerOffset);
+    m_compiler->unwindSaveReg(REG_FPBASE, framePointerOffset);
+
+    GetEmitter()->emitIns_R_R(INS_mflr, EA_PTRSIZE, REG_R0, REG_R0);
+    GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R0, REG_SPBASE, linkRegisterOffset);
+
+    genSaveCalleeSavedRegistersHelp(maskSaveRegs, calleeSavedOffset);
+
+    m_compiler->unwindEndProlog();
 }
 
 void CodeGen::genFuncletEpilog(BasicBlock* block)
 {
-    NYI_POWERPC64("genFuncletEpilog");
+    ScopedSetVariable<bool> setGeneratingEpilog(&m_compiler->compGeneratingEpilog, true);
+
+    m_compiler->unwindBegEpilog();
+
+    int frameSize = genFuncletInfo.fiSpDelta;
+    assert(frameSize < 0);
+
+    regMaskTP maskSaveRegs       = genFuncletInfo.fiSaveRegs & RBM_CALLEE_SAVED;
+    int       calleeSavedOffset  = genFuncletInfo.fiSP_to_CalleeSaved_delta;
+    int       framePointerOffset = calleeSavedOffset - PPC_LINK_REGISTER_SAVE_SIZE - PPC_FRAME_POINTER_SAVE_SIZE;
+    int       linkRegisterOffset = framePointerOffset + PPC_FRAME_POINTER_SAVE_SIZE;
+
+    assert(framePointerOffset >= 0);
+
+    if (!emitter::isValidSimm16(calleeSavedOffset) || (calleeSavedOffset > 2047))
+    {
+        NYI_POWERPC64("large funclet callee-saved offset");
+    }
+
+    genRestoreCalleeSavedRegistersHelp(maskSaveRegs, REG_SPBASE, calleeSavedOffset, /* reportUnwindData */ true);
+
+    GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_R0, REG_SPBASE, linkRegisterOffset);
+    GetEmitter()->emitIns_R_R(INS_mtlr, EA_PTRSIZE, REG_R0, REG_R0);
+
+    GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_FPBASE, REG_SPBASE, framePointerOffset);
+    m_compiler->unwindSaveReg(REG_FPBASE, framePointerOffset);
+
+    genStackPointerAdjustment(-frameSize, REG_TMP_0, nullptr, /* reportUnwindData */ true);
+
+    GetEmitter()->emitIns(INS_blr);
+    m_compiler->unwindReturn(REG_NA);
+
+    m_compiler->unwindEndEpilog();
 }
 
 void CodeGen::genCaptureFuncletPrologEpilogInfo()
 {
-    NYI_POWERPC64("genCaptureFuncletPrologEpilogInfo");
+    if (!m_compiler->ehAnyFunclets())
+    {
+        return;
+    }
+
+    assert(isFramePointerUsed());
+    assert(m_compiler->lvaDoneFrameLayout == Compiler::FINAL_FRAME_LAYOUT);
+
+    regMaskTP rsMaskSaveRegs = regSet.rsMaskCalleeSaved;
+
+    int funcletFrameSize   = m_compiler->lvaOutgoingArgSpaceSize;
+    int framePointerOffset = funcletFrameSize;
+    int linkRegisterOffset = framePointerOffset + PPC_FRAME_POINTER_SAVE_SIZE;
+    int calleeSavedOffset  = linkRegisterOffset + PPC_LINK_REGISTER_SAVE_SIZE;
+
+    genFuncletInfo.fiSP_to_CalleeSaved_delta = calleeSavedOffset;
+
+    funcletFrameSize = calleeSavedOffset + (genCountBits(rsMaskSaveRegs) * REGSIZE_BYTES);
+
+    int deltaPSP = -TARGET_POINTER_SIZE;
+    if ((m_compiler->lvaMonAcquired != BAD_VAR_NUM) && !m_compiler->opts.IsOSR())
+    {
+        deltaPSP -= TARGET_POINTER_SIZE;
+    }
+
+    funcletFrameSize = funcletFrameSize - deltaPSP;
+    funcletFrameSize = roundUp(static_cast<unsigned>(funcletFrameSize), STACK_ALIGN);
+
+    genFuncletInfo.fiSpDelta  = -funcletFrameSize;
+    genFuncletInfo.fiSaveRegs = rsMaskSaveRegs;
+
+#ifdef DEBUG
+    if (verbose)
+    {
+        printf("\n");
+        printf("Funclet prolog / epilog info\n");
+        printf("                        Save regs: ");
+        dspRegMask(genFuncletInfo.fiSaveRegs);
+        printf("\n");
+        printf("  SP to CalleeSaved location delta: %d\n", genFuncletInfo.fiSP_to_CalleeSaved_delta);
+        printf("                       SP delta: %d\n", genFuncletInfo.fiSpDelta);
+    }
+    assert(genFuncletInfo.fiSP_to_CalleeSaved_delta >= 0);
+#endif // DEBUG
 }
 
 void CodeGen::genEmitGSCookieCheck(bool tailCall)

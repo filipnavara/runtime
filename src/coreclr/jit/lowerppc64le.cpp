@@ -71,13 +71,14 @@ GenTree* Lowering::LowerJTrue(GenTreeOp* jtrue)
 
 GenTree* Lowering::LowerStoreIndir(GenTreeStoreInd* node)
 {
-    return node;
+    ContainCheckStoreIndir(node);
+    return node->gtNext;
 }
 
 GenTree* Lowering::LowerMul(GenTreeOp* mul)
 {
     ContainCheckMul(mul);
-    return mul;
+    return mul->gtNext;
 }
 
 GenTree* Lowering::LowerBinaryArithmetic(GenTreeOp* binOp)
@@ -115,7 +116,7 @@ GenTree* Lowering::LowerBinaryArithmetic(GenTreeOp* binOp)
     }
 
     ContainCheckBinary(binOp);
-    return binOp;
+    return binOp->gtNext;
 }
 
 void Lowering::LowerBlockStore(GenTreeBlk* blkNode)
@@ -133,8 +134,14 @@ void Lowering::LowerCast(GenTree* node)
 
 GenTree* Lowering::LowerStoreLoc(GenTreeLclVarCommon* tree)
 {
+    if (tree->OperIs(GT_STORE_LCL_FLD))
+    {
+        // We should only encounter this for lclVars that are lvDoNotEnregister.
+        verifyLclFldDoNotEnregister(tree->GetLclNum());
+    }
+
     ContainCheckStoreLoc(tree);
-    return tree;
+    return tree->gtNext;
 }
 
 void Lowering::LowerRotate(GenTree* tree)

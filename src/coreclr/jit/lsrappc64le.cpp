@@ -54,6 +54,15 @@ int LinearScan::BuildNode(GenTree* tree)
             return 1;
         }
 
+        case GT_INDEX_ADDR:
+        {
+            int srcCount = BuildBinaryUses(tree->AsOp());
+            buildInternalIntRegisterDefForNode(tree);
+            buildInternalRegisterUses();
+            BuildDef(tree);
+            return srcCount;
+        }
+
         case GT_STORE_LCL_VAR:
         case GT_STORE_LCL_FLD:
             return BuildStoreLoc(tree->AsLclVarCommon());

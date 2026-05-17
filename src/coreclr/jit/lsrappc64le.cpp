@@ -104,6 +104,28 @@ int LinearScan::BuildNode(GenTree* tree)
         case GT_JCMP:
             return BuildCmp(tree);
 
+        case GT_BOUNDS_CHECK:
+        {
+            GenTreeBoundsChk* node       = tree->AsBoundsChk();
+            var_types         indexType  = genActualType(node->GetIndex());
+            var_types         lengthType = genActualType(node->GetArrayLength());
+
+            if ((indexType == TYP_INT) && (lengthType == TYP_LONG))
+            {
+                buildInternalIntRegisterDefForNode(tree);
+            }
+            if ((lengthType == TYP_INT) && (indexType == TYP_LONG))
+            {
+                buildInternalIntRegisterDefForNode(tree);
+            }
+
+            buildInternalRegisterUses();
+
+            int srcCount = BuildOperandUses(node->GetIndex());
+            srcCount += BuildOperandUses(node->GetArrayLength());
+            return srcCount;
+        }
+
         case GT_PUTARG_STK:
             return BuildPutArgStk(tree->AsPutArgStk());
 

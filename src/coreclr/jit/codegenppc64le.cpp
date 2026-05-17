@@ -2522,12 +2522,20 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
             assert(source->AsIntConCommon()->IconValue() == 0);
 
             instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, 0);
-            emit->emitIns_S_R(storeIns, storeAttr, REG_R0, varNumOut, argOffsetOut);
+
+            regNumber baseReg = REG_NA;
+            int       offset  = ppcGetLclFrameOffset(m_compiler, varNumOut, argOffsetOut, &baseReg);
+            regNumber tmpReg  = emitter::isValidSimm16(offset) ? REG_NA : internalRegisters.GetSingle(treeNode);
+            genInstrWithConstant(storeIns, storeAttr, REG_R0, baseReg, offset, tmpReg);
         }
         else
         {
             genConsumeReg(source);
-            emit->emitIns_S_R(storeIns, storeAttr, source->GetRegNum(), varNumOut, argOffsetOut);
+
+            regNumber baseReg = REG_NA;
+            int       offset  = ppcGetLclFrameOffset(m_compiler, varNumOut, argOffsetOut, &baseReg);
+            regNumber tmpReg  = emitter::isValidSimm16(offset) ? REG_NA : internalRegisters.GetSingle(treeNode);
+            genInstrWithConstant(storeIns, storeAttr, source->GetRegNum(), baseReg, offset, tmpReg);
         }
 
         argOffsetOut += EA_SIZE_IN_BYTES(storeAttr);

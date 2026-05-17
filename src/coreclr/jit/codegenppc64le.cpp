@@ -1263,12 +1263,10 @@ void CodeGen::genCodeForPhysReg(GenTreePhysReg* tree)
     assert(tree->OperIs(GT_PHYSREG));
 
     var_types targetType = tree->TypeGet();
-    NYI_IF(!varTypeUsesIntReg(targetType), "floating-point GT_PHYSREG");
-
     regNumber targetReg = tree->GetRegNum();
     if (targetReg != tree->gtSrcReg)
     {
-        inst_Mov(targetType, targetReg, tree->gtSrcReg, /* canSkip */ true);
+        GetEmitter()->emitIns_Mov(emitActualTypeSize(targetType), targetReg, tree->gtSrcReg, /* canSkip */ true);
         genTransferRegGCState(targetReg, tree->gtSrcReg);
     }
 

@@ -7920,6 +7920,10 @@ void CodeGen::genMultiRegStoreToLocal(GenTreeLclVar* lclNode)
     }
 #endif
 
+#ifdef TARGET_POWERPC64
+    regNumber ppc64leLargeOffsetStoreTmpReg = REG_NA;
+#endif
+
     for (unsigned i = 0; i < regCount; ++i)
     {
         regNumber reg     = genConsumeReg(op1, i);
@@ -7972,7 +7976,24 @@ void CodeGen::genMultiRegStoreToLocal(GenTreeLclVar* lclNode)
             // Several fields could be passed in one register, copy using the register type.
             // It could rewrite memory outside of the fields but local on the stack are rounded to POINTER_SIZE so
             // it is safe to store a long register into a byte field as it is known that we have enough padding after.
+#ifdef TARGET_POWERPC64
+            bool      fpBased     = false;
+            int       frameOffset = m_compiler->lvaFrameAddress(lclNum, &fpBased) + static_cast<int>(offset);
+            regNumber baseReg     = fpBased ? REG_FPBASE : REG_SPBASE;
+            regNumber tmpReg      = REG_NA;
+            if (!emitter::isValidSimm16(frameOffset))
+            {
+                if (ppc64leLargeOffsetStoreTmpReg == REG_NA)
+                {
+                    ppc64leLargeOffsetStoreTmpReg = internalRegisters.GetSingle(lclNode);
+                }
+                tmpReg = ppc64leLargeOffsetStoreTmpReg;
+            }
+
+            genInstrWithConstant(ins_Store(srcType), emitTypeSize(srcType), reg, baseReg, frameOffset, tmpReg);
+#else
             GetEmitter()->emitIns_S_R(ins_Store(srcType), emitTypeSize(srcType), reg, lclNum, offset);
+#endif
             offset += genTypeSize(srcType);
 
 #ifdef DEBUG

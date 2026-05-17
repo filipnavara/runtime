@@ -4142,7 +4142,46 @@ int LinearScan::BuildStoreLoc(GenTreeLclVarCommon* storeLoc)
 #endif // FEATURE_SIMD
 
 #ifdef TARGET_POWERPC64
-    if (!storeLoc->TypeIs(TYP_STRUCT))
+    if (storeLoc->OperIs(GT_STORE_LCL_VAR) && storeLoc->TypeIs(TYP_STRUCT) && op1->IsMultiRegNode())
+    {
+        GenTree* actualOp1 = op1->gtSkipReloadOrCopy();
+        assert(actualOp1->OperIs(GT_CALL));
+
+        const ReturnTypeDesc* returnTypeDesc = actualOp1->AsCall()->GetReturnTypeDesc();
+        unsigned              regCount       = actualOp1->GetMultiRegCount(m_compiler);
+
+#ifdef SWIFT_SUPPORT
+        const uint32_t* offsets = nullptr;
+        if (actualOp1->AsCall()->GetUnmanagedCallConv() == CorInfoCallConvExtension::Swift)
+        {
+            const CORINFO_SWIFT_LOWERING* lowering =
+                m_compiler->GetSwiftLowering(actualOp1->AsCall()->gtRetClsHnd);
+            assert(!lowering->byReference && (regCount == lowering->numLoweredElements));
+            offsets = lowering->offsets;
+        }
+#endif // SWIFT_SUPPORT
+
+        bool fpBased = false;
+        int  base    = m_compiler->lvaFrameAddress(storeLoc->GetLclNum(), &fpBased);
+
+        for (unsigned i = 0; i < regCount; i++)
+        {
+            unsigned fieldOffset = returnTypeDesc->GetReturnFieldOffset(i);
+#ifdef SWIFT_SUPPORT
+            if (offsets != nullptr)
+            {
+                fieldOffset = offsets[i];
+            }
+#endif // SWIFT_SUPPORT
+
+            if (!emitter::isValidSimm16(base + static_cast<int>(fieldOffset)))
+            {
+                buildInternalIntRegisterDefForNode(storeLoc);
+                break;
+            }
+        }
+    }
+    else if (!storeLoc->TypeIs(TYP_STRUCT))
     {
         bool fpBased = false;
         int  offset  = m_compiler->lvaFrameAddress(storeLoc->GetLclNum(), &fpBased) + storeLoc->GetLclOffs();

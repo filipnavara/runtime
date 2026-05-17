@@ -5939,9 +5939,9 @@ void Compiler::lvaAlignFrame()
         lvaIncrementFrameSize(REGSIZE_BYTES);
     }
 
-#elif defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 
-    // The stack on ARM64/LoongArch64 must be 16 byte aligned.
+    // The stack on ARM64/LoongArch64/RISC-V/PPC64 must be 16 byte aligned.
 
     // First, align up to 8.
     if ((compLclFrameSize % 8) != 0)

@@ -171,6 +171,17 @@ static emitter::code_t ppcEncodeDForm(emitter::code_t code, regNumber rt, regNum
     return code | (ppcRegOrFReg(rt) << 21) | (ppcReg(ra) << 16) | ((unsigned)imm & 0xFFFF);
 }
 
+static ssize_t ppcSignExtend16(uint64_t value)
+{
+    ssize_t part = static_cast<ssize_t>(value & 0xFFFF);
+    return (part >= 0x8000) ? (part - 0x10000) : part;
+}
+
+static ssize_t ppcUnsigned16(uint64_t value)
+{
+    return static_cast<ssize_t>(value & 0xFFFF);
+}
+
 static emitter::code_t ppcEncodeXForm(emitter::code_t code, regNumber rt, regNumber ra, regNumber rb)
 {
     return code | (ppcReg(rt) << 21) | (ppcReg(ra) << 16) | (ppcReg(rb) << 11);
@@ -319,6 +330,29 @@ void emitter::emitIns_R_R_R(
     appendToCurIG(id);
 }
 
+void emitter::emitIns_R_C(
+    instruction ins, emitAttr attr, regNumber targetReg, regNumber addrReg, CORINFO_FIELD_HANDLE fldHnd)
+{
+    assert(!EA_IS_RELOC(attr));
+    assert(emitInsIsLoad(ins));
+    assert(isFloatReg(targetReg) || isGeneralRegister(targetReg));
+    assert(isGeneralRegister(addrReg));
+    assert(addrReg != REG_R0);
+
+    instrDesc* id = emitNewInstr(attr);
+
+    id->idIns(ins);
+    id->idInsOpt(INS_OPTS_RC);
+    id->idReg1(targetReg);
+    id->idReg2(addrReg);
+    id->idCodeSize(6 * sizeof(code_t));
+    id->idSetIsBound();
+    id->idAddr()->iiaFieldHnd = fldHnd;
+
+    dispIns(id);
+    appendToCurIG(id);
+}
+
 void emitter::emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int varx, int offs)
 {
     ssize_t imm = offs;
@@ -456,6 +490,13 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
     if (id->idInsOpt() == INS_OPTS_C)
     {
         size = emitOutputCall(dst, id);
+        *dp  = dst + size;
+        return size;
+    }
+
+    if (id->idInsOpt() == INS_OPTS_RC)
+    {
+        size = emitOutputConstLoad(dst, id);
         *dp  = dst + size;
         return size;
     }
@@ -628,6 +669,53 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 
     *dp = dst + size;
     return size;
+}
+
+unsigned emitter::emitOutputConstLoad(BYTE* dst, instrDesc* id)
+{
+    assert(id->idAddr()->iiaIsJitDataOffset());
+    assert(id->idGCref() == GCT_NONE);
+    assert(id->idCodeSize() == 6 * sizeof(code_t));
+    assert(emitInsIsLoad(id->idIns()));
+
+    const int offset = id->idAddr()->iiaGetJitDataOffset();
+    assert(offset >= 0);
+    assert(static_cast<UNATIVE_OFFSET>(offset) < emitDataSize());
+
+    const uintptr_t addr    = reinterpret_cast<uintptr_t>(emitDataOffsetToPtr(offset));
+    const uint64_t  value   = static_cast<uint64_t>(addr);
+    regNumber       addrReg = id->idReg2();
+
+    assert(isGeneralRegister(addrReg));
+    assert(addrReg != REG_R0);
+
+    BYTE* cur = dst;
+
+    emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), addrReg, REG_R0, ppcSignExtend16(value >> 48)));
+    cur += sizeof(code_t);
+
+    emitOutput_Instr(cur,
+                     emitInsCode(INS_ori) | (ppcReg(addrReg) << 21) | (ppcReg(addrReg) << 16) |
+                         (ppcUnsigned16(value >> 32) & 0xFFFF));
+    cur += sizeof(code_t);
+
+    emitOutput_Instr(cur, ppcEncodeRldicl(emitInsCode(INS_sldi), addrReg, addrReg, 32, 31));
+    cur += sizeof(code_t);
+
+    emitOutput_Instr(cur,
+                     emitInsCode(INS_oris) | (ppcReg(addrReg) << 21) | (ppcReg(addrReg) << 16) |
+                         (ppcUnsigned16(value >> 16) & 0xFFFF));
+    cur += sizeof(code_t);
+
+    emitOutput_Instr(cur,
+                     emitInsCode(INS_ori) | (ppcReg(addrReg) << 21) | (ppcReg(addrReg) << 16) |
+                         (ppcUnsigned16(value) & 0xFFFF));
+    cur += sizeof(code_t);
+
+    emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(id->idIns()), id->idReg1(), addrReg, 0));
+    cur += sizeof(code_t);
+
+    return static_cast<unsigned>(cur - dst);
 }
 
 void emitter::emitIns_J(instruction ins, BasicBlock* dst)

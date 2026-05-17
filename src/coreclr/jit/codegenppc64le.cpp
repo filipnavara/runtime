@@ -733,16 +733,27 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
                                      ssize_t   imm,
                                      insFlags flags DEBUGARG(size_t targetHandle) DEBUGARG(GenTreeFlags gtFlags))
 {
+    auto signExtend16 = [](uint64_t value) -> ssize_t {
+        ssize_t part = static_cast<ssize_t>(value & 0xFFFF);
+        return (part >= 0x8000) ? (part - 0x10000) : part;
+    };
+
+    auto unsigned16 = [](uint64_t value) -> ssize_t {
+        return static_cast<ssize_t>(value & 0xFFFF);
+    };
+
     if (emitter::isValidSimm16(imm))
     {
         GetEmitter()->emitIns_R_R_I(INS_addi, size, reg, REG_R0, imm);
         return;
     }
 
-    if ((imm >= INT32_MIN) && (imm <= UINT32_MAX))
+    const uint64_t value = static_cast<uint64_t>(imm);
+
+    if ((imm >= INT32_MIN) && (imm <= INT32_MAX))
     {
-        ssize_t hi = (imm + 0x8000) >> 16;
-        ssize_t lo = imm & 0xFFFF;
+        ssize_t hi = signExtend16(value >> 16);
+        ssize_t lo = unsigned16(value);
 
         GetEmitter()->emitIns_R_R_I(INS_addis, size, reg, REG_R0, hi);
         if (lo != 0)
@@ -752,7 +763,61 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
         return;
     }
 
-    NYI_POWERPC64("instGen_Set_Reg_To_Imm");
+    if ((imm >= 0) && (value <= UINT32_MAX))
+    {
+        GetEmitter()->emitIns_R_R_I(INS_addi, size, reg, REG_R0, 0);
+
+        ssize_t hi = unsigned16(value >> 16);
+        ssize_t lo = unsigned16(value);
+        if (hi != 0)
+        {
+            GetEmitter()->emitIns_R_R_I(INS_oris, size, reg, reg, hi);
+        }
+        if (lo != 0)
+        {
+            GetEmitter()->emitIns_R_R_I(INS_ori, size, reg, reg, lo);
+        }
+        return;
+    }
+
+    if ((imm >= -(1LL << 47)) && (imm < (1LL << 47)))
+    {
+        GetEmitter()->emitIns_R_R_I(INS_addi, size, reg, REG_R0, signExtend16(value >> 32));
+        GetEmitter()->emitIns_R_R_I(INS_sldi, size, reg, reg, 32);
+
+        ssize_t hi = unsigned16(value >> 16);
+        ssize_t lo = unsigned16(value);
+        if (hi != 0)
+        {
+            GetEmitter()->emitIns_R_R_I(INS_oris, size, reg, reg, hi);
+        }
+        if (lo != 0)
+        {
+            GetEmitter()->emitIns_R_R_I(INS_ori, size, reg, reg, lo);
+        }
+        return;
+    }
+
+    GetEmitter()->emitIns_R_R_I(INS_addis, size, reg, REG_R0, signExtend16(value >> 48));
+
+    ssize_t next = unsigned16(value >> 32);
+    if (next != 0)
+    {
+        GetEmitter()->emitIns_R_R_I(INS_ori, size, reg, reg, next);
+    }
+
+    GetEmitter()->emitIns_R_R_I(INS_sldi, size, reg, reg, 32);
+
+    ssize_t hi = unsigned16(value >> 16);
+    ssize_t lo = unsigned16(value);
+    if (hi != 0)
+    {
+        GetEmitter()->emitIns_R_R_I(INS_oris, size, reg, reg, hi);
+    }
+    if (lo != 0)
+    {
+        GetEmitter()->emitIns_R_R_I(INS_ori, size, reg, reg, lo);
+    }
 }
 
 // clang-format off

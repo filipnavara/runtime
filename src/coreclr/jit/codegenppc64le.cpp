@@ -113,6 +113,13 @@ static int ppcGetLclFrameOffset(Compiler* compiler, GenTreeLclVarCommon* lclNode
     return ppcGetLclFrameOffset(compiler, lclNode->GetLclNum(), lclNode->GetLclOffs(), baseReg);
 }
 
+static bool ppcOffsetRangeFitsSimm16(int offset, unsigned size)
+{
+    assert(size > 0);
+    ssize_t lastOffset = static_cast<ssize_t>(offset) + static_cast<ssize_t>(size) - 1;
+    return emitter::isValidSimm16(offset) && emitter::isValidSimm16(lastOffset);
+}
+
 void CodeGen::genFnEpilog(BasicBlock* block)
 {
     genPopCalleeSavedRegisters(/* jmpEpilog */ false);
@@ -1809,43 +1816,79 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* cpBlkNode)
         instGen_MemoryBarrier(BARRIER_FULL);
     }
 
-    emitter* emit = GetEmitter();
-    unsigned size = cpBlkNode->GetLayout()->GetSize();
+    unsigned size      = cpBlkNode->GetLayout()->GetSize();
+    unsigned totalSize = size;
 
     assert(size <= INT32_MAX);
     assert(srcOffset < INT32_MAX - static_cast<int>(size));
     assert(dstOffset < INT32_MAX - static_cast<int>(size));
 
     regNumber tempReg = internalRegisters.Extract(cpBlkNode, RBM_ALLINT);
+    regNumber tempReg2 = REG_NA;
 
     if (size >= 2 * REGSIZE_BYTES)
     {
-        regNumber tempReg2 = internalRegisters.Extract(cpBlkNode, RBM_ALLINT);
+        tempReg2 = internalRegisters.Extract(cpBlkNode, RBM_ALLINT);
+    }
+
+    bool containedDstNeedsLargeOffsetTemp = false;
+    if (dstAddr->isContained())
+    {
+        int initialDstOffset = dstOffset;
+        if (dstLclNum != BAD_VAR_NUM)
+        {
+            regNumber baseReg = REG_NA;
+            initialDstOffset  = ppcGetLclFrameOffset(m_compiler, dstLclNum, dstOffset, &baseReg);
+        }
+
+        containedDstNeedsLargeOffsetTemp = !ppcOffsetRangeFitsSimm16(initialDstOffset, totalSize);
+    }
+
+    regNumber dstTmpReg = containedDstNeedsLargeOffsetTemp ? internalRegisters.Extract(cpBlkNode, RBM_ALLINT) : REG_NA;
+
+    auto emitLoad = [this, srcLclNum, srcAddrBaseReg](instruction loadIns,
+                                                      emitAttr    attr,
+                                                      regNumber   targetReg,
+                                                      int         loadOffset) {
+        if (srcLclNum != BAD_VAR_NUM)
+        {
+            regNumber baseReg     = REG_NA;
+            int       frameOffset = ppcGetLclFrameOffset(m_compiler, srcLclNum, loadOffset, &baseReg);
+            genInstrWithConstant(loadIns, attr, targetReg, baseReg, frameOffset, targetReg);
+        }
+        else
+        {
+            genInstrWithConstant(loadIns, attr, targetReg, srcAddrBaseReg, loadOffset, targetReg);
+        }
+    };
+
+    auto emitStore = [this, dstLclNum, dstAddrBaseReg, dstTmpReg](instruction storeIns,
+                                                                  emitAttr    attr,
+                                                                  regNumber   dataReg,
+                                                                  int         storeOffset) {
+        if (dstLclNum != BAD_VAR_NUM)
+        {
+            regNumber baseReg     = REG_NA;
+            int       frameOffset = ppcGetLclFrameOffset(m_compiler, dstLclNum, storeOffset, &baseReg);
+            genInstrWithConstant(storeIns, attr, dataReg, baseReg, frameOffset, dstTmpReg);
+        }
+        else
+        {
+            genInstrWithConstant(storeIns, attr, dataReg, dstAddrBaseReg, storeOffset, dstTmpReg);
+        }
+    };
+
+    if (size >= 2 * REGSIZE_BYTES)
+    {
+        assert(tempReg2 != REG_NA);
 
         for (unsigned regSize = 2 * REGSIZE_BYTES; size >= regSize;
              size -= regSize, srcOffset += regSize, dstOffset += regSize)
         {
-            if (srcLclNum != BAD_VAR_NUM)
-            {
-                emit->emitIns_R_S(INS_ld, EA_8BYTE, tempReg, srcLclNum, srcOffset);
-                emit->emitIns_R_S(INS_ld, EA_8BYTE, tempReg2, srcLclNum, srcOffset + 8);
-            }
-            else
-            {
-                emit->emitIns_R_R_I(INS_ld, EA_8BYTE, tempReg, srcAddrBaseReg, srcOffset);
-                emit->emitIns_R_R_I(INS_ld, EA_8BYTE, tempReg2, srcAddrBaseReg, srcOffset + 8);
-            }
-
-            if (dstLclNum != BAD_VAR_NUM)
-            {
-                emit->emitIns_S_R(INS_std, EA_8BYTE, tempReg, dstLclNum, dstOffset);
-                emit->emitIns_S_R(INS_std, EA_8BYTE, tempReg2, dstLclNum, dstOffset + 8);
-            }
-            else
-            {
-                emit->emitIns_R_R_I(INS_std, EA_8BYTE, tempReg, dstAddrBaseReg, dstOffset);
-                emit->emitIns_R_R_I(INS_std, EA_8BYTE, tempReg2, dstAddrBaseReg, dstOffset + 8);
-            }
+            emitLoad(INS_ld, EA_8BYTE, tempReg, srcOffset);
+            emitLoad(INS_ld, EA_8BYTE, tempReg2, srcOffset + 8);
+            emitStore(INS_std, EA_8BYTE, tempReg, dstOffset);
+            emitStore(INS_std, EA_8BYTE, tempReg2, dstOffset + 8);
         }
     }
 
@@ -1882,23 +1925,8 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* cpBlkNode)
                 unreached();
         }
 
-        if (srcLclNum != BAD_VAR_NUM)
-        {
-            emit->emitIns_R_S(loadIns, attr, tempReg, srcLclNum, srcOffset);
-        }
-        else
-        {
-            emit->emitIns_R_R_I(loadIns, attr, tempReg, srcAddrBaseReg, srcOffset);
-        }
-
-        if (dstLclNum != BAD_VAR_NUM)
-        {
-            emit->emitIns_S_R(storeIns, attr, tempReg, dstLclNum, dstOffset);
-        }
-        else
-        {
-            emit->emitIns_R_R_I(storeIns, attr, tempReg, dstAddrBaseReg, dstOffset);
-        }
+        emitLoad(loadIns, attr, tempReg, srcOffset);
+        emitStore(storeIns, attr, tempReg, dstOffset);
     }
 
     if (cpBlkNode->IsVolatile())

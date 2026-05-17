@@ -411,6 +411,24 @@ void emitter::emitIns_R_L(instruction ins, emitAttr attr, BasicBlock* dst, regNu
     appendToCurIG(id);
 }
 
+void emitter::emitIns_R_L(instruction ins, emitAttr attr, insGroup* dst, regNumber reg)
+{
+    assert(dst != nullptr);
+    assert(isGeneralRegister(reg));
+
+    instrDesc* id = emitNewInstr(attr);
+
+    id->idIns(ins);
+    id->idInsOpt(INS_OPTS_RL);
+    id->idAddr()->iiaIGlabel = dst;
+    id->idSetIsBound();
+    id->idCodeSize(5 * sizeof(code_t));
+    id->idReg1(reg);
+
+    dispIns(id);
+    appendToCurIG(id);
+}
+
 void emitter::emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int varx, int offs)
 {
     ssize_t imm = offs;

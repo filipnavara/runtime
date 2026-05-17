@@ -2491,10 +2491,61 @@ void CodeGen::genAllocLclFrame(unsigned frameSize, regNumber initReg, bool* pIni
 
 void CodeGen::genZeroInitFrameUsingBlockInit(int untrLclHi, int untrLclLo, regNumber initReg, bool* pInitRegZeroed)
 {
-    if (untrLclHi > untrLclLo)
+    if (untrLclHi <= untrLclLo)
     {
-        NYI_POWERPC64("genZeroInitFrameUsingBlockInit");
+        return;
     }
+
+    assert((genRegMask(initReg) & calleeRegArgMaskLiveIn) == 0);
+    assert((untrLclLo % 4) == 0);
+
+    regNumber rAddr = initReg;
+    *pInitRegZeroed = false;
+
+    if (emitter::isValidSimm16(untrLclLo))
+    {
+        GetEmitter()->emitIns_R_R_I(INS_addi, EA_PTRSIZE, rAddr, genFramePointerReg(), untrLclLo);
+    }
+    else
+    {
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, rAddr, static_cast<ssize_t>(untrLclLo));
+        GetEmitter()->emitIns_R_R_R(INS_add, EA_PTRSIZE, rAddr, genFramePointerReg(), rAddr);
+    }
+
+    instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, 0);
+
+    ssize_t bytes = untrLclHi - untrLclLo;
+    assert((bytes % 4) == 0);
+
+    if ((untrLclLo & 0x7) != 0)
+    {
+        assert((untrLclLo & 0x7) == 4);
+        GetEmitter()->emitIns_R_R_I(INS_stw, EA_4BYTE, REG_R0, rAddr, 0);
+        bytes -= 4;
+        if (bytes != 0)
+        {
+            GetEmitter()->emitIns_R_R_I(INS_addi, EA_PTRSIZE, rAddr, rAddr, 4);
+        }
+    }
+
+    while (bytes >= REGSIZE_BYTES)
+    {
+        GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R0, rAddr, 0);
+        bytes -= REGSIZE_BYTES;
+        if (bytes != 0)
+        {
+            GetEmitter()->emitIns_R_R_I(INS_addi, EA_PTRSIZE, rAddr, rAddr, REGSIZE_BYTES);
+        }
+    }
+
+    if (bytes != 0)
+    {
+        assert(bytes == 4);
+        GetEmitter()->emitIns_R_R_I(INS_stw, EA_4BYTE, REG_R0, rAddr, 0);
+        bytes -= 4;
+    }
+
+    noway_assert(bytes == 0);
 }
 
 void CodeGen::genSetGSSecurityCookie(regNumber initReg, bool* pInitRegZeroed)

@@ -139,6 +139,14 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genDefineTempLabel(genCreateTempLabel());
             break;
 
+        case GT_PROF_HOOK:
+            noway_assert(m_compiler->compIsProfilerHookNeeded());
+
+#ifdef PROFILING_SUPPORTED
+            genProfilingLeaveCallback(CORINFO_HELP_PROF_FCN_TAILCALL);
+#endif // PROFILING_SUPPORTED
+            break;
+
         case GT_CNS_INT:
         {
             regNumber targetReg  = treeNode->GetRegNum();

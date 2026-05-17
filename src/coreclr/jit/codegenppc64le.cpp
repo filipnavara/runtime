@@ -111,6 +111,11 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             break;
         }
 
+        case GT_NEG:
+        case GT_NOT:
+            genCodeForNegNot(treeNode->AsOp());
+            break;
+
         case GT_EQ:
         case GT_NE:
         case GT_LT:
@@ -172,6 +177,22 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             NYI_POWERPC64("genCodeForTreeNode");
             break;
     }
+}
+
+void CodeGen::genCodeForNegNot(GenTreeOp* tree)
+{
+    assert(tree->OperIs(GT_NEG, GT_NOT));
+
+    GenTree* operand = tree->gtGetOp1();
+    regNumber operandReg = genConsumeReg(operand);
+    regNumber targetReg  = tree->GetRegNum();
+
+    assert(targetReg != REG_NA);
+    assert(!varTypeIsFloating(tree));
+
+    GetEmitter()->emitIns_R_R(genGetInsForOper(tree), emitActualTypeSize(tree), targetReg, operandReg);
+
+    genProduceReg(tree);
 }
 
 void CodeGen::genCodeForCompare(GenTreeOp* tree)
@@ -417,6 +438,10 @@ instruction CodeGen::genGetInsForOper(GenTree* treeNode)
             return INS_or;
         case GT_XOR:
             return INS_xor;
+        case GT_NEG:
+            return INS_neg;
+        case GT_NOT:
+            return INS_not;
         default:
             NYI_POWERPC64("genGetInsForOper");
             return INS_invalid;

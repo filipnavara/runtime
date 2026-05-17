@@ -4321,7 +4321,7 @@ void CodeGen::genEnregisterOSRArgsAndLocals(regNumber initReg, bool* pInitRegZer
     }
 }
 
-#if defined(SWIFT_SUPPORT) || defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#if defined(SWIFT_SUPPORT) || defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
 //-----------------------------------------------------------------------------
 // genHomeSwiftStructParameters: Move the incoming stack segment to the local stack frame.
 //
@@ -4381,7 +4381,7 @@ void CodeGen::genHomeStackSegment(unsigned                 lclNum,
     if (initRegStillZeroed)
         *initRegStillZeroed = false;
 }
-#endif // defined(SWIFT_SUPPORT) || defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#endif // defined(SWIFT_SUPPORT) || defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
 
 #ifdef SWIFT_SUPPORT
 
@@ -4435,7 +4435,7 @@ void CodeGen::genHomeSwiftStructStackParameters()
 //
 void CodeGen::genHomeStackPartOfSplitParameter(regNumber initReg, bool* initRegStillZeroed)
 {
-#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
     unsigned lclNum = 0;
     for (; lclNum < m_compiler->info.compArgsCount; lclNum++)
     {
@@ -4468,7 +4468,7 @@ void CodeGen::genHomeStackPartOfSplitParameter(regNumber initReg, bool* initRegS
             break;
         }
     }
-#endif // TARGET_RISCV64 || TARGET_LOONGARCH64
+#endif // TARGET_RISCV64 || TARGET_LOONGARCH64 || TARGET_POWERPC64
 }
 
 #ifndef TARGET_WASM
@@ -7527,7 +7527,7 @@ void CodeGen::genStructReturn(GenTree* treeNode)
         LclVarDsc*     varDsc  = m_compiler->lvaGetDesc(lclNode);
         assert(varDsc->lvIsMultiRegRet);
 
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
         var_types type   = retTypeDesc.GetReturnRegType(0);
         unsigned  offset = retTypeDesc.GetReturnFieldOffset(0);
         regNumber toReg  = retTypeDesc.GetABIReturnReg(0, m_compiler->info.compCallConv);
@@ -7902,8 +7902,8 @@ void CodeGen::genMultiRegStoreToLocal(GenTreeLclVar* lclNode)
         assert(regCount == varDsc->lvFieldCnt);
     }
 
-#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
-    // genMultiRegStoreToLocal is only used for calls on RISC-V and LoongArch
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
+    // genMultiRegStoreToLocal is only used for calls on RISC-V, LoongArch, and PPC64
     const ReturnTypeDesc* returnTypeDesc = actualOp1->AsCall()->GetReturnTypeDesc();
 #endif
 
@@ -7956,7 +7956,7 @@ void CodeGen::genMultiRegStoreToLocal(GenTreeLclVar* lclNode)
         }
         else
         {
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
             // Should consider the padding, empty struct fields, etc within a struct.
             offset = returnTypeDesc->GetReturnFieldOffset(i);
 #endif

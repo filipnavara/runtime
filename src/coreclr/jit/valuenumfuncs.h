@@ -218,6 +218,9 @@ ValueNumFuncDef(HWI_##isa##_##name, ((numArgs == -1) ? -1 : (numArgs + 1)), ((fl
     ValueNumFuncDef(MinInt_UN, 2, true, false)
     ValueNumFuncDef(MaxInt_UN, 2, true, false)
 
+#elif defined(TARGET_POWERPC64)
+    // No hardware intrinsics on PPC64LE yet.
+
 #elif defined(TARGET_WASM)
 // No hardware intrinsics on WASM yet.
 

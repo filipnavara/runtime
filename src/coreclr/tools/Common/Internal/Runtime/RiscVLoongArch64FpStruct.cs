@@ -33,9 +33,9 @@ namespace Internal.JitInterface
         // Note: flags OnlyOne, BothFloat, FloatInt, and IntFloat are mutually exclusive
     }
 
-    // On RISC-V and LoongArch a struct with up to two non-empty fields, at least one of them floating-point,
-    // can be passed in registers according to hardware FP calling convention. FpStructInRegistersInfo represents
-    // passing information for such parameters.
+    // On RISC-V, LoongArch, and PPC64LE a struct with up to two non-empty fields, at least one of them
+    // floating-point, can be passed in registers according to hardware FP calling convention.
+    // FpStructInRegistersInfo represents passing information for such parameters.
     public struct FpStructInRegistersInfo
     {
         public FpStruct flags;
@@ -193,7 +193,7 @@ namespace Internal.JitInterface
 
         public static FpStructInRegistersInfo GetFpStructInRegistersInfo(TypeDesc td, TargetArchitecture arch)
         {
-            Debug.Assert(arch is TargetArchitecture.RiscV64 or TargetArchitecture.LoongArch64);
+            Debug.Assert(arch is TargetArchitecture.RiscV64 or TargetArchitecture.LoongArch64 or TargetArchitecture.Ppc64le);
 
             if (td.GetElementSize().AsInt > ENREGISTERED_PARAMTYPE_MAXSIZE)
                 return new FpStructInRegistersInfo{};

@@ -70,6 +70,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
         public bool IsARM => Architecture == TargetArchitecture.ARM;
         public bool IsARM64 => Architecture == TargetArchitecture.ARM64;
         public bool IsLoongArch64 => Architecture == TargetArchitecture.LoongArch64;
+        public bool IsPpc64le => Architecture == TargetArchitecture.Ppc64le;
         public bool IsRiscV64 => Architecture == TargetArchitecture.RiscV64;
         public bool IsWasm32 => Architecture == TargetArchitecture.Wasm32;
 
@@ -320,7 +321,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                     throw new NotSupportedException();
 
                 case CorElementType.ELEMENT_TYPE_R4:
-                    if (IsRiscV64 || IsLoongArch64)
+                    if (IsRiscV64 || IsLoongArch64 || IsPpc64le)
                     {
                         fpReturnSize = (uint)FpStruct.OnlyOne | (2 << (int)FpStruct.PosSizeShift1st);
                     }
@@ -331,7 +332,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                     break;
 
                 case CorElementType.ELEMENT_TYPE_R8:
-                    if (IsRiscV64 || IsLoongArch64)
+                    if (IsRiscV64 || IsLoongArch64 || IsPpc64le)
                     {
                         fpReturnSize = (uint)FpStruct.OnlyOne | (3 << (int)FpStruct.PosSizeShift1st);
                     }
@@ -408,7 +409,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
 
                             if (size <= EnregisteredReturnTypeIntegerMaxSize)
                             {
-                                if (IsLoongArch64 || IsRiscV64)
+                                if (IsLoongArch64 || IsPpc64le || IsRiscV64)
                                 {
                                     FpStructInRegistersInfo info = RiscVLoongArch64FpStruct.GetFpStructInRegistersInfo(
                                         thRetType.GetRuntimeTypeHandle(), Architecture);

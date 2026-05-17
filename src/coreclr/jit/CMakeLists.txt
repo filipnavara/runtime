@@ -268,7 +268,13 @@ set( JIT_S390X_SOURCES
 )
 
 set( JIT_POWERPC64_SOURCES
-  # Not supported as JIT target
+  ${JIT_NATIVE_TARGET_SOURCES}
+  codegenppc64le.cpp
+  emitppc64le.cpp
+  lowerppc64le.cpp
+  lsrappc64le.cpp
+  targetppc64le.cpp
+  unwindppc64le.cpp
 )
 
 set( JIT_LOONGARCH64_SOURCES
@@ -465,7 +471,11 @@ set ( JIT_S390X_HEADERS
 )
 
 set ( JIT_POWERPC64_HEADERS
-  # Not supported as JIT target
+    emitppc64le.h
+    emitfmtsppc64le.h
+    instrsppc64le.h
+    registerppc64le.h
+    targetppc64le.h
 )
 
 set( JIT_LOONGARCH64_HEADERS
@@ -516,6 +526,8 @@ convert_to_absolute_path(JIT_ARMV6_SOURCES ${JIT_ARMV6_SOURCES})
 convert_to_absolute_path(JIT_ARMV6_HEADERS ${JIT_ARMV6_HEADERS})
 convert_to_absolute_path(JIT_S390X_SOURCES ${JIT_S390X_SOURCES})
 convert_to_absolute_path(JIT_S390X_HEADERS ${JIT_S390X_HEADERS})
+convert_to_absolute_path(JIT_POWERPC64_SOURCES ${JIT_POWERPC64_SOURCES})
+convert_to_absolute_path(JIT_POWERPC64_HEADERS ${JIT_POWERPC64_HEADERS})
 convert_to_absolute_path(JIT_LOONGARCH64_SOURCES ${JIT_LOONGARCH64_SOURCES})
 convert_to_absolute_path(JIT_LOONGARCH64_HEADERS ${JIT_LOONGARCH64_HEADERS})
 convert_to_absolute_path(JIT_RISCV64_SOURCES ${JIT_RISCV64_SOURCES})
@@ -714,6 +726,7 @@ if (CLR_CMAKE_TARGET_ARCH_ARM64 OR CLR_CMAKE_TARGET_ARCH_AMD64)
   create_standalone_jit(TARGET clrjit_unix_x64_${ARCH_HOST_NAME} OS unix_anyos ARCH x64)
   create_standalone_jit(TARGET clrjit_win_x64_${ARCH_HOST_NAME} OS win ARCH x64)
   if (CLR_CMAKE_BUILD_COMMUNITY_ALTJITS EQUAL 1)
+    create_standalone_jit(TARGET clrjit_unix_ppc64le_${ARCH_HOST_NAME} OS unix ARCH ppc64le)
     create_standalone_jit(TARGET clrjit_unix_loongarch64_${ARCH_HOST_NAME} OS unix ARCH loongarch64)
     create_standalone_jit(TARGET clrjit_unix_riscv64_${ARCH_HOST_NAME} OS unix ARCH riscv64)
   endif(CLR_CMAKE_BUILD_COMMUNITY_ALTJITS EQUAL 1)
@@ -726,6 +739,10 @@ endif (CLR_CMAKE_TARGET_ARCH_WASM)
 if (CLR_CMAKE_TARGET_ARCH_LOONGARCH64)
   create_standalone_jit(TARGET clrjit_unix_loongarch64_${ARCH_HOST_NAME} OS unix ARCH loongarch64)
 endif (CLR_CMAKE_TARGET_ARCH_LOONGARCH64)
+
+if (CLR_CMAKE_TARGET_ARCH_POWERPC64)
+  create_standalone_jit(TARGET clrjit_unix_ppc64le_${ARCH_HOST_NAME} OS unix ARCH ppc64le)
+endif (CLR_CMAKE_TARGET_ARCH_POWERPC64)
 
 if (CLR_CMAKE_TARGET_ARCH_RISCV64)
   create_standalone_jit(TARGET clrjit_unix_riscv64_${ARCH_HOST_NAME} OS unix ARCH riscv64)

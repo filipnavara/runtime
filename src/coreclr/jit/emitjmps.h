@@ -59,6 +59,12 @@ JMP_SMALL(jmp   , jmp   , j      )
 JMP_SMALL(eq    , ne    , beq    )  // EQ
 JMP_SMALL(ne    , eq    , bne    )  // NE
 
+#elif defined(TARGET_POWERPC64)
+// TODO-PPC64LE: add the remaining condition branches.
+JMP_SMALL(jmp   , jmp   , b      )
+JMP_SMALL(eq    , ne    , beq    )  // EQ
+JMP_SMALL(ne    , eq    , bne    )  // NE
+
 #elif defined(TARGET_WASM)
 
 JMP_SMALL(jmp   , br    , br     )

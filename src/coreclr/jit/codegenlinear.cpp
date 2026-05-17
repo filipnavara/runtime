@@ -2511,7 +2511,7 @@ CodeGen::GenIntCastDesc::GenIntCastDesc(GenTreeCast* cast)
             m_checkKind = CHECK_NONE;
         }
 
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
         // TODO-LOONGARCH64:
         // TODO-RISCV64:
         // LoongArch64 and RiscV64 ABIs require 32-bit values to be sign-extended to 64-bits.
@@ -2625,7 +2625,7 @@ void CodeGen::genStoreLongLclVar(GenTree* treeNode)
 }
 #endif // !defined(TARGET_64BIT)
 
-#if !defined(TARGET_LOONGARCH64) && !defined(TARGET_RISCV64)
+#if !defined(TARGET_LOONGARCH64) && !defined(TARGET_RISCV64) && !defined(TARGET_POWERPC64)
 
 //------------------------------------------------------------------------
 // genCodeForJcc: Generate code for a GT_JCC node.
@@ -2690,7 +2690,7 @@ void CodeGen::genCodeForSetcc(GenTreeCC* setcc)
     inst_SETCC(setcc->gtCondition, setcc->TypeGet(), setcc->GetRegNum());
     genProduceReg(setcc);
 }
-#endif // !TARGET_LOONGARCH64 && !TARGET_RISCV64
+#endif // !TARGET_LOONGARCH64 && !TARGET_RISCV64 && !TARGET_POWERPC64
 #endif // !TARGET_WASM
 
 /*****************************************************************************

@@ -862,7 +862,7 @@ var_types Compiler::getReturnTypeForStruct(CORINFO_CLASS_HANDLE     clsHnd,
         howToReturnStruct   = SPK_ByReference;
         useType             = TYP_UNKNOWN;
     }
-#elif defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#elif defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
     if (structSize <= (TARGET_POINTER_SIZE * 2))
     {
         const CORINFO_FPSTRUCT_LOWERING* lowering = GetFpStructLowering(clsHnd);
@@ -7952,7 +7952,7 @@ void Compiler::GetStructTypeOffset(
     GetStructTypeOffset(structDesc, type0, type1, offset0, offset1);
 }
 
-#elif defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#elif defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
 //------------------------------------------------------------------------
 // GetFpStructLowering: Gets the information on passing of a struct according to hardware floating-point
 // calling convention, i.e. the types and offsets of struct fields lowered for passing.

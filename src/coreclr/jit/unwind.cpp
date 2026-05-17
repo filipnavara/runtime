@@ -430,7 +430,8 @@ UNATIVE_OFFSET Compiler::unwindGetCurrentOffset(FuncInfoDsc* func)
     {
         if (TargetArchitecture::IsX64 ||
             (TargetOS::IsUnix &&
-             (TargetArchitecture::IsArmArch || TargetArchitecture::IsX86 || TargetArchitecture::IsLoongArch64)))
+             (TargetArchitecture::IsArmArch || TargetArchitecture::IsX86 || TargetArchitecture::IsLoongArch64 ||
+              TargetArchitecture::IsPpc64le)))
         {
             assert(func->startLoc != nullptr);
             offset = func->startLoc->GetFuncletPrologOffset(GetEmitter());
@@ -467,6 +468,10 @@ UNATIVE_OFFSET Compiler::unwindGetCurrentOffset(FuncInfoDsc* func)
 #elif defined(TARGET_RISCV64)
 
 // See unwindRiscv64.cpp
+
+#elif defined(TARGET_POWERPC64)
+
+// See unwindppc64le.cpp
 
 #else // TARGET*
 

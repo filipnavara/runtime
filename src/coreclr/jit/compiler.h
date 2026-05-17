@@ -1796,7 +1796,7 @@ struct FuncInfoDsc
     emitLocation* coldStartLoc; // locations for the cold section, if there is one.
     emitLocation* coldEndLoc;
 
-#elif defined(TARGET_ARMARCH) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_ARMARCH) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 
     UnwindInfo  uwi;     // Unwind information for this function/funclet's hot  section
     UnwindInfo* uwiCold; // Unwind information for this function/funclet's cold section
@@ -1811,7 +1811,7 @@ struct FuncInfoDsc
     emitLocation* coldStartLoc; // locations for the cold section, if there is one.
     emitLocation* coldEndLoc;
 
-#endif // TARGET_ARMARCH || TARGET_LOONGARCH64 || TARGET_RISCV64
+#endif // TARGET_ARMARCH || TARGET_LOONGARCH64 || TARGET_RISCV64 || TARGET_POWERPC64
 
 #if defined(FEATURE_CFI_SUPPORT)
     jitstd::vector<CFI_CODE>* cfiCodes;
@@ -9411,6 +9411,9 @@ public:
 #elif defined(TARGET_RISCV64)
             reg     = REG_T5;
             regMask = RBM_T5;
+#elif defined(TARGET_POWERPC64)
+            reg     = REG_R12;
+            regMask = RBM_R12;
 #elif defined(TARGET_WASM)
             reg     = REG_NA;
             regMask = RBM_NONE;
@@ -9799,14 +9802,14 @@ public:
     void unwindReturn(regNumber reg);
 #endif // defined(TARGET_LOONGARCH64)
 
-#if defined(TARGET_RISCV64)
+#if defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     void unwindNop();
     void unwindPadding(); // Generate a sequence of unwind NOP codes representing instructions between the last
                           // instruction and the current location.
     void unwindSaveReg(regNumber reg, int offset);
     void unwindSaveRegPair(regNumber reg1, regNumber reg2, int offset);
     void unwindReturn(regNumber reg);
-#endif // defined(TARGET_RISCV64)
+#endif // defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 
     //
     // Private "helper" functions for the unwind implementation.
@@ -12465,7 +12468,7 @@ public:
     void GetStructTypeOffset(
         CORINFO_CLASS_HANDLE typeHnd, var_types* type0, var_types* type1, uint8_t* offset0, uint8_t* offset1);
 
-#elif defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#elif defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
     typedef JitHashTable<CORINFO_CLASS_HANDLE, JitPtrKeyFuncs<struct CORINFO_CLASS_STRUCT_>, CORINFO_FPSTRUCT_LOWERING*>
                                      FpStructLoweringMap;
     FpStructLoweringMap*             m_fpStructLoweringCache = nullptr;
@@ -13548,6 +13551,10 @@ const instruction INS_SQRT       = INS_fsqrt_d; // NOTE: default is double.
 #ifdef TARGET_RISCV64
 const instruction INS_BREAKPOINT = INS_ebreak;
 #endif // TARGET_RISCV64
+
+#ifdef TARGET_POWERPC64
+const instruction INS_BREAKPOINT = INS_trap;
+#endif // TARGET_POWERPC64
 
 #ifdef TARGET_WASM
 const instruction INS_BREAKPOINT = INS_unreachable;

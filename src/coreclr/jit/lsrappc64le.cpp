@@ -316,6 +316,22 @@ int LinearScan::BuildNode(GenTree* tree)
         case GT_CALL:
             return BuildCall(tree->AsCall());
 
+        case GT_SWITCH:
+            noway_assert(!"Switch must be lowered at this point");
+            return 0;
+
+        case GT_JMPTABLE:
+            BuildDef(tree);
+            return 0;
+
+        case GT_SWITCH_TABLE:
+        {
+            buildInternalIntRegisterDefForNode(tree);
+            int srcCount = BuildBinaryUses(tree->AsOp());
+            buildInternalRegisterUses();
+            return srcCount;
+        }
+
         default:
             return BuildSimple(tree);
     }

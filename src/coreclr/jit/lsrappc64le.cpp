@@ -96,6 +96,16 @@ int LinearScan::BuildNode(GenTree* tree)
             BuildDef(tree, RBM_ASYNC_CONTINUATION_RET.GetIntRegSet());
             return 0;
 
+        case GT_CNS_DBL:
+        {
+            buildInternalIntRegisterDefForNode(tree);
+            buildInternalRegisterUses();
+
+            RefPosition* def               = BuildDef(tree);
+            def->getInterval()->isConstant = true;
+            return 0;
+        }
+
         case GT_CAST:
         {
             int srcCount = BuildCastUses(tree->AsCast(), RBM_NONE);

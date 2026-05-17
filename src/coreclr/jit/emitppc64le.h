@@ -53,6 +53,7 @@ void emitIns_R_R_I(
     instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, ssize_t imm, insOpts opt = INS_OPTS_NONE);
 void emitIns_R_R_R(
     instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, regNumber reg3, insOpts opt = INS_OPTS_NONE);
+void emitIns_R_C(instruction ins, emitAttr attr, regNumber targetReg, regNumber addrReg, CORINFO_FIELD_HANDLE fldHnd);
 void emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int varx, int offs);
 void emitIns_R_S_I(
     instruction ins, emitAttr attr, regNumber ireg, int varx, int offs, int ival, insOpts opt = INS_OPTS_NONE);
@@ -89,6 +90,7 @@ bool emitInsIsLoadOrStore(instruction ins);
 void emitDispInsName(code_t code, const instrDesc* id);
 static emitter::code_t emitInsCode(instruction ins);
 unsigned emitOutput_Instr(BYTE* dst, code_t code) const;
+unsigned emitOutputConstLoad(BYTE* dst, instrDesc* id);
 
 void emitIns_Jump(instruction ins, BasicBlock* dst);
 void emitOutputInstrJumpDistanceHelper(const insGroup* ig,

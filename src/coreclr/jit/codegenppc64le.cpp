@@ -143,6 +143,10 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             break;
         }
 
+        case GT_MULHI:
+            genCodeForMulHi(treeNode->AsOp());
+            break;
+
         case GT_DIV:
         case GT_UDIV:
         case GT_MOD:
@@ -448,6 +452,40 @@ void CodeGen::genCodeForDivMod(GenTreeOp* tree)
         GetEmitter()->emitIns_R_R_R(mulIns, attr, quotientReg, quotientReg, divisorReg);
         GetEmitter()->emitIns_R_R_R(INS_subf, attr, targetReg, quotientReg, dividendReg);
     }
+
+    genProduceReg(tree);
+}
+
+//------------------------------------------------------------------------
+// genCodeForMulHi: Produce code for a GT_MULHI node.
+//
+// Arguments:
+//    tree - the GT_MULHI node
+//
+void CodeGen::genCodeForMulHi(GenTreeOp* tree)
+{
+    assert(tree->OperIs(GT_MULHI));
+    assert(!tree->gtOverflowEx());
+    assert(!varTypeIsFloating(tree));
+
+    GenTree* op1 = tree->gtGetOp1();
+    GenTree* op2 = tree->gtGetOp2();
+
+    genConsumeOperands(tree);
+
+    emitAttr    attr = emitActualTypeSize(tree);
+    instruction ins;
+    if (EA_SIZE(attr) == EA_8BYTE)
+    {
+        ins = tree->IsUnsigned() ? INS_mulhdu : INS_mulhd;
+    }
+    else
+    {
+        assert(EA_SIZE(attr) == EA_4BYTE);
+        ins = tree->IsUnsigned() ? INS_mulhwu : INS_mulhw;
+    }
+
+    GetEmitter()->emitIns_R_R_R(ins, attr, tree->GetRegNum(), op1->GetRegNum(), op2->GetRegNum());
 
     genProduceReg(tree);
 }

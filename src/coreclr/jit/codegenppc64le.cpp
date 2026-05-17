@@ -47,11 +47,7 @@ static instruction ppcBranchInsForCondition(GenCondition cond)
 
 void CodeGen::genFnEpilog(BasicBlock* block)
 {
-    if (m_compiler->compLclFrameSize != 0)
-    {
-        genStackPointerAdjustment(m_compiler->compLclFrameSize, REG_TMP_0, nullptr, true);
-    }
-
+    genPopCalleeSavedRegisters(/* jmpEpilog */ false);
     GetEmitter()->emitIns(INS_blr);
 }
 
@@ -771,7 +767,40 @@ void CodeGen::genStackPointerAdjustment(ssize_t spAdjustment, regNumber tmpReg, 
 
 void CodeGen::genSaveCalleeSavedRegistersHelp(regMaskTP regsToSaveMask, int lowestCalleeSavedOffset)
 {
-    NYI_POWERPC64("genSaveCalleeSavedRegistersHelp");
+    if (regsToSaveMask == RBM_NONE)
+    {
+        return;
+    }
+
+    assert((regsToSaveMask & ~RBM_CALLEE_SAVED) == RBM_NONE);
+
+    if ((regsToSaveMask & RBM_FLT_CALLEE_SAVED) != RBM_NONE)
+    {
+        NYI_POWERPC64("floating-point callee-saved registers");
+    }
+
+    emitter*  emit         = GetEmitter();
+    regMaskTP regsMask     = regsToSaveMask & RBM_INT_CALLEE_SAVED;
+    uint64_t  maskSaveRegs = static_cast<uint64_t>(regsMask.getLow()) >> FIRST_INT_CALLEE_SAVED;
+    regNumber reg          = FIRST_INT_CALLEE_SAVED;
+
+    while (maskSaveRegs != 0)
+    {
+        if ((maskSaveRegs & 1) != 0)
+        {
+            if (!emitter::isValidSimm16(lowestCalleeSavedOffset) || (lowestCalleeSavedOffset > 2047))
+            {
+                NYI_POWERPC64("large callee-saved register offset");
+            }
+
+            emit->emitIns_R_R_I(INS_std, EA_PTRSIZE, reg, REG_SPBASE, lowestCalleeSavedOffset);
+            m_compiler->unwindSaveReg(reg, lowestCalleeSavedOffset);
+            lowestCalleeSavedOffset += REGSIZE_BYTES;
+        }
+
+        maskSaveRegs >>= 1;
+        reg = REG_NEXT(reg);
+    }
 }
 
 void CodeGen::genRestoreCalleeSavedRegistersHelp(regMaskTP regsToRestoreMask,
@@ -779,7 +808,50 @@ void CodeGen::genRestoreCalleeSavedRegistersHelp(regMaskTP regsToRestoreMask,
                                                  int       lowestCalleeSavedOffset,
                                                  bool      reportUnwindData)
 {
-    NYI_POWERPC64("genRestoreCalleeSavedRegistersHelp");
+    if (regsToRestoreMask == RBM_NONE)
+    {
+        return;
+    }
+
+    assert((regsToRestoreMask & ~RBM_CALLEE_SAVED) == RBM_NONE);
+
+    if ((regsToRestoreMask & RBM_FLT_CALLEE_SAVED) != RBM_NONE)
+    {
+        NYI_POWERPC64("floating-point callee-saved registers");
+    }
+
+    int highestCalleeSavedOffset = lowestCalleeSavedOffset + (genCountBits(regsToRestoreMask) * REGSIZE_BYTES);
+    assert((highestCalleeSavedOffset % REGSIZE_BYTES) == 0);
+
+    emitter*  emit         = GetEmitter();
+    regMaskTP regsMask     = regsToRestoreMask & RBM_INT_CALLEE_SAVED;
+    int64_t   maskSaveRegs = static_cast<int64_t>(regsMask.getLow()) << (63 - LAST_INT_CALLEE_SAVED);
+    regNumber reg          = LAST_INT_CALLEE_SAVED;
+
+    while (maskSaveRegs != 0)
+    {
+        if (maskSaveRegs < 0)
+        {
+            highestCalleeSavedOffset -= REGSIZE_BYTES;
+
+            if (!emitter::isValidSimm16(highestCalleeSavedOffset) || (highestCalleeSavedOffset > 2047))
+            {
+                NYI_POWERPC64("large callee-saved register offset");
+            }
+
+            emit->emitIns_R_R_I(INS_ld, EA_PTRSIZE, reg, baseReg, highestCalleeSavedOffset);
+
+            if (reportUnwindData)
+            {
+                m_compiler->unwindSaveReg(reg, highestCalleeSavedOffset);
+            }
+        }
+
+        maskSaveRegs <<= 1;
+        reg = REG_PREV(reg);
+    }
+
+    assert(highestCalleeSavedOffset == lowestCalleeSavedOffset);
 }
 
 instruction CodeGen::genGetInsForOper(GenTree* treeNode)
@@ -836,22 +908,32 @@ bool CodeGen::genEmitOptimizedGCWriteBarrier(GCInfo::WriteBarrierForm writeBarri
 
 int CodeGenInterface::genSPtoFPdelta() const
 {
+    assert(isFramePointerUsed());
+    NYI_POWERPC64("frame pointer based frames");
     return 0;
 }
 
 int CodeGenInterface::genTotalFrameSize() const
 {
-    return 0;
+    assert(!IsUninitialized(m_compiler->compCalleeRegsPushed));
+
+    int totalFrameSize = (m_compiler->compCalleeRegsPushed * REGSIZE_BYTES) + m_compiler->compLclFrameSize;
+    assert(totalFrameSize >= 0);
+    return totalFrameSize;
 }
 
 int CodeGenInterface::genCallerSPtoFPdelta() const
 {
+    assert(isFramePointerUsed());
+    NYI_POWERPC64("frame pointer based frames");
     return 0;
 }
 
 int CodeGenInterface::genCallerSPtoInitialSPdelta() const
 {
-    return 0;
+    int callerSPtoSPdelta = -genTotalFrameSize();
+    assert(callerSPtoSPdelta <= 0);
+    return callerSPtoSPdelta;
 }
 
 void CodeGen::genCreateAndStoreGCInfo(unsigned codeSize, unsigned prologSize, unsigned epilogSize DEBUGARG(void* codePtr))
@@ -889,10 +971,58 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize, 
 
 void CodeGen::genPushCalleeSavedRegisters(regNumber initReg, bool* pInitRegZeroed)
 {
+    assert(m_compiler->compGeneratingProlog);
+
+    regMaskTP rsPushRegs = regSet.rsGetModifiedCalleeSavedRegsMask();
+
+    if (isFramePointerUsed())
+    {
+        NYI_POWERPC64("frame pointer based frames");
+    }
+
+    if ((rsPushRegs & RBM_FLT_CALLEE_SAVED) != RBM_NONE)
+    {
+        NYI_POWERPC64("floating-point callee-saved registers");
+    }
+
+    regSet.rsMaskCalleeSaved = rsPushRegs;
+
+#ifdef DEBUG
+    if (m_compiler->compCalleeRegsPushed != genCountBits(rsPushRegs))
+    {
+        printf("Error: unexpected number of callee-saved registers to save. Expected: %d. Got: %d ",
+               m_compiler->compCalleeRegsPushed, genCountBits(rsPushRegs));
+        dspRegMask(rsPushRegs);
+        printf("\n");
+        assert(m_compiler->compCalleeRegsPushed == genCountBits(rsPushRegs));
+    }
+#endif
 }
 
 void CodeGen::genPopCalleeSavedRegisters(bool jmpEpilog)
 {
+    assert(m_compiler->compGeneratingEpilog);
+
+    if (m_compiler->compLocallocUsed)
+    {
+        NYI_POWERPC64("localloc frames");
+    }
+
+    regMaskTP regsToRestoreMask = regSet.rsGetModifiedCalleeSavedRegsMask();
+
+    if ((regsToRestoreMask & RBM_FLT_CALLEE_SAVED) != RBM_NONE)
+    {
+        NYI_POWERPC64("floating-point callee-saved registers");
+    }
+
+    int calleeSaveOffset = m_compiler->compLclFrameSize;
+    genRestoreCalleeSavedRegistersHelp(regsToRestoreMask, REG_SPBASE, calleeSaveOffset, /* reportUnwindData */ true);
+
+    int totalFrameSize = genTotalFrameSize();
+    if (totalFrameSize != 0)
+    {
+        genStackPointerAdjustment(totalFrameSize, REG_TMP_0, nullptr, /* reportUnwindData */ true);
+    }
 }
 
 void CodeGen::genOSRHandleTier0CalleeSavedRegistersAndFrame()
@@ -901,9 +1031,13 @@ void CodeGen::genOSRHandleTier0CalleeSavedRegistersAndFrame()
 
 void CodeGen::genAllocLclFrame(unsigned frameSize, regNumber initReg, bool* pInitRegZeroed, regMaskTP maskArgRegsLiveIn)
 {
-    if (frameSize != 0)
+    unsigned calleeSaveSize = m_compiler->compCalleeRegsPushed * REGSIZE_BYTES;
+    unsigned totalFrameSize = frameSize + calleeSaveSize;
+
+    if (totalFrameSize != 0)
     {
-        genStackPointerAdjustment(-static_cast<ssize_t>(frameSize), initReg, pInitRegZeroed, true);
+        genStackPointerAdjustment(-static_cast<ssize_t>(totalFrameSize), initReg, pInitRegZeroed, true);
+        genSaveCalleeSavedRegistersHelp(regSet.rsMaskCalleeSaved, static_cast<int>(frameSize));
     }
 }
 

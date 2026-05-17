@@ -405,6 +405,7 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
     {
         case INS_nop:
         case INS_trap:
+        case INS_sync:
         case INS_bclr:
         case INS_blr:
             break;

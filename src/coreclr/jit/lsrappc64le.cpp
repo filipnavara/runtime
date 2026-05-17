@@ -50,6 +50,7 @@ int LinearScan::BuildNode(GenTree* tree)
             return srcCount;
         }
 
+        case GT_NULLCHECK:
         case GT_IND:
             return BuildIndir(tree->AsIndir());
 
@@ -80,7 +81,7 @@ int LinearScan::BuildIndir(GenTreeIndir* indirTree)
 
     int srcCount = BuildIndirUses(indirTree);
 
-    if (!indirTree->OperIs(GT_STOREIND))
+    if (!indirTree->OperIs(GT_STOREIND, GT_NULLCHECK))
     {
         BuildDef(indirTree);
     }

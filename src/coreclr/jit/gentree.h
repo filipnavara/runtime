@@ -4527,7 +4527,7 @@ struct ReturnTypeDesc
 private:
     var_types m_regType[MAX_RET_REG_COUNT];
 
-#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
     // Structs according to hardware floating-point calling convention are passed as two logical fields, each in
     // separate register, disregarding struct layout such as packing, custom alignment, padding with empty structs, etc.
     // We need size (can be derived from m_regType) & offset of each field for memory load/stores
@@ -4565,7 +4565,7 @@ public:
         for (unsigned i = 0; i < MAX_RET_REG_COUNT; ++i)
         {
             m_regType[i] = TYP_UNKNOWN;
-#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
             m_fieldOffset[i] = 0;
 #endif
         }
@@ -4613,7 +4613,7 @@ public:
         for (unsigned i = regCount + 1; i < MAX_RET_REG_COUNT; ++i)
         {
             assert(m_regType[i] == TYP_UNKNOWN);
-#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
             assert(m_fieldOffset[i] == 0);
 #endif
         }
@@ -4670,7 +4670,7 @@ public:
     {
         assert(!IsMultiRegRetType());
         assert(m_regType[0] != TYP_UNKNOWN);
-#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
         return m_fieldOffset[0];
 #else
         return 0;

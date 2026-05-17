@@ -567,6 +567,7 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 
         case INS_fmr:
         case INS_fneg:
+        case INS_frsp:
             code = code | (ppcFReg(id->idReg1()) << 21) | (ppcFReg(id->idReg2()) << 11);
             break;
 

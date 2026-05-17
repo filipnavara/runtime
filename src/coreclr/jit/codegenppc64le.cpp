@@ -188,26 +188,7 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
 
         case GT_MUL:
         {
-            if (varTypeIsFloating(treeNode))
-            {
-                genCodeForFloatingBinary(treeNode->AsOp());
-                break;
-            }
-
-            if (treeNode->gtOverflow())
-            {
-                NYI_POWERPC64("overflow-checking multiply");
-            }
-
-            GenTree*  op1       = treeNode->gtGetOp1();
-            GenTree*  op2       = treeNode->gtGetOp2();
-            regNumber targetReg = treeNode->GetRegNum();
-
-            genConsumeRegs(op1);
-            genConsumeRegs(op2);
-            GetEmitter()->emitIns_R_R_R(genGetInsForOper(treeNode), emitActualTypeSize(treeNode), targetReg,
-                                        op1->GetRegNum(), op2->GetRegNum());
-            genProduceReg(treeNode);
+            genCodeForMul(treeNode->AsOp());
             break;
         }
 
@@ -466,6 +447,75 @@ void CodeGen::genCodeForFloatingBinary(GenTreeOp* tree)
 
     GetEmitter()->emitIns_R_R_R(genGetInsForOper(tree), emitActualTypeSize(tree), tree->GetRegNum(),
                                 op1->GetRegNum(), op2->GetRegNum());
+
+    genProduceReg(tree);
+}
+
+void CodeGen::genCodeForMul(GenTreeOp* tree)
+{
+    assert(tree->OperIs(GT_MUL));
+
+    if (varTypeIsFloating(tree))
+    {
+        genCodeForFloatingBinary(tree);
+        return;
+    }
+
+    GenTree*  op1       = tree->gtGetOp1();
+    GenTree*  op2       = tree->gtGetOp2();
+    regNumber targetReg = tree->GetRegNum();
+
+    genConsumeOperands(tree);
+
+    emitAttr attr = emitActualTypeSize(tree);
+    if (!tree->gtOverflow())
+    {
+        GetEmitter()->emitIns_R_R_R(genGetInsForOper(tree), attr, targetReg, op1->GetRegNum(), op2->GetRegNum());
+        genProduceReg(tree);
+        return;
+    }
+
+    regNumber highReg = internalRegisters.Extract(tree);
+    instruction highIns;
+    if (EA_SIZE(attr) == EA_8BYTE)
+    {
+        highIns = tree->IsUnsigned() ? INS_mulhdu : INS_mulhd;
+    }
+    else
+    {
+        assert(EA_SIZE(attr) == EA_4BYTE);
+        highIns = tree->IsUnsigned() ? INS_mulhwu : INS_mulhw;
+    }
+
+    GetEmitter()->emitIns_R_R_R(highIns, attr, highReg, op1->GetRegNum(), op2->GetRegNum());
+    GetEmitter()->emitIns_R_R_R(genGetInsForOper(tree), attr, targetReg, op1->GetRegNum(), op2->GetRegNum());
+
+    if (EA_SIZE(attr) == EA_4BYTE)
+    {
+        if (tree->IsUnsigned())
+        {
+            GetEmitter()->emitIns_R_R_I(INS_clrldi, EA_PTRSIZE, highReg, highReg, 32);
+        }
+        else
+        {
+            GetEmitter()->emitIns_R_R(INS_extsw, EA_PTRSIZE, highReg, highReg);
+        }
+    }
+
+    if (tree->IsUnsigned())
+    {
+        genJumpToThrowHlpBlk_la(SCK_OVERFLOW, INS_bne, highReg);
+    }
+    else
+    {
+        regNumber signReg = internalRegisters.Extract(tree);
+        unsigned  shift   = (EA_SIZE(attr) == EA_8BYTE) ? 63 : 31;
+
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, signReg, shift);
+        GetEmitter()->emitIns_R_R_R((EA_SIZE(attr) == EA_8BYTE) ? INS_srad : INS_sraw, EA_PTRSIZE, signReg, targetReg,
+                                    signReg);
+        genJumpToThrowHlpBlk_la(SCK_OVERFLOW, INS_bne, highReg, nullptr, signReg);
+    }
 
     genProduceReg(tree);
 }

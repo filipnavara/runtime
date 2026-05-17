@@ -143,6 +143,22 @@ int LinearScan::BuildNode(GenTree* tree)
             return srcCount;
         }
 
+        case GT_MUL:
+        {
+            int srcCount = BuildBinaryUses(tree->AsOp());
+            if (!varTypeIsFloating(tree) && tree->gtOverflow())
+            {
+                buildInternalIntRegisterDefForNode(tree);
+                if (!tree->IsUnsigned())
+                {
+                    buildInternalIntRegisterDefForNode(tree);
+                }
+                buildInternalRegisterUses();
+            }
+            BuildDef(tree);
+            return srcCount;
+        }
+
         case GT_MULHI:
         {
             int srcCount = BuildBinaryUses(tree->AsOp());

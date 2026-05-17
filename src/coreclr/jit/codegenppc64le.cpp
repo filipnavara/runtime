@@ -1514,24 +1514,29 @@ void CodeGen::genCodeForInitBlkUnroll(GenTreeBlk* node)
         instGen_MemoryBarrier(BARRIER_FULL);
     }
 
-    emitter* emit = GetEmitter();
     unsigned size = node->GetLayout()->GetSize();
 
     assert(size <= INT32_MAX);
     assert(dstOffset < INT32_MAX - static_cast<int>(size));
 
-    for (unsigned regSize = 2 * REGSIZE_BYTES; size >= regSize; size -= regSize, dstOffset += regSize)
-    {
+    regNumber dstTmpReg = dstAddr->isContained() ? internalRegisters.GetSingle(node) : REG_NA;
+    auto emitStore = [=](instruction storeIns, emitAttr attr, regNumber dataReg, int storeOffset) {
         if (dstLclNum != BAD_VAR_NUM)
         {
-            emit->emitIns_S_R(INS_std, EA_8BYTE, srcReg, dstLclNum, dstOffset);
-            emit->emitIns_S_R(INS_std, EA_8BYTE, srcReg, dstLclNum, dstOffset + 8);
+            regNumber baseReg     = REG_NA;
+            int       frameOffset = ppcGetLclFrameOffset(m_compiler, dstLclNum, storeOffset, &baseReg);
+            genInstrWithConstant(storeIns, attr, dataReg, baseReg, frameOffset, dstTmpReg);
         }
         else
         {
-            emit->emitIns_R_R_I(INS_std, EA_8BYTE, srcReg, dstAddrBaseReg, dstOffset);
-            emit->emitIns_R_R_I(INS_std, EA_8BYTE, srcReg, dstAddrBaseReg, dstOffset + 8);
+            genInstrWithConstant(storeIns, attr, dataReg, dstAddrBaseReg, storeOffset, dstTmpReg);
         }
+    };
+
+    for (unsigned regSize = 2 * REGSIZE_BYTES; size >= regSize; size -= regSize, dstOffset += regSize)
+    {
+        emitStore(INS_std, EA_8BYTE, srcReg, dstOffset);
+        emitStore(INS_std, EA_8BYTE, srcReg, dstOffset + 8);
     }
 
     for (unsigned regSize = REGSIZE_BYTES; size > 0; size -= regSize, dstOffset += regSize)
@@ -1562,14 +1567,7 @@ void CodeGen::genCodeForInitBlkUnroll(GenTreeBlk* node)
                 unreached();
         }
 
-        if (dstLclNum != BAD_VAR_NUM)
-        {
-            emit->emitIns_S_R(storeIns, attr, srcReg, dstLclNum, dstOffset);
-        }
-        else
-        {
-            emit->emitIns_R_R_I(storeIns, attr, srcReg, dstAddrBaseReg, dstOffset);
-        }
+        emitStore(storeIns, attr, srcReg, dstOffset);
     }
 }
 

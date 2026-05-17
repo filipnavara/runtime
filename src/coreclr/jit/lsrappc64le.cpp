@@ -135,6 +135,14 @@ int LinearScan::BuildNode(GenTree* tree)
             return srcCount;
         }
 
+        case GT_RETURNTRAP:
+        {
+            BuildUse(tree->gtGetOp1());
+            regMaskTP killMask = m_compiler->compHelperCallKillSet(CORINFO_HELP_STOP_FOR_GC);
+            BuildKills(tree, killMask);
+            return 1;
+        }
+
         case GT_PUTARG_STK:
             return BuildPutArgStk(tree->AsPutArgStk());
 

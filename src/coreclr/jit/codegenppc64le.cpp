@@ -3285,39 +3285,6 @@ void CodeGen::genIntToFloatCast(GenTree* treeNode)
     genConsumeOperands(treeNode->AsOp());
 
     regNumber sourceReg = op1->GetRegNum();
-    if (isUnsigned && (srcSize == EA_8BYTE))
-    {
-        regNumber shiftedReg = internalRegisters.Extract(treeNode);
-        regNumber lowBitReg  = internalRegisters.Extract(treeNode);
-
-        BasicBlock* nonNegativeLabel = genCreateTempLabel();
-        BasicBlock* doneLabel        = genCreateTempLabel();
-        instruction addIns           = (dstType == TYP_FLOAT) ? INS_fadds : INS_fadd;
-        instruction convertIns       = (dstType == TYP_FLOAT) ? INS_fcfids : INS_fcfid;
-
-        instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, 0);
-        GetEmitter()->emitIns_R_R(INS_cmpd, EA_8BYTE, sourceReg, REG_R0);
-        GetEmitter()->emitIns_J(INS_bge, nonNegativeLabel);
-
-        // Convert ((source >> 1) | (source & 1)) as signed, then double the result.
-        instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, 1);
-        GetEmitter()->emitIns_R_R_R(INS_srd, EA_8BYTE, shiftedReg, sourceReg, REG_R0);
-        GetEmitter()->emitIns_R_R_I(INS_clrldi, EA_8BYTE, lowBitReg, sourceReg, 63);
-        GetEmitter()->emitIns_R_R_R(INS_or, EA_8BYTE, shiftedReg, shiftedReg, lowBitReg);
-        GetEmitter()->emitIns_R_R(INS_mffgpr, EA_8BYTE, targetReg, shiftedReg);
-        GetEmitter()->emitIns_R_R(convertIns, emitActualTypeSize(dstType), targetReg, targetReg);
-        GetEmitter()->emitIns_R_R_R(addIns, emitActualTypeSize(dstType), targetReg, targetReg, targetReg);
-        GetEmitter()->emitIns_J(INS_b, doneLabel);
-
-        genDefineTempLabel(nonNegativeLabel);
-        GetEmitter()->emitIns_R_R(INS_mffgpr, EA_8BYTE, targetReg, sourceReg);
-        GetEmitter()->emitIns_R_R(convertIns, emitActualTypeSize(dstType), targetReg, targetReg);
-
-        genDefineTempLabel(doneLabel);
-        genProduceReg(treeNode);
-        return;
-    }
-
     if (srcSize == EA_4BYTE)
     {
         if (isUnsigned)
@@ -3332,8 +3299,17 @@ void CodeGen::genIntToFloatCast(GenTree* treeNode)
     }
 
     GetEmitter()->emitIns_R_R(INS_mffgpr, EA_8BYTE, targetReg, sourceReg);
-    GetEmitter()->emitIns_R_R((dstType == TYP_FLOAT) ? INS_fcfids : INS_fcfid, emitActualTypeSize(dstType), targetReg,
-                              targetReg);
+    instruction convertIns = INS_fcfid;
+    if (dstType == TYP_FLOAT)
+    {
+        convertIns = isUnsigned ? INS_fcfidus : INS_fcfids;
+    }
+    else if (isUnsigned)
+    {
+        convertIns = INS_fcfidu;
+    }
+
+    GetEmitter()->emitIns_R_R(convertIns, emitActualTypeSize(dstType), targetReg, targetReg);
 
     genProduceReg(treeNode);
 }

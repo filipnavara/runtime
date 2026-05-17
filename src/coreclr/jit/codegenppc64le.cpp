@@ -245,6 +245,10 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genCodeForStoreInd(treeNode->AsStoreInd());
             break;
 
+        case GT_STORE_BLK:
+            genCodeForStoreBlk(treeNode->AsBlk());
+            break;
+
         case GT_PUTARG_STK:
             genPutArgStk(treeNode->AsPutArgStk());
             break;
@@ -813,6 +817,404 @@ void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
     if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
     {
         instGen_MemoryBarrier(BARRIER_FULL);
+    }
+}
+
+//------------------------------------------------------------------------
+// genCodeForStoreBlk: Produce code for a GT_STORE_BLK node.
+//
+// Arguments:
+//    blkOp - the block store node
+//
+void CodeGen::genCodeForStoreBlk(GenTreeBlk* blkOp)
+{
+    assert(blkOp->OperIs(GT_STORE_BLK));
+
+    if (blkOp->gtBlkOpGcUnsafe)
+    {
+        GetEmitter()->emitDisableGC();
+    }
+
+    bool isCopyBlk = blkOp->OperIsCopyBlkOp();
+
+    switch (blkOp->gtBlkOpKind)
+    {
+        case GenTreeBlk::BlkOpKindCpObjUnroll:
+            NYI_POWERPC64("CpObj block stores");
+            break;
+
+        case GenTreeBlk::BlkOpKindLoop:
+            assert(!isCopyBlk);
+            genCodeForInitBlkLoop(blkOp);
+            break;
+
+        case GenTreeBlk::BlkOpKindUnroll:
+            if (isCopyBlk)
+            {
+                genCodeForCpBlkUnroll(blkOp);
+            }
+            else
+            {
+                genCodeForInitBlkUnroll(blkOp);
+            }
+            break;
+
+        default:
+            unreached();
+    }
+
+    if (blkOp->gtBlkOpGcUnsafe)
+    {
+        GetEmitter()->emitEnableGC();
+    }
+}
+
+//------------------------------------------------------------------------
+// genCodeForInitBlkUnroll: Produce code for an unrolled initblk.
+//
+// Arguments:
+//    node - the block store node
+//
+void CodeGen::genCodeForInitBlkUnroll(GenTreeBlk* node)
+{
+    assert(node->OperIs(GT_STORE_BLK));
+
+    unsigned  dstLclNum      = BAD_VAR_NUM;
+    regNumber dstAddrBaseReg = REG_NA;
+    int       dstOffset      = 0;
+    GenTree*  dstAddr        = node->Addr();
+
+    if (!dstAddr->isContained())
+    {
+        dstAddrBaseReg = genConsumeReg(dstAddr);
+    }
+    else if (dstAddr->OperIsAddrMode())
+    {
+        assert(!dstAddr->AsAddrMode()->HasIndex());
+
+        dstAddrBaseReg = genConsumeReg(dstAddr->AsAddrMode()->Base());
+        dstOffset      = dstAddr->AsAddrMode()->Offset();
+    }
+    else
+    {
+        assert(dstAddr->OperIs(GT_LCL_ADDR));
+        dstLclNum = dstAddr->AsLclVarCommon()->GetLclNum();
+        dstOffset = dstAddr->AsLclVarCommon()->GetLclOffs();
+    }
+
+    regNumber srcReg = REG_NA;
+    GenTree*  src    = node->Data();
+
+    if (src->OperIs(GT_INIT_VAL))
+    {
+        assert(src->isContained());
+        src = src->gtGetOp1();
+    }
+
+    if (!src->isContained())
+    {
+        srcReg = genConsumeReg(src);
+    }
+    else
+    {
+        assert(src->IsIntegralConst(0));
+        srcReg = REG_R0;
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, srcReg, 0);
+    }
+
+    if (node->IsVolatile())
+    {
+        instGen_MemoryBarrier(BARRIER_FULL);
+    }
+
+    emitter* emit = GetEmitter();
+    unsigned size = node->GetLayout()->GetSize();
+
+    assert(size <= INT32_MAX);
+    assert(dstOffset < INT32_MAX - static_cast<int>(size));
+
+    for (unsigned regSize = 2 * REGSIZE_BYTES; size >= regSize; size -= regSize, dstOffset += regSize)
+    {
+        if (dstLclNum != BAD_VAR_NUM)
+        {
+            emit->emitIns_S_R(INS_std, EA_8BYTE, srcReg, dstLclNum, dstOffset);
+            emit->emitIns_S_R(INS_std, EA_8BYTE, srcReg, dstLclNum, dstOffset + 8);
+        }
+        else
+        {
+            emit->emitIns_R_R_I(INS_std, EA_8BYTE, srcReg, dstAddrBaseReg, dstOffset);
+            emit->emitIns_R_R_I(INS_std, EA_8BYTE, srcReg, dstAddrBaseReg, dstOffset + 8);
+        }
+    }
+
+    for (unsigned regSize = REGSIZE_BYTES; size > 0; size -= regSize, dstOffset += regSize)
+    {
+        while (regSize > size)
+        {
+            regSize /= 2;
+        }
+
+        instruction storeIns;
+        emitAttr    attr = EA_ATTR(regSize);
+
+        switch (regSize)
+        {
+            case 1:
+                storeIns = INS_stb;
+                break;
+            case 2:
+                storeIns = INS_sth;
+                break;
+            case 4:
+                storeIns = INS_stw;
+                break;
+            case 8:
+                storeIns = INS_std;
+                break;
+            default:
+                unreached();
+        }
+
+        if (dstLclNum != BAD_VAR_NUM)
+        {
+            emit->emitIns_S_R(storeIns, attr, srcReg, dstLclNum, dstOffset);
+        }
+        else
+        {
+            emit->emitIns_R_R_I(storeIns, attr, srcReg, dstAddrBaseReg, dstOffset);
+        }
+    }
+}
+
+//------------------------------------------------------------------------
+// genCodeForCpBlkUnroll: Produce code for an unrolled cpblk.
+//
+// Arguments:
+//    cpBlkNode - the block store node
+//
+void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* cpBlkNode)
+{
+    assert(cpBlkNode->OperIs(GT_STORE_BLK));
+
+    unsigned  dstLclNum      = BAD_VAR_NUM;
+    regNumber dstAddrBaseReg = REG_NA;
+    int       dstOffset      = 0;
+    GenTree*  dstAddr        = cpBlkNode->Addr();
+
+    if (!dstAddr->isContained())
+    {
+        dstAddrBaseReg = genConsumeReg(dstAddr);
+    }
+    else if (dstAddr->OperIsAddrMode())
+    {
+        assert(!dstAddr->AsAddrMode()->HasIndex());
+
+        dstAddrBaseReg = genConsumeReg(dstAddr->AsAddrMode()->Base());
+        dstOffset      = dstAddr->AsAddrMode()->Offset();
+    }
+    else
+    {
+        assert(dstAddr->OperIs(GT_LCL_ADDR));
+        dstLclNum = dstAddr->AsLclVarCommon()->GetLclNum();
+        dstOffset = dstAddr->AsLclVarCommon()->GetLclOffs();
+    }
+
+    unsigned  srcLclNum      = BAD_VAR_NUM;
+    regNumber srcAddrBaseReg = REG_NA;
+    int       srcOffset      = 0;
+    GenTree*  src            = cpBlkNode->Data();
+
+    assert(src->isContained());
+
+    if (src->OperIs(GT_LCL_VAR, GT_LCL_FLD))
+    {
+        srcLclNum = src->AsLclVarCommon()->GetLclNum();
+        srcOffset = src->AsLclVarCommon()->GetLclOffs();
+    }
+    else
+    {
+        assert(src->OperIs(GT_IND));
+        GenTree* srcAddr = src->AsIndir()->Addr();
+
+        if (!srcAddr->isContained())
+        {
+            srcAddrBaseReg = genConsumeReg(srcAddr);
+        }
+        else if (srcAddr->OperIsAddrMode())
+        {
+            srcAddrBaseReg = genConsumeReg(srcAddr->AsAddrMode()->Base());
+            srcOffset      = srcAddr->AsAddrMode()->Offset();
+        }
+        else
+        {
+            assert(srcAddr->OperIs(GT_LCL_ADDR));
+            srcLclNum = srcAddr->AsLclVarCommon()->GetLclNum();
+            srcOffset = srcAddr->AsLclVarCommon()->GetLclOffs();
+        }
+    }
+
+    if (cpBlkNode->IsVolatile())
+    {
+        instGen_MemoryBarrier(BARRIER_FULL);
+    }
+
+    emitter* emit = GetEmitter();
+    unsigned size = cpBlkNode->GetLayout()->GetSize();
+
+    assert(size <= INT32_MAX);
+    assert(srcOffset < INT32_MAX - static_cast<int>(size));
+    assert(dstOffset < INT32_MAX - static_cast<int>(size));
+
+    regNumber tempReg = internalRegisters.Extract(cpBlkNode, RBM_ALLINT);
+
+    if (size >= 2 * REGSIZE_BYTES)
+    {
+        regNumber tempReg2 = internalRegisters.Extract(cpBlkNode, RBM_ALLINT);
+
+        for (unsigned regSize = 2 * REGSIZE_BYTES; size >= regSize;
+             size -= regSize, srcOffset += regSize, dstOffset += regSize)
+        {
+            if (srcLclNum != BAD_VAR_NUM)
+            {
+                emit->emitIns_R_S(INS_ld, EA_8BYTE, tempReg, srcLclNum, srcOffset);
+                emit->emitIns_R_S(INS_ld, EA_8BYTE, tempReg2, srcLclNum, srcOffset + 8);
+            }
+            else
+            {
+                emit->emitIns_R_R_I(INS_ld, EA_8BYTE, tempReg, srcAddrBaseReg, srcOffset);
+                emit->emitIns_R_R_I(INS_ld, EA_8BYTE, tempReg2, srcAddrBaseReg, srcOffset + 8);
+            }
+
+            if (dstLclNum != BAD_VAR_NUM)
+            {
+                emit->emitIns_S_R(INS_std, EA_8BYTE, tempReg, dstLclNum, dstOffset);
+                emit->emitIns_S_R(INS_std, EA_8BYTE, tempReg2, dstLclNum, dstOffset + 8);
+            }
+            else
+            {
+                emit->emitIns_R_R_I(INS_std, EA_8BYTE, tempReg, dstAddrBaseReg, dstOffset);
+                emit->emitIns_R_R_I(INS_std, EA_8BYTE, tempReg2, dstAddrBaseReg, dstOffset + 8);
+            }
+        }
+    }
+
+    for (unsigned regSize = REGSIZE_BYTES; size > 0; size -= regSize, srcOffset += regSize, dstOffset += regSize)
+    {
+        while (regSize > size)
+        {
+            regSize /= 2;
+        }
+
+        instruction loadIns;
+        instruction storeIns;
+        emitAttr    attr = EA_ATTR(regSize);
+
+        switch (regSize)
+        {
+            case 1:
+                loadIns  = INS_lbz;
+                storeIns = INS_stb;
+                break;
+            case 2:
+                loadIns  = INS_lhz;
+                storeIns = INS_sth;
+                break;
+            case 4:
+                loadIns  = INS_lwz;
+                storeIns = INS_stw;
+                break;
+            case 8:
+                loadIns  = INS_ld;
+                storeIns = INS_std;
+                break;
+            default:
+                unreached();
+        }
+
+        if (srcLclNum != BAD_VAR_NUM)
+        {
+            emit->emitIns_R_S(loadIns, attr, tempReg, srcLclNum, srcOffset);
+        }
+        else
+        {
+            emit->emitIns_R_R_I(loadIns, attr, tempReg, srcAddrBaseReg, srcOffset);
+        }
+
+        if (dstLclNum != BAD_VAR_NUM)
+        {
+            emit->emitIns_S_R(storeIns, attr, tempReg, dstLclNum, dstOffset);
+        }
+        else
+        {
+            emit->emitIns_R_R_I(storeIns, attr, tempReg, dstAddrBaseReg, dstOffset);
+        }
+    }
+
+    if (cpBlkNode->IsVolatile())
+    {
+        instGen_MemoryBarrier(BARRIER_LOAD_ONLY);
+    }
+}
+
+//------------------------------------------------------------------------
+// genCodeForInitBlkLoop: Produce code for a zeroing initblk loop.
+//
+// Arguments:
+//    initBlkNode - the block store node
+//
+void CodeGen::genCodeForInitBlkLoop(GenTreeBlk* initBlkNode)
+{
+    GenTree* const dstNode = initBlkNode->Addr();
+    genConsumeReg(dstNode);
+    const regNumber dstReg = dstNode->GetRegNum();
+
+    GenTree* src = initBlkNode->Data();
+    if (src->OperIs(GT_INIT_VAL))
+    {
+        assert(src->isContained());
+        src = src->gtGetOp1();
+    }
+
+    regNumber fillReg = REG_NA;
+    if (!src->isContained())
+    {
+        fillReg = genConsumeReg(src);
+    }
+    else
+    {
+        assert(src->IsIntegralConst(0));
+        fillReg = REG_R0;
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, fillReg, 0);
+    }
+
+    if (initBlkNode->IsVolatile())
+    {
+        instGen_MemoryBarrier(BARRIER_FULL);
+    }
+
+    const unsigned size = initBlkNode->GetLayout()->GetSize();
+    assert((size >= TARGET_POINTER_SIZE) && ((size % TARGET_POINTER_SIZE) == 0));
+
+    GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, fillReg, dstReg, 0);
+    if (size > TARGET_POINTER_SIZE)
+    {
+        gcInfo.gcMarkRegPtrVal(dstReg, dstNode->TypeGet());
+
+        const regNumber tempReg = internalRegisters.GetSingle(initBlkNode);
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, tempReg, size - TARGET_POINTER_SIZE);
+        GetEmitter()->emitIns_R_R_R(INS_add, EA_PTRSIZE, tempReg, dstReg, tempReg);
+
+        BasicBlock* loop = genCreateTempLabel();
+        genDefineTempLabel(loop);
+        GetEmitter()->emitDisableGC();
+
+        GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, fillReg, tempReg, 0);
+        GetEmitter()->emitIns_R_R_I(INS_addi, EA_PTRSIZE, tempReg, tempReg, -static_cast<ssize_t>(TARGET_POINTER_SIZE));
+        GetEmitter()->emitIns_R_R(INS_cmpd, EA_PTRSIZE, tempReg, dstReg);
+        GetEmitter()->emitIns_J(INS_bne, loop);
+        GetEmitter()->emitEnableGC();
+
+        gcInfo.gcMarkRegSetNpt(genRegMask(dstReg));
     }
 }
 

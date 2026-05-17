@@ -427,6 +427,15 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
             code = code | (ppcReg(id->idReg2()) << 21) | (ppcReg(id->idReg1()) << 16);
             break;
 
+        case INS_neg:
+            code = code | (ppcReg(id->idReg1()) << 21) | (ppcReg(id->idReg2()) << 16);
+            break;
+
+        case INS_not:
+            code = code | (ppcReg(id->idReg2()) << 21) | (ppcReg(id->idReg1()) << 16) |
+                   (ppcReg(id->idReg2()) << 11);
+            break;
+
         case INS_clrldi:
             code = ppcEncodeRldicl(code, id->idReg1(), id->idReg2(), 0, static_cast<unsigned>(emitGetInsSC(id)));
             break;

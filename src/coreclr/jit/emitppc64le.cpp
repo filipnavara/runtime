@@ -140,6 +140,23 @@ unsigned emitter::emitOutput_Instr(BYTE* dst, code_t code) const
     return sizeof(code_t);
 }
 
+static unsigned ppcReg(regNumber reg)
+{
+    assert((REG_R0 <= reg) && (reg <= REG_R31));
+    return (unsigned)reg - (unsigned)REG_R0;
+}
+
+static emitter::code_t ppcEncodeDForm(emitter::code_t code, regNumber rt, regNumber ra, ssize_t imm)
+{
+    assert(emitter::isValidSimm16(imm));
+    return code | (ppcReg(rt) << 21) | (ppcReg(ra) << 16) | ((unsigned)imm & 0xFFFF);
+}
+
+static emitter::code_t ppcEncodeXForm(emitter::code_t code, regNumber rt, regNumber ra, regNumber rb)
+{
+    return code | (ppcReg(rt) << 21) | (ppcReg(ra) << 16) | (ppcReg(rb) << 11);
+}
+
 void emitter::emitIns(instruction ins)
 {
     instrDesc* id = emitNewInstr(EA_4BYTE);
@@ -153,10 +170,10 @@ void emitter::emitIns(instruction ins)
 
 void emitter::emitIns_I(instruction ins, emitAttr attr, ssize_t imm)
 {
-    (void)imm;
-    instrDesc* id = emitNewInstr(attr);
+    instrDesc* id = emitNewInstrSC(attr, imm);
 
     id->idIns(ins);
+    id->idInsOpt(INS_OPTS_I);
     id->idCodeSize(sizeof(code_t));
 
     dispIns(id);
@@ -165,10 +182,16 @@ void emitter::emitIns_I(instruction ins, emitAttr attr, ssize_t imm)
 
 void emitter::emitIns_R_I(instruction ins, emitAttr attr, regNumber reg, ssize_t imm, insOpts opt)
 {
-    (void)reg;
-    (void)imm;
-    (void)opt;
-    emitIns_I(ins, attr, imm);
+    instrDesc* id = emitNewInstrSC(attr, imm);
+
+    id->idIns(ins);
+    id->idInsOpt(opt);
+    id->idReg1(reg);
+    id->idReg2(REG_R0);
+    id->idCodeSize(sizeof(code_t));
+
+    dispIns(id);
+    appendToCurIG(id);
 }
 
 void emitter::emitIns_R_R(instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, insOpts opt)
@@ -195,25 +218,42 @@ void emitter::emitIns_R_R(instruction ins, emitAttr attr, regNumber reg1, regNum
 
 void emitter::emitIns_R_R_I(instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, ssize_t imm, insOpts opt)
 {
-    (void)imm;
-    emitIns_R_R(ins, attr, reg1, reg2, opt);
+    instrDesc* id = emitNewInstrSC(attr, imm);
+
+    id->idIns(ins);
+    id->idInsOpt(opt);
+    id->idReg1(reg1);
+    id->idReg2(reg2);
+    id->idCodeSize(sizeof(code_t));
+
+    dispIns(id);
+    appendToCurIG(id);
 }
 
 void emitter::emitIns_R_R_R(
     instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, regNumber reg3, insOpts opt)
 {
-    (void)reg3;
-    emitIns_R_R(ins, attr, reg1, reg2, opt);
+    instrDesc* id = emitNewInstr(attr);
+
+    id->idIns(ins);
+    id->idInsOpt(opt);
+    id->idReg1(reg1);
+    id->idReg2(reg2);
+    id->idReg3(reg3);
+    id->idCodeSize(sizeof(code_t));
+
+    dispIns(id);
+    appendToCurIG(id);
 }
 
 void emitter::emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int varx, int offs)
 {
     (void)varx;
-    (void)offs;
-    instrDesc* id = emitNewInstr(attr);
+    instrDesc* id = emitNewInstrSC(attr, offs);
 
     id->idIns(ins);
     id->idReg1(ireg);
+    id->idReg2(REG_SPBASE);
     id->idCodeSize(sizeof(code_t));
 
     dispIns(id);
@@ -231,11 +271,11 @@ void emitter::emitIns_R_S_I(
 void emitter::emitIns_S_R(instruction ins, emitAttr attr, regNumber ireg, int varx, int offs)
 {
     (void)varx;
-    (void)offs;
-    instrDesc* id = emitNewInstr(attr);
+    instrDesc* id = emitNewInstrSC(attr, offs);
 
     id->idIns(ins);
     id->idReg1(ireg);
+    id->idReg2(REG_SPBASE);
     id->idCodeSize(sizeof(code_t));
 
     dispIns(id);
@@ -250,14 +290,12 @@ void emitter::emitIns_S_R_I(instruction ins, emitAttr attr, int varx, int offs, 
 
 void emitter::emitIns_R_AR(instruction ins, emitAttr attr, regNumber ireg, regNumber reg, int offs)
 {
-    (void)reg;
-    emitIns_R_S(ins, attr, ireg, BAD_VAR_NUM, offs);
+    emitIns_R_R_I(ins, attr, ireg, reg, offs);
 }
 
 void emitter::emitIns_AR_R(instruction ins, emitAttr attr, regNumber ireg, regNumber reg, int offs)
 {
-    (void)reg;
-    emitIns_S_R(ins, attr, ireg, BAD_VAR_NUM, offs);
+    emitIns_R_R_I(ins, attr, ireg, reg, offs);
 }
 
 void emitter::emitIns_R_ARR(instruction ins, emitAttr attr, regNumber ireg, regNumber reg, regNumber rg2, int disp)
@@ -294,10 +332,69 @@ emitter::instrDesc* emitter::emitNewInstrLoadImm(emitAttr attr, cnsval_ssize_t c
 size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 {
     BYTE*  dst  = *dp;
-    size_t size = sizeof(code_t);
+    size_t size = id->idCodeSize();
+    code_t code = emitInsCode(id->idIns());
 
-    NYI_POWERPC64("emitOutputInstr");
-    emitOutput_Instr(dst, emitInsCode(INS_trap));
+    switch (id->idIns())
+    {
+        case INS_nop:
+        case INS_trap:
+        case INS_bclr:
+        case INS_blr:
+            break;
+
+        case INS_add:
+            code = ppcEncodeXForm(code, id->idReg1(), id->idReg2(), id->idReg3());
+            break;
+
+        case INS_mr:
+        case INS_mov:
+            code = code | (ppcReg(id->idReg2()) << 21) | (ppcReg(id->idReg1()) << 16) | (ppcReg(id->idReg2()) << 11);
+            break;
+
+        case INS_addi:
+        case INS_addis:
+        case INS_ld:
+        case INS_lwz:
+        case INS_lhz:
+        case INS_lbz:
+        case INS_std:
+        case INS_stw:
+        case INS_sth:
+        case INS_stb:
+            code = ppcEncodeDForm(code, id->idReg1(), id->idReg2(), emitGetInsSC(id));
+            break;
+
+        case INS_ori:
+        case INS_oris:
+            code = code | (ppcReg(id->idReg2()) << 21) | (ppcReg(id->idReg1()) << 16) |
+                   ((unsigned)emitGetInsSC(id) & 0xFFFF);
+            break;
+
+        case INS_cmp:
+        case INS_cmpd:
+            code = code | (1u << 21) | (ppcReg(id->idReg1()) << 16) | (ppcReg(id->idReg2()) << 11);
+            break;
+
+        case INS_cmpw:
+            code = code | (ppcReg(id->idReg1()) << 16) | (ppcReg(id->idReg2()) << 11);
+            break;
+
+        case INS_b:
+        case INS_bl:
+        case INS_bc:
+        case INS_beq:
+        case INS_bne:
+            // Branch displacement binding is still skeletal; keep offset zero for now.
+            break;
+
+        default:
+            code = emitInsCode(INS_trap);
+            size = sizeof(code_t);
+            break;
+    }
+
+    emitOutput_Instr(dst, code);
 
     *dp = dst + size;
     return size;

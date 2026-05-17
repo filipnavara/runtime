@@ -4129,6 +4129,18 @@ int LinearScan::BuildStoreLoc(GenTreeLclVarCommon* storeLoc)
     }
 #endif // FEATURE_SIMD
 
+#ifdef TARGET_POWERPC64
+    if (!storeLoc->TypeIs(TYP_STRUCT))
+    {
+        bool fpBased = false;
+        int  offset  = m_compiler->lvaFrameAddress(storeLoc->GetLclNum(), &fpBased) + storeLoc->GetLclOffs();
+        if (!emitter::isValidSimm16(offset))
+        {
+            buildInternalIntRegisterDefForNode(storeLoc);
+        }
+    }
+#endif // TARGET_POWERPC64
+
     // Second, use source registers.
 
     if (op1->IsMultiRegNode())
@@ -4194,9 +4206,9 @@ int LinearScan::BuildStoreLoc(GenTreeLclVarCommon* storeLoc)
     }
 #endif // TARGET_ARM
 
-#if defined(FEATURE_SIMD) || defined(TARGET_ARM)
+#if defined(FEATURE_SIMD) || defined(TARGET_ARM) || defined(TARGET_POWERPC64)
     buildInternalRegisterUses();
-#endif // FEATURE_SIMD || TARGET_ARM
+#endif // FEATURE_SIMD || TARGET_ARM || TARGET_POWERPC64
 
     // Fourth, define destination registers.
 

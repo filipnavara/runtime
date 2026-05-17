@@ -14,6 +14,13 @@
 #include "codegen.h"
 #include "lsra.h"
 
+static bool ppc64leNeedsLargeLclOffsetTemp(Compiler* compiler, GenTreeLclVarCommon* lclNode)
+{
+    bool fpBased = false;
+    int  offset  = compiler->lvaFrameAddress(lclNode->GetLclNum(), &fpBased) + lclNode->GetLclOffs();
+    return !emitter::isValidSimm16(offset);
+}
+
 int LinearScan::BuildNode(GenTree* tree)
 {
     assert(!tree->isContained());
@@ -22,13 +29,31 @@ int LinearScan::BuildNode(GenTree* tree)
     switch (tree->OperGet())
     {
         case GT_LCL_VAR:
+        {
             if (checkContainedOrCandidateLclVar(tree->AsLclVar()))
             {
                 return 0;
             }
-            FALLTHROUGH;
+
+            LclVarDsc* varDsc = m_compiler->lvaGetDesc(tree->AsLclVar());
+            if (!varDsc->lvIsRegCandidate() && !tree->AsLclVar()->IsMultiReg() &&
+                ((tree->gtFlags & GTF_SPILLED) == 0) && ppc64leNeedsLargeLclOffsetTemp(m_compiler, tree->AsLclVar()))
+            {
+                buildInternalIntRegisterDefForNode(tree);
+                buildInternalRegisterUses();
+            }
+
+            BuildDef(tree);
+            return 0;
+        }
 
         case GT_LCL_FLD:
+            if (!tree->TypeIs(TYP_STRUCT) && ppc64leNeedsLargeLclOffsetTemp(m_compiler, tree->AsLclFld()))
+            {
+                buildInternalIntRegisterDefForNode(tree);
+                buildInternalRegisterUses();
+            }
+
             BuildDef(tree);
             return 0;
 

@@ -47,6 +47,11 @@ static instruction ppcBranchInsForCondition(GenCondition cond)
 
 void CodeGen::genFnEpilog(BasicBlock* block)
 {
+    if (m_compiler->compLclFrameSize != 0)
+    {
+        genStackPointerAdjustment(m_compiler->compLclFrameSize, REG_TMP_0, nullptr, true);
+    }
+
     GetEmitter()->emitIns(INS_blr);
 }
 
@@ -334,7 +339,32 @@ bool CodeGen::genInstrWithConstant(
 
 void CodeGen::genStackPointerAdjustment(ssize_t spAdjustment, regNumber tmpReg, bool* pTmpRegIsZero, bool reportUnwindData)
 {
-    NYI_POWERPC64("genStackPointerAdjustment");
+    if (emitter::isValidSimm16(spAdjustment))
+    {
+        GetEmitter()->emitIns_R_R_I(INS_addi, EA_PTRSIZE, REG_SPBASE, REG_SPBASE, spAdjustment);
+    }
+    else
+    {
+        if (tmpReg == REG_NA)
+        {
+            NYI_POWERPC64("large stack adjustment without temporary register");
+        }
+
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, tmpReg, spAdjustment);
+        GetEmitter()->emitIns_R_R_R(INS_add, EA_PTRSIZE, REG_SPBASE, REG_SPBASE, tmpReg);
+
+        if (pTmpRegIsZero != nullptr)
+        {
+            *pTmpRegIsZero = false;
+        }
+    }
+
+    if (reportUnwindData)
+    {
+        ssize_t spDeltaAbs = std::abs(spAdjustment);
+        assert((spDeltaAbs % STACK_ALIGN) == 0);
+        m_compiler->unwindAllocStack(static_cast<unsigned>(spDeltaAbs));
+    }
 }
 
 void CodeGen::genSaveCalleeSavedRegistersHelp(regMaskTP regsToSaveMask, int lowestCalleeSavedOffset)
@@ -451,7 +481,7 @@ void CodeGen::genAllocLclFrame(unsigned frameSize, regNumber initReg, bool* pIni
 {
     if (frameSize != 0)
     {
-        NYI_POWERPC64("genAllocLclFrame");
+        genStackPointerAdjustment(-static_cast<ssize_t>(frameSize), initReg, pInitRegZeroed, true);
     }
 }
 

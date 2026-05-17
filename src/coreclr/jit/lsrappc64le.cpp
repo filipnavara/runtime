@@ -126,6 +126,13 @@ int LinearScan::BuildNode(GenTree* tree)
             return srcCount;
         }
 
+        case GT_MULHI:
+        {
+            int srcCount = BuildBinaryUses(tree->AsOp());
+            BuildDef(tree);
+            return srcCount;
+        }
+
         case GT_EQ:
         case GT_NE:
         case GT_LT:

@@ -120,6 +120,29 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genCodeForCompare(treeNode->AsOp());
             break;
 
+        case GT_CAST:
+        {
+            GenTreeCast* cast = treeNode->AsCast();
+            if (varTypeIsIntegral(cast) && varTypeIsIntegral(cast->CastOp()))
+            {
+                genIntToIntCast(cast);
+            }
+            else if (varTypeIsFloating(cast) && varTypeIsFloating(cast->CastOp()))
+            {
+                genFloatToFloatCast(cast);
+            }
+            else if (varTypeIsIntegral(cast) && varTypeIsFloating(cast->CastOp()))
+            {
+                genFloatToIntCast(cast);
+            }
+            else
+            {
+                assert(varTypeIsFloating(cast) && varTypeIsIntegral(cast->CastOp()));
+                genIntToFloatCast(cast);
+            }
+            break;
+        }
+
         case GT_LCL_VAR:
             genCodeForLclVar(treeNode->AsLclVar());
             break;
@@ -546,7 +569,52 @@ void CodeGen::genEHCatchRet(BasicBlock* block)
 
 void CodeGen::genIntToIntCast(GenTreeCast* cast)
 {
-    NYI_POWERPC64("genIntToIntCast");
+    genConsumeRegs(cast->gtGetOp1());
+
+    GenIntCastDesc desc(cast);
+    if (desc.CheckKind() != GenIntCastDesc::CHECK_NONE)
+    {
+        NYI_POWERPC64("overflow-checking integer cast");
+    }
+
+    emitter*        emit   = GetEmitter();
+    const regNumber srcReg = cast->gtGetOp1()->GetRegNum();
+    const regNumber dstReg = cast->GetRegNum();
+
+    assert(genIsValidIntReg(srcReg));
+    assert(genIsValidIntReg(dstReg));
+
+    switch (desc.ExtendKind())
+    {
+        case GenIntCastDesc::ZERO_EXTEND_SMALL_INT:
+        {
+            unsigned clearBits = 64 - (desc.ExtendSrcSize() * BITS_PER_BYTE);
+            emit->emitIns_R_R_I(INS_clrldi, EA_PTRSIZE, dstReg, srcReg, clearBits);
+            break;
+        }
+
+        case GenIntCastDesc::SIGN_EXTEND_SMALL_INT:
+        {
+            instruction extend = (desc.ExtendSrcSize() == 1) ? INS_extsb : INS_extsh;
+            emit->emitIns_R_R(extend, EA_PTRSIZE, dstReg, srcReg);
+            break;
+        }
+
+        case GenIntCastDesc::ZERO_EXTEND_INT:
+            emit->emitIns_R_R_I(INS_clrldi, EA_PTRSIZE, dstReg, srcReg, 32);
+            break;
+
+        case GenIntCastDesc::SIGN_EXTEND_INT:
+            emit->emitIns_R_R(INS_extsw, EA_PTRSIZE, dstReg, srcReg);
+            break;
+
+        default:
+            assert(desc.ExtendKind() == GenIntCastDesc::COPY);
+            emit->emitIns_Mov(emitActualTypeSize(cast), dstReg, srcReg, true);
+            break;
+    }
+
+    genProduceReg(cast);
 }
 
 void CodeGen::genFloatToFloatCast(GenTree* treeNode)

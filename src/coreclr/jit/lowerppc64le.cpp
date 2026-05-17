@@ -82,6 +82,38 @@ GenTree* Lowering::LowerMul(GenTreeOp* mul)
 
 GenTree* Lowering::LowerBinaryArithmetic(GenTreeOp* binOp)
 {
+    if (binOp->OperIs(GT_AND, GT_OR, GT_XOR))
+    {
+        bool isOp1Negated = binOp->gtGetOp1()->OperIs(GT_NOT);
+        bool isOp2Negated = binOp->gtGetOp2()->OperIs(GT_NOT);
+
+        if (isOp1Negated != isOp2Negated)
+        {
+            GenTree* notNode = isOp1Negated ? binOp->gtGetOp1() : binOp->gtGetOp2();
+            GenTree* opNode  = isOp1Negated ? binOp->gtGetOp2() : binOp->gtGetOp1();
+
+            binOp->gtOp1 = opNode;
+            binOp->gtOp2 = notNode->AsUnOp()->gtGetOp1();
+            binOp->gtOp2->ClearContained();
+
+            switch (binOp->OperGet())
+            {
+                case GT_AND:
+                    binOp->ChangeOper(GT_AND_NOT);
+                    break;
+                case GT_OR:
+                    binOp->ChangeOper(GT_OR_NOT);
+                    break;
+                default:
+                    assert(binOp->OperIs(GT_XOR));
+                    binOp->ChangeOper(GT_XOR_NOT);
+                    break;
+            }
+
+            BlockRange().Remove(notNode);
+        }
+    }
+
     ContainCheckBinary(binOp);
     return binOp;
 }

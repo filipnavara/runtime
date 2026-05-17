@@ -130,6 +130,12 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             break;
         }
 
+        case GT_LSH:
+        case GT_RSH:
+        case GT_RSZ:
+            genCodeForShift(treeNode);
+            break;
+
         case GT_NEG:
         case GT_NOT:
             genCodeForNegNot(treeNode->AsOp());
@@ -210,6 +216,22 @@ void CodeGen::genCodeForNegNot(GenTreeOp* tree)
     assert(!varTypeIsFloating(tree));
 
     GetEmitter()->emitIns_R_R(genGetInsForOper(tree), emitActualTypeSize(tree), targetReg, operandReg);
+
+    genProduceReg(tree);
+}
+
+void CodeGen::genCodeForShift(GenTree* tree)
+{
+    assert(tree->OperIsShift());
+    assert(!varTypeIsFloating(tree));
+
+    GenTree* operand = tree->gtGetOp1();
+    GenTree* shiftBy = tree->gtGetOp2();
+
+    genConsumeOperands(tree->AsOp());
+
+    GetEmitter()->emitIns_R_R_R(genGetInsForOper(tree), emitActualTypeSize(tree), tree->GetRegNum(),
+                                operand->GetRegNum(), shiftBy->GetRegNum());
 
     genProduceReg(tree);
 }
@@ -453,6 +475,12 @@ instruction CodeGen::genGetInsForOper(GenTree* treeNode)
             return INS_subf;
         case GT_MUL:
             return (emitActualTypeSize(treeNode) == EA_4BYTE) ? INS_mullw : INS_mulld;
+        case GT_LSH:
+            return (emitActualTypeSize(treeNode) == EA_4BYTE) ? INS_slw : INS_sld;
+        case GT_RSH:
+            return (emitActualTypeSize(treeNode) == EA_4BYTE) ? INS_sraw : INS_srad;
+        case GT_RSZ:
+            return (emitActualTypeSize(treeNode) == EA_4BYTE) ? INS_srw : INS_srd;
         case GT_AND:
             return INS_and;
         case GT_OR:

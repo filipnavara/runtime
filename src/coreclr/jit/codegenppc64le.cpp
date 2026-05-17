@@ -100,12 +100,17 @@ static void ppcEmitBranchOnFloatRelop(emitter* emit, genTreeOps oper, BasicBlock
     }
 }
 
-static int ppcGetLclFrameOffset(Compiler* compiler, GenTreeLclVarCommon* lclNode, regNumber* baseReg)
+static int ppcGetLclFrameOffset(Compiler* compiler, unsigned lclNum, unsigned lclOffs, regNumber* baseReg)
 {
     bool fpBased = false;
-    int  offset  = compiler->lvaFrameAddress(lclNode->GetLclNum(), &fpBased) + lclNode->GetLclOffs();
+    int  offset  = compiler->lvaFrameAddress(lclNum, &fpBased) + lclOffs;
     *baseReg     = fpBased ? REG_FPBASE : REG_SPBASE;
     return offset;
+}
+
+static int ppcGetLclFrameOffset(Compiler* compiler, GenTreeLclVarCommon* lclNode, regNumber* baseReg)
+{
+    return ppcGetLclFrameOffset(compiler, lclNode->GetLclNum(), lclNode->GetLclOffs(), baseReg);
 }
 
 void CodeGen::genFnEpilog(BasicBlock* block)
@@ -2978,7 +2983,11 @@ void CodeGen::genSetGSSecurityCookie(regNumber initReg, bool* pInitRegZeroed)
         GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, initReg, initReg, 0);
     }
 
-    GetEmitter()->emitIns_S_R(INS_std, EA_PTRSIZE, initReg, m_compiler->lvaGSSecurityCookie, 0);
+    regNumber baseReg = REG_NA;
+    int       offset  = ppcGetLclFrameOffset(m_compiler, m_compiler->lvaGSSecurityCookie, 0, &baseReg);
+    regNumber tmpReg  = emitter::isValidSimm16(offset) ? REG_NA : ((initReg != REG_TMP_0) ? REG_TMP_0 : REG_SCRATCH);
+
+    genInstrWithConstant(INS_std, EA_PTRSIZE, initReg, baseReg, offset, tmpReg);
 
     *pInitRegZeroed = false;
 }
@@ -3093,7 +3102,9 @@ void CodeGen::genEmitGSCookieCheck(bool tailCall)
         GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, regGSConst, regGSConst, 0);
     }
 
-    GetEmitter()->emitIns_R_S(INS_ld, EA_PTRSIZE, regGSValue, m_compiler->lvaGSSecurityCookie, 0);
+    regNumber baseReg = REG_NA;
+    int       offset  = ppcGetLclFrameOffset(m_compiler, m_compiler->lvaGSSecurityCookie, 0, &baseReg);
+    genInstrWithConstant(INS_ld, EA_PTRSIZE, regGSValue, baseReg, offset, regGSValue);
 
     GetEmitter()->emitIns_R_R(INS_cmpd, EA_PTRSIZE, regGSConst, regGSValue);
 

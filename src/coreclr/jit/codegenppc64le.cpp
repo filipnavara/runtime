@@ -504,7 +504,6 @@ void CodeGen::genCodeForIndir(GenTreeIndir* tree)
 {
     assert(tree->OperIs(GT_IND));
     NYI_IF(tree->TypeIs(TYP_STRUCT), "GT_IND: struct load not supported");
-    NYI_IF((tree->gtFlags & GTF_IND_VOLATILE) != 0, "GT_IND: volatile load not supported");
 
     GenTree* addr = tree->Addr();
     assert(!addr->isContained());
@@ -519,8 +518,18 @@ void CodeGen::genCodeForIndir(GenTreeIndir* tree)
     var_types targetType = tree->TypeGet();
     regNumber targetReg  = tree->GetRegNum();
 
+    if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
+    {
+        instGen_MemoryBarrier(BARRIER_FULL);
+    }
+
     GetEmitter()->emitIns_R_AR(ins_Load(targetType), emitActualTypeSize(targetType), targetReg, baseReg,
                                static_cast<int>(offset));
+
+    if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
+    {
+        instGen_MemoryBarrier(BARRIER_FULL);
+    }
 
     genProduceReg(tree);
 }
@@ -546,7 +555,6 @@ void CodeGen::genCodeForNullCheck(GenTreeIndir* tree)
 void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
 {
     NYI_IF(tree->TypeIs(TYP_STRUCT), "GT_STOREIND: struct store not supported");
-    NYI_IF((tree->gtFlags & GTF_IND_VOLATILE) != 0, "GT_STOREIND: volatile store not supported");
     NYI_IF(gcInfo.gcIsWriteBarrierCandidate(tree) != GCInfo::WBF_NoBarrier, "GT_STOREIND: write barrier not supported");
 
     GenTree* addr = tree->Addr();
@@ -571,8 +579,18 @@ void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
     regNumber dataReg = data->GetRegNum();
     assert(dataReg != REG_NA);
 
+    if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
+    {
+        instGen_MemoryBarrier(BARRIER_FULL);
+    }
+
     GetEmitter()->emitIns_AR_R(ins_StoreFromSrc(dataReg, type), emitActualTypeSize(type), dataReg, baseReg,
                                static_cast<int>(offset));
+
+    if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
+    {
+        instGen_MemoryBarrier(BARRIER_FULL);
+    }
 }
 
 void CodeGen::genCodeForJumpCompare(GenTreeOpCC* tree)

@@ -5349,9 +5349,9 @@ AGAIN:
 #if defined(TARGET_ARM)
         srcEncodingOffs =
             srcInstrOffs + 4; // For relative branches, ARM PC is always considered to be the instruction address + 4
-#elif defined(TARGET_ARM64) || defined(TARGET_RISCV64)
-        srcEncodingOffs = srcInstrOffs; // For relative branches, ARM64 and RISC-V PC is always considered to be the
-                                        // instruction address
+#elif defined(TARGET_ARM64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+        srcEncodingOffs = srcInstrOffs; // For relative branches, ARM64, RISC-V, and PowerPC PC is always considered
+                                        // to be the instruction address
 #else
         srcEncodingOffs = srcInstrOffs + ssz; // Encoding offset of relative offset for small branch
 #endif

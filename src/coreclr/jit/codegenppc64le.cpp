@@ -3387,7 +3387,7 @@ void CodeGen::genCallFinally(BasicBlock* block)
 
 void CodeGen::genEHCatchRet(BasicBlock* block)
 {
-    NYI_POWERPC64("genEHCatchRet");
+    GetEmitter()->emitIns_R_L(INS_addi, EA_PTRSIZE, block->GetTarget(), REG_INTRET);
 }
 
 void CodeGen::genIntCastOverflowCheck(GenTreeCast* cast, const GenIntCastDesc& desc, regNumber reg)

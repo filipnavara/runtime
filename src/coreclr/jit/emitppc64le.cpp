@@ -376,6 +376,30 @@ void emitter::emitIns_R_C(
     appendToCurIG(id);
 }
 
+void emitter::emitIns_R_L(instruction ins, emitAttr attr, BasicBlock* dst, regNumber reg)
+{
+    assert(dst->HasFlag(BBF_HAS_LABEL));
+    assert(isGeneralRegister(reg));
+
+    instrDesc* id = emitNewInstr(attr);
+
+    id->idIns(ins);
+    id->idInsOpt(INS_OPTS_RL);
+    id->idAddr()->iiaBBlabel = dst;
+    id->idCodeSize(5 * sizeof(code_t));
+    id->idReg1(reg);
+
+#ifdef DEBUG
+    if (m_compiler->compCurBB->KindIs(BBJ_EHCATCHRET))
+    {
+        id->idDebugOnlyInfo()->idCatchRet = true;
+    }
+#endif // DEBUG
+
+    dispIns(id);
+    appendToCurIG(id);
+}
+
 void emitter::emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int varx, int offs)
 {
     ssize_t imm = offs;
@@ -520,6 +544,20 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
     if (id->idInsOpt() == INS_OPTS_RC)
     {
         codeSize = emitOutputConstLoad(dst, id);
+        *dp      = dst + codeSize;
+        return emitSizeOfInsDsc(id);
+    }
+
+    if (id->idInsOpt() == INS_OPTS_RL)
+    {
+        if (!id->idIsBound())
+        {
+            insGroup* target = static_cast<insGroup*>(emitCodeGetCookie(id->idAddr()->iiaBBlabel));
+            id->idAddr()->iiaIGlabel = target;
+            id->idSetIsBound();
+        }
+
+        codeSize = emitOutputLabelLoad(dst, id);
         *dp      = dst + codeSize;
         return emitSizeOfInsDsc(id);
     }
@@ -713,6 +751,42 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 
     *dp = dst + codeSize;
     return emitSizeOfInsDsc(id);
+}
+
+unsigned emitter::emitOutputLabelLoad(BYTE* dst, instrDesc* id)
+{
+    assert(id->idInsOpt() == INS_OPTS_RL);
+    assert(id->idIsBound());
+    assert(isGeneralRegister(id->idReg1()));
+    assert(id->idCodeSize() == 5 * sizeof(code_t));
+
+    const uintptr_t value = reinterpret_cast<uintptr_t>(emitCodeBlock + id->idAddr()->iiaIGlabel->igOffs);
+    const regNumber reg  = id->idReg1();
+
+    BYTE* cur = dst;
+
+    emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), reg, REG_R0, ppcSignExtend16(value >> 48)));
+    cur += sizeof(code_t);
+
+    emitOutput_Instr(cur,
+                     emitInsCode(INS_ori) | (ppcReg(reg) << 21) | (ppcReg(reg) << 16) |
+                         (ppcUnsigned16(value >> 32) & 0xFFFF));
+    cur += sizeof(code_t);
+
+    emitOutput_Instr(cur, ppcEncodeRldicl(emitInsCode(INS_sldi), reg, reg, 32, 31));
+    cur += sizeof(code_t);
+
+    emitOutput_Instr(cur,
+                     emitInsCode(INS_oris) | (ppcReg(reg) << 21) | (ppcReg(reg) << 16) |
+                         (ppcUnsigned16(value >> 16) & 0xFFFF));
+    cur += sizeof(code_t);
+
+    emitOutput_Instr(cur,
+                     emitInsCode(INS_ori) | (ppcReg(reg) << 21) | (ppcReg(reg) << 16) |
+                         (ppcUnsigned16(value) & 0xFFFF));
+    cur += sizeof(code_t);
+
+    return static_cast<unsigned>(cur - dst);
 }
 
 unsigned emitter::emitOutputConstLoad(BYTE* dst, instrDesc* id)

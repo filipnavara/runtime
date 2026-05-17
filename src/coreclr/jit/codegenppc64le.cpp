@@ -3363,6 +3363,19 @@ void CodeGen::genFuncletProlog(BasicBlock* block)
 
     assert(framePointerOffset >= 0);
 
+    unsigned saveAreaSize =
+        PPC_FRAME_POINTER_SAVE_SIZE + PPC_LINK_REGISTER_SAVE_SIZE + (genCountBits(maskSaveRegs) * REGSIZE_BYTES);
+    unsigned deferredFrameSize = ppcGetDeferredFrameSizeForSaveArea(static_cast<unsigned>(framePointerOffset),
+                                                                    saveAreaSize,
+                                                                    static_cast<unsigned>(framePointerOffset));
+    if (deferredFrameSize != 0)
+    {
+        frameSize += static_cast<int>(deferredFrameSize);
+        framePointerOffset -= static_cast<int>(deferredFrameSize);
+        linkRegisterOffset -= static_cast<int>(deferredFrameSize);
+        calleeSavedOffset -= static_cast<int>(deferredFrameSize);
+    }
+
     if (!emitter::isValidSimm16(calleeSavedOffset) || (calleeSavedOffset > 2047))
     {
         NYI_POWERPC64("large funclet callee-saved offset");
@@ -3377,6 +3390,12 @@ void CodeGen::genFuncletProlog(BasicBlock* block)
     GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R0, REG_SPBASE, linkRegisterOffset);
 
     genSaveCalleeSavedRegistersHelp(maskSaveRegs, calleeSavedOffset);
+
+    if (deferredFrameSize != 0)
+    {
+        genStackPointerAdjustment(-static_cast<ssize_t>(deferredFrameSize), REG_TMP_0, nullptr,
+                                  /* reportUnwindData */ true);
+    }
 
     m_compiler->unwindEndProlog();
 }
@@ -3396,6 +3415,21 @@ void CodeGen::genFuncletEpilog(BasicBlock* block)
     int       linkRegisterOffset = framePointerOffset + PPC_FRAME_POINTER_SAVE_SIZE;
 
     assert(framePointerOffset >= 0);
+
+    unsigned saveAreaSize =
+        PPC_FRAME_POINTER_SAVE_SIZE + PPC_LINK_REGISTER_SAVE_SIZE + (genCountBits(maskSaveRegs) * REGSIZE_BYTES);
+    unsigned deferredFrameSize = ppcGetDeferredFrameSizeForSaveArea(static_cast<unsigned>(framePointerOffset),
+                                                                    saveAreaSize,
+                                                                    static_cast<unsigned>(framePointerOffset));
+    if (deferredFrameSize != 0)
+    {
+        genStackPointerAdjustment(deferredFrameSize, REG_TMP_0, nullptr, /* reportUnwindData */ true);
+
+        frameSize += static_cast<int>(deferredFrameSize);
+        framePointerOffset -= static_cast<int>(deferredFrameSize);
+        linkRegisterOffset -= static_cast<int>(deferredFrameSize);
+        calleeSavedOffset -= static_cast<int>(deferredFrameSize);
+    }
 
     if (!emitter::isValidSimm16(calleeSavedOffset) || (calleeSavedOffset > 2047))
     {

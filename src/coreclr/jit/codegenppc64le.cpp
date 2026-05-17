@@ -2767,6 +2767,68 @@ void CodeGen::genEHCatchRet(BasicBlock* block)
     NYI_POWERPC64("genEHCatchRet");
 }
 
+void CodeGen::genIntCastOverflowCheck(GenTreeCast* cast, const GenIntCastDesc& desc, regNumber reg)
+{
+    regNumber tempReg = internalRegisters.GetSingle(cast);
+
+    auto shiftRight = [=](unsigned shift) {
+        assert(shift < 64);
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, shift);
+        GetEmitter()->emitIns_R_R_R(INS_srd, EA_PTRSIZE, tempReg, reg, REG_R0);
+    };
+
+    switch (desc.CheckKind())
+    {
+        case GenIntCastDesc::CHECK_POSITIVE:
+            if (desc.CheckSrcSize() == 4)
+            {
+                GetEmitter()->emitIns_R_R(INS_extsw, EA_PTRSIZE, tempReg, reg);
+                reg = tempReg;
+            }
+            genJumpToThrowHlpBlk_la(SCK_OVERFLOW, INS_blt, reg);
+            break;
+
+        case GenIntCastDesc::CHECK_UINT_RANGE:
+            shiftRight(32);
+            genJumpToThrowHlpBlk_la(SCK_OVERFLOW, INS_bne, tempReg);
+            break;
+
+        case GenIntCastDesc::CHECK_POSITIVE_INT_RANGE:
+            shiftRight(31);
+            genJumpToThrowHlpBlk_la(SCK_OVERFLOW, INS_bne, tempReg);
+            break;
+
+        case GenIntCastDesc::CHECK_INT_RANGE:
+            GetEmitter()->emitIns_R_R(INS_extsw, EA_PTRSIZE, tempReg, reg);
+            genJumpToThrowHlpBlk_la(SCK_OVERFLOW, INS_bne, tempReg, nullptr, reg);
+            break;
+
+        default:
+        {
+            assert(desc.CheckKind() == GenIntCastDesc::CHECK_SMALL_INT_RANGE);
+
+            const unsigned castSize = genTypeSize(cast->gtCastType);
+            assert((castSize == 1) || (castSize == 2));
+
+            if (desc.CheckSmallIntMin() == 0)
+            {
+                const bool     isDstSigned = !varTypeIsUnsigned(cast->gtCastType);
+                const unsigned checkBits   = (castSize * BITS_PER_BYTE) - (isDstSigned ? 1 : 0);
+
+                shiftRight(checkBits);
+                genJumpToThrowHlpBlk_la(SCK_OVERFLOW, INS_bne, tempReg);
+            }
+            else
+            {
+                instruction extend = (castSize == 1) ? INS_extsb : INS_extsh;
+                GetEmitter()->emitIns_R_R(extend, EA_PTRSIZE, tempReg, reg);
+                genJumpToThrowHlpBlk_la(SCK_OVERFLOW, INS_bne, tempReg, nullptr, reg);
+            }
+            break;
+        }
+    }
+}
+
 void CodeGen::genIntToIntCast(GenTreeCast* cast)
 {
     genConsumeRegs(cast->gtGetOp1());
@@ -2774,7 +2836,7 @@ void CodeGen::genIntToIntCast(GenTreeCast* cast)
     GenIntCastDesc desc(cast);
     if (desc.CheckKind() != GenIntCastDesc::CHECK_NONE)
     {
-        NYI_POWERPC64("overflow-checking integer cast");
+        genIntCastOverflowCheck(cast, desc, cast->gtGetOp1()->GetRegNum());
     }
 
     emitter*        emit   = GetEmitter();

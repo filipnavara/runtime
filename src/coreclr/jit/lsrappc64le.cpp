@@ -11,6 +11,7 @@
 #include "jit.h"
 #include "sideeffects.h"
 #include "lower.h"
+#include "codegen.h"
 #include "lsra.h"
 
 int LinearScan::BuildNode(GenTree* tree)
@@ -98,6 +99,12 @@ int LinearScan::BuildNode(GenTree* tree)
         case GT_CAST:
         {
             int srcCount = BuildCastUses(tree->AsCast(), RBM_NONE);
+            if (varTypeIsIntegral(tree) && varTypeIsIntegral(tree->AsCast()->CastOp()) &&
+                (CodeGen::GenIntCastDesc(tree->AsCast()).CheckKind() != CodeGen::GenIntCastDesc::CHECK_NONE))
+            {
+                buildInternalIntRegisterDefForNode(tree);
+                buildInternalRegisterUses();
+            }
             BuildDef(tree);
             return srcCount;
         }

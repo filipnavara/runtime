@@ -84,6 +84,8 @@ bool emitter::emitInsWritesToLclVarStackLoc(instrDesc* id)
         case INS_stw:
         case INS_sth:
         case INS_stb:
+        case INS_stfd:
+        case INS_stfs:
             return true;
 
         default:
@@ -146,10 +148,21 @@ static unsigned ppcReg(regNumber reg)
     return (unsigned)reg - (unsigned)REG_R0;
 }
 
+static unsigned ppcRegOrFReg(regNumber reg)
+{
+    if ((REG_R0 <= reg) && (reg <= REG_R31))
+    {
+        return (unsigned)reg - (unsigned)REG_R0;
+    }
+
+    assert((REG_F0 <= reg) && (reg <= REG_F31));
+    return (unsigned)reg - (unsigned)REG_F0;
+}
+
 static emitter::code_t ppcEncodeDForm(emitter::code_t code, regNumber rt, regNumber ra, ssize_t imm)
 {
     assert(emitter::isValidSimm16(imm));
-    return code | (ppcReg(rt) << 21) | (ppcReg(ra) << 16) | ((unsigned)imm & 0xFFFF);
+    return code | (ppcRegOrFReg(rt) << 21) | (ppcReg(ra) << 16) | ((unsigned)imm & 0xFFFF);
 }
 
 static emitter::code_t ppcEncodeXForm(emitter::code_t code, regNumber rt, regNumber ra, regNumber rb)
@@ -395,6 +408,13 @@ void emitter::emitIns_Mov(
         return;
     }
 
+    if (isFloatReg(dstReg) || isFloatReg(srcReg))
+    {
+        assert(isFloatReg(dstReg));
+        assert(isFloatReg(srcReg));
+        ins = INS_fmr;
+    }
+
     emitIns_R_R(ins, attr, dstReg, srcReg, opt);
 }
 
@@ -488,6 +508,10 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
                    (ppcReg(id->idReg2()) << 11);
             break;
 
+        case INS_fmr:
+            code = code | (ppcRegOrFReg(id->idReg1()) << 21) | (ppcRegOrFReg(id->idReg2()) << 11);
+            break;
+
         case INS_clrldi:
             code = ppcEncodeRldicl(code, id->idReg1(), id->idReg2(), 0, static_cast<unsigned>(emitGetInsSC(id)));
             break;
@@ -511,10 +535,14 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_lwz:
         case INS_lhz:
         case INS_lbz:
+        case INS_lfs:
+        case INS_lfd:
         case INS_std:
         case INS_stw:
         case INS_sth:
         case INS_stb:
+        case INS_stfs:
+        case INS_stfd:
             code = ppcEncodeDForm(code, id->idReg1(), id->idReg2(), emitGetInsSC(id));
             break;
 

@@ -60,6 +60,11 @@ int LinearScan::BuildNode(GenTree* tree)
 
         case GT_STOREIND:
         {
+            if (m_compiler->codeGen->gcInfo.gcIsWriteBarrierStoreIndNode(tree->AsStoreInd()))
+            {
+                return BuildGCWriteBarrier(tree);
+            }
+
             int srcCount = BuildIndir(tree->AsIndir());
             if (!tree->gtGetOp2()->isContained())
             {

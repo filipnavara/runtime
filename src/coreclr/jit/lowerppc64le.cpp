@@ -34,6 +34,41 @@ bool Lowering::IsContainableImmed(GenTree* parentNode, GenTree* childNode) const
     return false;
 }
 
+GenTree* Lowering::LowerJTrue(GenTreeOp* jtrue)
+{
+    GenTree*     op = jtrue->gtGetOp1();
+    GenCondition cond;
+    GenTree*     cmpOp1;
+    GenTree*     cmpOp2;
+
+    if (op->OperIsCompare() && !varTypeIsFloating(op->gtGetOp1()))
+    {
+        cond   = GenCondition::FromIntegralRelop(op);
+        cmpOp1 = op->gtGetOp1();
+        cmpOp2 = op->gtGetOp2();
+
+        BlockRange().Remove(op);
+    }
+    else
+    {
+        cond   = GenCondition(GenCondition::NE);
+        cmpOp1 = op;
+        cmpOp2 = m_compiler->gtNewZeroConNode(cmpOp1->TypeGet());
+
+        BlockRange().InsertBefore(jtrue, cmpOp2);
+    }
+
+    jtrue->ChangeOper(GT_JCMP);
+    jtrue->gtOp1                 = cmpOp1;
+    jtrue->gtOp2                 = cmpOp2;
+    jtrue->AsOpCC()->gtCondition = cond;
+
+    cmpOp1->ClearContained();
+    cmpOp2->ClearContained();
+
+    return jtrue->gtNext;
+}
+
 GenTree* Lowering::LowerStoreIndir(GenTreeStoreInd* node)
 {
     return node;

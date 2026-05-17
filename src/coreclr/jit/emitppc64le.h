@@ -99,7 +99,8 @@ ssize_t emitOutputInstrJumpDistance(const BYTE* src, const insGroup* ig, instrDe
 
 inline static bool emitIsCmpJump(instruction ins)
 {
-    return (ins == INS_bc) || (ins == INS_beq) || (ins == INS_bne);
+    return (ins == INS_bc) || (ins == INS_blt) || (ins == INS_bge) || (ins == INS_bgt) || (ins == INS_ble) ||
+           (ins == INS_beq) || (ins == INS_bne);
 }
 
 inline static bool emitIsCmpJump(instrDesc* jmp)

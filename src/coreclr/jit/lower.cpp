@@ -4683,7 +4683,7 @@ GenTree* Lowering::LowerCompare(GenTree* cmp)
     return cmp->gtNext;
 }
 
-#if !defined(TARGET_LOONGARCH64) && !defined(TARGET_RISCV64) && !defined(TARGET_WASM)
+#if !defined(TARGET_LOONGARCH64) && !defined(TARGET_RISCV64) && !defined(TARGET_POWERPC64) && !defined(TARGET_WASM)
 //------------------------------------------------------------------------
 // Lowering::LowerJTrue: Lowers a JTRUE node.
 //
@@ -4779,7 +4779,7 @@ GenTree* Lowering::LowerJTrue(GenTreeOp* jtrue)
 
     return nullptr;
 }
-#endif // !TARGET_LOONGARCH64 && !TARGET_RISCV64 && !defined(TARGET_WASM)
+#endif // !TARGET_LOONGARCH64 && !TARGET_RISCV64 && !TARGET_POWERPC64 && !defined(TARGET_WASM)
 
 //----------------------------------------------------------------------------------------------
 // LowerSelect: Lower a GT_SELECT node.

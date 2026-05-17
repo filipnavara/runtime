@@ -181,6 +181,10 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genCodeForLclFld(treeNode->AsLclFld());
             break;
 
+        case GT_LCL_ADDR:
+            genCodeForLclAddr(treeNode->AsLclFld());
+            break;
+
         case GT_STORE_LCL_VAR:
             genCodeForStoreLclVar(treeNode->AsLclVar());
             break;
@@ -310,6 +314,33 @@ void CodeGen::genCodeForLclFld(GenTreeLclFld* tree)
     GetEmitter()->emitIns_R_S(ins_Load(targetType), emitTypeSize(targetType), targetReg, tree->GetLclNum(),
                               tree->GetLclOffs());
     genProduceReg(tree);
+}
+
+void CodeGen::genCodeForLclAddr(GenTreeLclFld* lclAddrNode)
+{
+    assert(lclAddrNode->OperIs(GT_LCL_ADDR));
+
+    var_types targetType = lclAddrNode->TypeGet();
+    assert((targetType == TYP_BYREF) || (targetType == TYP_I_IMPL));
+
+    bool fpBased = false;
+    int  offset  = m_compiler->lvaFrameAddress(lclAddrNode->GetLclNum(), &fpBased) + lclAddrNode->GetLclOffs();
+
+    regNumber baseReg   = fpBased ? REG_FPBASE : REG_SPBASE;
+    regNumber targetReg = lclAddrNode->GetRegNum();
+    assert(targetReg != REG_NA);
+
+    if (emitter::isValidSimm16(offset))
+    {
+        GetEmitter()->emitIns_R_R_I(INS_addi, emitActualTypeSize(targetType), targetReg, baseReg, offset);
+    }
+    else
+    {
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, targetReg, offset);
+        GetEmitter()->emitIns_R_R_R(INS_add, EA_PTRSIZE, targetReg, baseReg, targetReg);
+    }
+
+    genProduceReg(lclAddrNode);
 }
 
 void CodeGen::genCodeForStoreLclFld(GenTreeLclFld* tree)

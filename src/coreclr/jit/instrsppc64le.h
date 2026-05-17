@@ -90,6 +90,7 @@ INST(ori,           "ori",            0,    0x60000000)
 INST(oris,          "oris",           0,    0x64000000)
 
 INST(ld,            "ld",             LD,   0xE8000000)
+INST(lwa,           "lwa",            LD,   0xE8000002)
 INST(lwz,           "lwz",            LD,   0x80000000)
 INST(lhz,           "lhz",            LD,   0xA0000000)
 INST(lbz,           "lbz",            LD,   0x88000000)
@@ -121,6 +122,7 @@ INST(beq,           "beq",            0,    0x41820000)
 INST(bne,           "bne",            0,    0x40820000)
 INST(bclr,          "bclr",           0,    0x4C000020)
 INST(blr,           "blr",            0,    0x4E800020)
+INST(bctr,          "bctr",           0,    0x4E800420)
 INST(bctrl,         "bctrl",          0,    0x4E800421)
 
 // clang-format on

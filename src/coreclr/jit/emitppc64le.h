@@ -92,6 +92,7 @@ void emitDispInsName(code_t code, const instrDesc* id);
 static emitter::code_t emitInsCode(instruction ins);
 unsigned emitOutput_Instr(BYTE* dst, code_t code) const;
 unsigned emitOutputLabelLoad(BYTE* dst, instrDesc* id);
+unsigned emitOutputConstAddr(BYTE* dst, instrDesc* id);
 unsigned emitOutputConstLoad(BYTE* dst, instrDesc* id);
 
 void emitIns_Jump(instruction ins, BasicBlock* dst);
@@ -114,7 +115,7 @@ inline static bool emitIsCmpJump(instrDesc* jmp)
 
 inline static bool emitIsUncondJump(instruction ins)
 {
-    return (ins == INS_b) || (ins == INS_bl) || (ins == INS_bclr) || (ins == INS_blr);
+    return (ins == INS_b) || (ins == INS_bl) || (ins == INS_bclr) || (ins == INS_blr) || (ins == INS_bctr);
 }
 
 inline static bool emitIsUncondJump(const instrDesc* jmp)

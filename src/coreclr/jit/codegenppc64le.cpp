@@ -23,6 +23,13 @@ static instruction ppcCompareInsForCondition(GenCondition cond, emitAttr cmpSize
                              : ((cmpSize == EA_4BYTE) ? INS_cmpw : INS_cmpd);
 }
 
+static emitAttr ppcNormalizeCompareSize(emitAttr cmpSize)
+{
+    cmpSize = EA_SIZE(cmpSize);
+    assert((cmpSize == EA_1BYTE) || (cmpSize == EA_2BYTE) || (cmpSize == EA_4BYTE) || (cmpSize == EA_8BYTE));
+    return (cmpSize == EA_8BYTE) ? EA_8BYTE : EA_4BYTE;
+}
+
 static instruction ppcBranchInsForCondition(GenCondition cond)
 {
     switch (cond.GetCode())
@@ -423,6 +430,14 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
 
         case GT_CALL:
             genCall(treeNode->AsCall());
+            break;
+
+        case GT_JMPTABLE:
+            genJumpTable(treeNode);
+            break;
+
+        case GT_SWITCH_TABLE:
+            genTableBasedSwitch(treeNode);
             break;
 
         case GT_PHYSREG:
@@ -971,7 +986,7 @@ void CodeGen::genCodeForCompare(GenTreeOp* tree)
 
     assert(varTypeIsIntegralOrI(op1Type));
 
-    emitAttr     cmpSize   = emitActualTypeSize(op1Type);
+    emitAttr     cmpSize   = ppcNormalizeCompareSize(emitActualTypeSize(op1Type));
     GenCondition cond      = GenCondition::FromIntegralRelop(tree);
     instruction  cmp       = ppcCompareInsForCondition(cond, cmpSize);
 
@@ -2051,7 +2066,7 @@ void CodeGen::genCodeForJumpCompare(GenTreeOpCC* tree)
 
     genConsumeOperands(tree);
 
-    emitAttr  cmpSize = emitActualTypeSize(op1Type);
+    emitAttr  cmpSize = ppcNormalizeCompareSize(emitActualTypeSize(op1Type));
     regNumber regOp1  = op1->GetRegNum();
     regNumber regOp2  = op2->GetRegNum();
 
@@ -2066,6 +2081,38 @@ void CodeGen::genCodeForJumpCompare(GenTreeOpCC* tree)
     {
         inst_JMP(EJ_jmp, falseTarget);
     }
+}
+
+// generate code for a switch statement based on a table of ip-relative offsets
+void CodeGen::genTableBasedSwitch(GenTree* treeNode)
+{
+    assert(m_compiler->compCurBB->KindIs(BBJ_SWITCH));
+
+    genConsumeOperands(treeNode->AsOp());
+    regNumber idxReg  = treeNode->AsOp()->gtOp1->GetRegNum();
+    regNumber baseReg = treeNode->AsOp()->gtOp2->GetRegNum();
+
+    regNumber tmpReg = internalRegisters.GetSingle(treeNode);
+
+    GetEmitter()->emitIns_R_R_I(INS_sldi, EA_PTRSIZE, tmpReg, idxReg, 2);
+    GetEmitter()->emitIns_R_R_R(INS_add, EA_PTRSIZE, baseReg, baseReg, tmpReg);
+    GetEmitter()->emitIns_R_R_I(INS_lwa, EA_4BYTE, baseReg, baseReg, 0);
+
+    GetEmitter()->emitIns_R_L(INS_addi, EA_PTRSIZE, m_compiler->fgFirstBB, tmpReg);
+    GetEmitter()->emitIns_R_R_R(INS_add, EA_PTRSIZE, baseReg, baseReg, tmpReg);
+
+    GetEmitter()->emitIns_R_R(INS_mtctr, EA_PTRSIZE, baseReg, baseReg);
+    GetEmitter()->emitIns(INS_bctr);
+}
+
+// emits the table and an instruction to get the address of the first element
+void CodeGen::genJumpTable(GenTree* treeNode)
+{
+    unsigned jmpTabBase = genEmitJumpTable(treeNode, true);
+
+    GetEmitter()->emitIns_R_C(INS_addi, EA_PTRSIZE, treeNode->GetRegNum(), REG_NA,
+                              m_compiler->eeFindJitDataOffs(jmpTabBase));
+    genProduceReg(treeNode);
 }
 
 void CodeGen::genJumpToThrowHlpBlk_la(SpecialCodeKind codeKind,
@@ -3086,6 +3133,22 @@ void CodeGen::genZeroInitFrameUsingBlockInit(int untrLclHi, int untrLclLo, regNu
         {
             GetEmitter()->emitIns_R_R_I(INS_addi, EA_PTRSIZE, rAddr, rAddr, 4);
         }
+    }
+
+    if (bytes >= (4 * REGSIZE_BYTES))
+    {
+        regNumber countReg = (rAddr != REG_TMP_0) ? REG_TMP_0 : REG_SCRATCH;
+        noway_assert((genRegMask(countReg) & calleeRegArgMaskLiveIn) == 0);
+
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, countReg, bytes / REGSIZE_BYTES);
+
+        GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R0, rAddr, 0);
+        GetEmitter()->emitIns_R_R_I(INS_addi, EA_PTRSIZE, rAddr, rAddr, REGSIZE_BYTES);
+        GetEmitter()->emitIns_R_R_I(INS_addi, EA_PTRSIZE, countReg, countReg, -1);
+        GetEmitter()->emitIns_R_R(INS_cmpd, EA_PTRSIZE, countReg, REG_R0);
+        GetEmitter()->emitIns_I(INS_bne, EA_4BYTE, -4 * static_cast<ssize_t>(sizeof(emitter::code_t)));
+
+        bytes %= REGSIZE_BYTES;
     }
 
     while (bytes >= REGSIZE_BYTES)

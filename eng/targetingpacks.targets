@@ -67,21 +67,30 @@
                       RuntimeFrameworkName="$(LocalFrameworkOverrideName)"
                       LatestRuntimeFrameworkVersion="$(ProductVersion)"
                       RuntimePackNamePatterns="$(LocalFrameworkOverrideName).Runtime.NativeAOT.**RID**"
-                      RuntimePackRuntimeIdentifiers="ios-arm64;iossimulator-arm64;iossimulator-x64;tvos-arm64;tvossimulator-arm64;tvossimulator-x64;maccatalyst-arm64;maccatalyst-x64;linux-bionic-arm64;linux-bionic-x64;osx-arm64;osx-x64"
+                      RuntimePackRuntimeIdentifiers="ios-arm64;iossimulator-arm64;iossimulator-x64;tvos-arm64;tvossimulator-arm64;tvossimulator-x64;maccatalyst-arm64;maccatalyst-x64;linux-bionic-arm64;linux-bionic-x64;linux-ppc64le;osx-arm64;osx-x64"
                       RuntimePackLabels="NativeAOT"
                       Condition="'$(UseLocalTargetingRuntimePack)' == 'true' and ('@(KnownRuntimePack)' == '' or '@(KnownRuntimePack->WithMetadataValue('Identity', 'Microsoft.NETCore.App')->WithMetadataValue('RuntimePackLabels', 'NativeAOT')->AnyHaveMetadataValue('TargetFramework', '$(NetCoreAppCurrent)'))' != 'true')" />
+    <KnownRuntimePack Update="@(KnownRuntimePack->WithMetadataValue('Identity', '$(LocalFrameworkOverrideName)')->WithMetadataValue('RuntimePackLabels', 'NativeAOT')->WithMetadataValue('TargetFramework', '$(NetCoreAppCurrent)'))"
+                      RuntimePackRuntimeIdentifiers="%(RuntimePackRuntimeIdentifiers);linux-ppc64le"
+                      Condition="'$(UseLocalTargetingRuntimePack)' == 'true'" />
     <KnownILCompilerPack Include="Microsoft.DotNet.ILCompiler"
                          ILCompilerPackNamePattern="runtime.**RID**.Microsoft.DotNet.ILCompiler"
                          TargetFramework="$(NetCoreAppCurrent)"
                          ILCompilerPackVersion="$(ProductVersion)"
                          ILCompilerRuntimeIdentifiers="linux-musl-x64;linux-x64;win-x64;linux-arm;linux-arm64;linux-musl-arm;linux-musl-arm64;osx-arm64;osx-x64;win-arm64;win-x86;linux-ppc64le;linux-riscv64;linux-musl-riscv64;linux-loongarch64;linux-musl-loongarch64"
                          Condition="'$(UseLocalILCompilerPack)' == 'true' and '@(KnownILCompilerPack->AnyHaveMetadataValue('TargetFramework', '$(NetCoreAppCurrent)'))' != 'true'" />
+    <KnownILCompilerPack Update="@(KnownILCompilerPack->WithMetadataValue('Identity', 'Microsoft.DotNet.ILCompiler')->WithMetadataValue('TargetFramework', '$(NetCoreAppCurrent)'))"
+                         ILCompilerRuntimeIdentifiers="%(ILCompilerRuntimeIdentifiers);linux-ppc64le"
+                         Condition="'$(UseLocalILCompilerPack)' == 'true'" />
     <KnownCrossgen2Pack Include="$(LocalFrameworkOverrideName).Crossgen2"
                         TargetFramework="$(NetCoreAppCurrent)"
                         Crossgen2PackNamePattern="$(LocalFrameworkOverrideName).Crossgen2.**RID**"
                         Crossgen2PackVersion="$(ProductVersion)"
                         Crossgen2RuntimeIdentifiers="linux-musl-x64;linux-x64;win-x64;linux-arm;linux-arm64;linux-musl-arm;linux-musl-arm64;osx-arm64;osx-x64;win-arm64;win-x86;linux-ppc64le;linux-riscv64;linux-musl-riscv64;linux-loongarch64;linux-musl-loongarch64"
                         Condition="'$(UseLocalCrossgen2Pack)' == 'true' and '@(KnownCrossgen2Pack->AnyHaveMetadataValue('TargetFramework', '$(NetCoreAppCurrent)'))' != 'true'" />
+    <KnownCrossgen2Pack Update="@(KnownCrossgen2Pack->WithMetadataValue('Identity', '$(LocalFrameworkOverrideName).Crossgen2')->WithMetadataValue('TargetFramework', '$(NetCoreAppCurrent)'))"
+                        Crossgen2RuntimeIdentifiers="%(Crossgen2RuntimeIdentifiers);linux-ppc64le"
+                        Condition="'$(UseLocalCrossgen2Pack)' == 'true'" />
     <KnownAppHostPack Include="$(LocalFrameworkOverrideName)"
                       ExcludedRuntimeIdentifiers="android"
                       AppHostPackNamePattern="$(LocalFrameworkOverrideName).Host.**RID**"

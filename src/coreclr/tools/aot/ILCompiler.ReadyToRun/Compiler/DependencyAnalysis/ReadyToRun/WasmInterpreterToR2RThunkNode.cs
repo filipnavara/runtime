@@ -284,6 +284,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
         protected override void EmitCode(NodeFactory factory, ref ARM.ARMEmitter instructionEncoder, bool relocsOnly) { throw new NotSupportedException(); }
         protected override void EmitCode(NodeFactory factory, ref ARM64.ARM64Emitter instructionEncoder, bool relocsOnly) { throw new NotSupportedException(); }
         protected override void EmitCode(NodeFactory factory, ref LoongArch64.LoongArch64Emitter instructionEncoder, bool relocsOnly) { throw new NotSupportedException(); }
+        protected override void EmitCode(NodeFactory factory, ref Ppc64le.Ppc64leEmitter instructionEncoder, bool relocsOnly) { throw new NotSupportedException(); }
         protected override void EmitCode(NodeFactory factory, ref RiscV64.RiscV64Emitter instructionEncoder, bool relocsOnly) { throw new NotSupportedException(); }
     }
 }

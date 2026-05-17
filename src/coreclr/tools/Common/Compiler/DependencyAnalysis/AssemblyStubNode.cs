@@ -76,6 +76,13 @@ namespace ILCompiler.DependencyAnalysis
                     loongarch64Emitter.Builder.AddSymbol(this);
                     return loongarch64Emitter.Builder.ToObjectData();
 
+                case TargetArchitecture.Ppc64le:
+                    Ppc64le.Ppc64leEmitter ppc64leEmitter = new Ppc64le.Ppc64leEmitter(factory, relocsOnly);
+                    EmitCode(factory, ref ppc64leEmitter, relocsOnly);
+                    ppc64leEmitter.Builder.RequireInitialAlignment(alignment);
+                    ppc64leEmitter.Builder.AddSymbol(this);
+                    return ppc64leEmitter.Builder.ToObjectData();
+
                 case TargetArchitecture.RiscV64:
                     RiscV64.RiscV64Emitter riscv64Emitter = new RiscV64.RiscV64Emitter(factory, relocsOnly);
                     EmitCode(factory, ref riscv64Emitter, relocsOnly);
@@ -98,6 +105,7 @@ namespace ILCompiler.DependencyAnalysis
         protected abstract void EmitCode(NodeFactory factory, ref ARM.ARMEmitter instructionEncoder, bool relocsOnly);
         protected abstract void EmitCode(NodeFactory factory, ref ARM64.ARM64Emitter instructionEncoder, bool relocsOnly);
         protected abstract void EmitCode(NodeFactory factory, ref LoongArch64.LoongArch64Emitter instructionEncoder, bool relocsOnly);
+        protected abstract void EmitCode(NodeFactory factory, ref Ppc64le.Ppc64leEmitter instructionEncoder, bool relocsOnly);
         protected abstract void EmitCode(NodeFactory factory, ref RiscV64.RiscV64Emitter instructionEncoder, bool relocsOnly);
         protected abstract void EmitCode(NodeFactory factory, ref Wasm.WasmEmitter instructionEncoder, bool relocsOnly);
     }

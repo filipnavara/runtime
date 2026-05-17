@@ -3008,7 +3008,32 @@ void CodeGen::genIntToIntCast(GenTreeCast* cast)
 
 void CodeGen::genFloatToFloatCast(GenTree* treeNode)
 {
-    NYI_POWERPC64("genFloatToFloatCast");
+    assert(treeNode->OperIs(GT_CAST));
+    assert(!treeNode->gtOverflow());
+
+    GenTree* op1 = treeNode->AsCast()->CastOp();
+    assert(varTypeIsFloating(op1));
+    assert(varTypeIsFloating(treeNode));
+
+    regNumber srcReg = genConsumeReg(op1);
+    regNumber dstReg = treeNode->GetRegNum();
+
+    assert(genIsValidFloatReg(srcReg));
+    assert(genIsValidFloatReg(dstReg));
+
+    var_types srcType = op1->TypeGet();
+    var_types dstType = treeNode->CastToType();
+
+    if ((srcType == TYP_DOUBLE) && (dstType == TYP_FLOAT))
+    {
+        GetEmitter()->emitIns_R_R(INS_frsp, EA_4BYTE, dstReg, srcReg);
+    }
+    else if (dstReg != srcReg)
+    {
+        GetEmitter()->emitIns_Mov(emitActualTypeSize(treeNode), dstReg, srcReg, true);
+    }
+
+    genProduceReg(treeNode);
 }
 
 void CodeGen::genFloatToIntCast(GenTree* treeNode)

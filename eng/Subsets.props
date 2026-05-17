@@ -34,7 +34,7 @@
     <_CoreCLRSupportedOS Condition="'$(TargetsBrowser)' == 'true'">true</_CoreCLRSupportedOS>
     <_CoreCLRSupportedOS Condition="'$(TargetsAppleMobile)' == 'true'">true</_CoreCLRSupportedOS>
 
-    <_CoreCLRSupportedArch Condition="'$(TargetArchitecture)' != 'ppc64le' and '$(TargetArchitecture)' != 's390x'">true</_CoreCLRSupportedArch>
+    <_CoreCLRSupportedArch Condition="'$(TargetArchitecture)' != 's390x'">true</_CoreCLRSupportedArch>
     <CoreCLRSupported Condition="'$(_CoreCLRSupportedOS)' == 'true' and '$(_CoreCLRSupportedArch)' == 'true'">true</CoreCLRSupported>
 
     <!-- Determine if the Mono runtime can build/run for the specified target. -->
@@ -49,7 +49,7 @@
 
     <!-- Determine if the NativeAOT runtime can run on the specified target. -->
     <_NativeAotSupportedOS Condition="'$(TargetOS)' != 'browser' and '$(TargetOS)' != 'haiku' and '$(TargetOS)' != 'illumos' and '$(TargetOS)' != 'netbsd' and '$(TargetOS)' != 'solaris'">true</_NativeAotSupportedOS>
-    <_NativeAotSupportedArch Condition="'$(TargetArchitecture)' == 'x64' or '$(TargetArchitecture)' == 'arm64' or '$(TargetArchitecture)' == 'arm' or '$(TargetArchitecture)' == 'loongarch64' or '$(TargetArchitecture)' == 'riscv64' or ('$(TargetOS)' == 'windows' and '$(TargetArchitecture)' == 'x86')">true</_NativeAotSupportedArch>
+    <_NativeAotSupportedArch Condition="'$(TargetArchitecture)' == 'x64' or '$(TargetArchitecture)' == 'arm64' or '$(TargetArchitecture)' == 'arm' or '$(TargetArchitecture)' == 'loongarch64' or '$(TargetArchitecture)' == 'ppc64le' or '$(TargetArchitecture)' == 'riscv64' or ('$(TargetOS)' == 'windows' and '$(TargetArchitecture)' == 'x86')">true</_NativeAotSupportedArch>
     <NativeAotSupported Condition="'$(_NativeAotSupportedOS)' == 'true' and '$(_NativeAotSupportedArch)' == 'true'">true</NativeAotSupported>
 
     <!-- Determine if we support running the .NET SDK on the target platform -->

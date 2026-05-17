@@ -104,6 +104,15 @@ int LinearScan::BuildNode(GenTree* tree)
         case GT_JCMP:
             return BuildCmp(tree);
 
+        case GT_PUTARG_STK:
+            return BuildPutArgStk(tree->AsPutArgStk());
+
+        case GT_PUTARG_REG:
+            return BuildPutArgReg(tree->AsUnOp());
+
+        case GT_CALL:
+            return BuildCall(tree->AsCall());
+
         default:
             return BuildSimple(tree);
     }
@@ -120,6 +129,164 @@ int LinearScan::BuildIndir(GenTreeIndir* indirTree)
         BuildDef(indirTree);
     }
 
+    return srcCount;
+}
+
+int LinearScan::BuildCall(GenTreeCall* call)
+{
+    bool                  hasMultiRegRetVal   = false;
+    const ReturnTypeDesc* retTypeDesc         = nullptr;
+    SingleTypeRegSet      singleDstCandidates = RBM_NONE;
+
+    int srcCount = 0;
+    int dstCount = 0;
+
+    if (!call->TypeIs(TYP_VOID))
+    {
+        hasMultiRegRetVal = call->HasMultiRegRetVal();
+        if (hasMultiRegRetVal)
+        {
+            retTypeDesc = call->GetReturnTypeDesc();
+            dstCount    = retTypeDesc->GetReturnRegCount();
+        }
+        else
+        {
+            dstCount = 1;
+        }
+    }
+
+    GenTree*         ctrlExpr           = call->gtControlExpr;
+    SingleTypeRegSet ctrlExprCandidates = RBM_NONE;
+    if (ctrlExpr != nullptr)
+    {
+        assert(!ctrlExpr->TypeIs(TYP_VOID));
+
+        if (call->IsFastTailCall())
+        {
+            ctrlExprCandidates = allRegs(TYP_INT) & RBM_INT_CALLEE_TRASH.GetIntRegSet();
+            if (m_compiler->getNeedsGSSecurityCookie())
+            {
+                ctrlExprCandidates &= ~m_compiler->codeGen->genGetGSCookieTempRegs(/* tailCall */ true).GetIntRegSet();
+            }
+            assert(ctrlExprCandidates != RBM_NONE);
+        }
+
+        if (ctrlExpr->isContainedIntOrIImmed())
+        {
+            buildInternalIntRegisterDefForNode(call);
+        }
+    }
+    else if (call->IsR2ROrVirtualStubRelativeIndir())
+    {
+        SingleTypeRegSet candidates = RBM_NONE;
+        if (call->IsFastTailCall())
+        {
+            candidates = allRegs(TYP_INT) & RBM_INT_CALLEE_TRASH.GetIntRegSet();
+            assert(candidates != RBM_NONE);
+        }
+
+        buildInternalIntRegisterDefForNode(call, candidates);
+    }
+
+    RegisterType registerType = call->TypeGet();
+    if (!hasMultiRegRetVal)
+    {
+        if (varTypeUsesFloatArgReg(registerType))
+        {
+            singleDstCandidates = RBM_FLOATRET.GetFloatRegSet();
+        }
+        else if (registerType == TYP_LONG)
+        {
+            singleDstCandidates = RBM_LNGRET.GetIntRegSet();
+        }
+        else
+        {
+            singleDstCandidates = RBM_INTRET.GetIntRegSet();
+        }
+    }
+
+    srcCount += BuildCallArgUses(call);
+
+    if ((ctrlExpr != nullptr) && !ctrlExpr->isContainedIntOrIImmed())
+    {
+        BuildUse(ctrlExpr, ctrlExprCandidates);
+        srcCount++;
+    }
+
+    buildInternalRegisterUses();
+
+    if (call->IsAsync() && m_compiler->compIsAsync() && !call->IsFastTailCall())
+    {
+        MarkAsyncContinuationBusyForCall(call);
+    }
+
+    regMaskTP killMask = getKillSetForCall(call);
+    if (dstCount > 0)
+    {
+        if (hasMultiRegRetVal)
+        {
+            assert(retTypeDesc != nullptr);
+            regMaskTP multiDstCandidates = retTypeDesc->GetABIReturnRegs(call->GetUnmanagedCallConv());
+            assert(genCountBits(multiDstCandidates) > 0);
+            BuildCallDefsWithKills(call, dstCount, multiDstCandidates, killMask);
+        }
+        else
+        {
+            assert(dstCount == 1);
+            BuildDefWithKills(call, singleDstCandidates, killMask);
+        }
+    }
+    else
+    {
+        BuildKills(call, killMask);
+    }
+
+    placedArgRegs      = RBM_NONE;
+    numPlacedArgLocals = 0;
+    return srcCount;
+}
+
+int LinearScan::BuildPutArgStk(GenTreePutArgStk* argNode)
+{
+    assert(argNode->OperIs(GT_PUTARG_STK));
+
+    GenTree* src      = argNode->gtGetOp1();
+    int      srcCount = 0;
+
+    if (src->TypeIs(TYP_STRUCT))
+    {
+        if (src->OperIs(GT_FIELD_LIST))
+        {
+            assert(src->isContained());
+            for (GenTreeFieldList::Use& use : src->AsFieldList()->Uses())
+            {
+                BuildUse(use.GetNode());
+                srcCount++;
+            }
+        }
+        else
+        {
+            buildInternalIntRegisterDefForNode(argNode);
+            buildInternalIntRegisterDefForNode(argNode);
+
+            assert(src->isContained());
+            if (src->OperIs(GT_BLK))
+            {
+                srcCount = BuildOperandUses(src->AsBlk()->Addr());
+            }
+            else
+            {
+                assert(src->OperIs(GT_LCL_VAR, GT_LCL_FLD));
+            }
+        }
+    }
+    else
+    {
+        assert(!src->isContained());
+        srcCount = BuildOperandUses(src);
+    }
+
+    buildInternalRegisterUses();
     return srcCount;
 }
 

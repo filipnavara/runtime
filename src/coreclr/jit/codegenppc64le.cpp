@@ -232,6 +232,10 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             break;
         }
 
+        case GT_FTN_ENTRY:
+            genFtnEntry(treeNode);
+            break;
+
         case GT_ADD:
         {
             if (varTypeIsFloating(treeNode))
@@ -464,6 +468,11 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genCodeForCatchArg(treeNode);
             break;
 
+        case GT_LABEL:
+            genPendingCallLabel = genCreateTempLabel();
+            GetEmitter()->emitIns_R_L(INS_addi, EA_PTRSIZE, genPendingCallLabel, treeNode->GetRegNum());
+            break;
+
         case GT_JCMP:
             genCodeForJumpCompare(treeNode->AsOpCC());
             break;
@@ -487,6 +496,18 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
 
         case GT_ASYNC_CONTINUATION:
             genCodeForAsyncContinuation(treeNode);
+            break;
+
+        case GT_ASYNC_RESUME_INFO:
+            genAsyncResumeInfo(treeNode->AsVal());
+            break;
+
+        case GT_RECORD_ASYNC_RESUME:
+            genRecordAsyncResume(treeNode->AsVal());
+            break;
+
+        case GT_NONLOCAL_JMP:
+            genNonLocalJmp(treeNode->AsUnOp());
             break;
 
         case GT_MEMORYBARRIER:
@@ -2097,6 +2118,36 @@ void CodeGen::genCodeForJumpCompare(GenTreeOpCC* tree)
     {
         inst_JMP(EJ_jmp, falseTarget);
     }
+}
+
+void CodeGen::genAsyncResumeInfo(GenTreeVal* treeNode)
+{
+    emitAttr attr = EA_PTRSIZE;
+    if (m_compiler->eeDataWithCodePointersNeedsRelocs())
+    {
+        attr = EA_SET_FLG(EA_PTRSIZE, EA_CNS_RELOC_FLG);
+    }
+
+    GetEmitter()->emitIns_R_C(INS_addi, attr, treeNode->GetRegNum(), REG_NA,
+                              genEmitAsyncResumeInfo(static_cast<unsigned>(treeNode->gtVal1)));
+    genProduceReg(treeNode);
+}
+
+void CodeGen::genFtnEntry(GenTree* treeNode)
+{
+    GetEmitter()->emitIns_R_L(INS_addi, EA_PTRSIZE, GetEmitter()->emitPrologIG, treeNode->GetRegNum());
+    genProduceReg(treeNode);
+}
+
+void CodeGen::genNonLocalJmp(GenTreeUnOp* tree)
+{
+    SetHasTailCalls(true);
+
+    genConsumeOperands(tree->AsOp());
+    regNumber targetReg = tree->gtGetOp1()->GetRegNum();
+
+    GetEmitter()->emitIns_R_R(INS_mtctr, EA_PTRSIZE, targetReg, targetReg);
+    GetEmitter()->emitIns(INS_bctr);
 }
 
 // generate code for a switch statement based on a table of ip-relative offsets

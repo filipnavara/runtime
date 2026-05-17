@@ -1147,6 +1147,7 @@ protected:
     void genCodeForShift(GenTree* tree);
 #if defined(TARGET_POWERPC64)
     void genCodeForRotate(GenTree* tree);
+    void genCodeForFloatingBinary(GenTreeOp* tree);
 #endif
 
 #if defined(TARGET_X86) || defined(TARGET_ARM)

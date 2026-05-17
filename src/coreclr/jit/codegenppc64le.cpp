@@ -3160,12 +3160,85 @@ void CodeGen::genFloatToFloatCast(GenTree* treeNode)
 
 void CodeGen::genFloatToIntCast(GenTree* treeNode)
 {
-    NYI_POWERPC64("genFloatToIntCast");
+    assert(treeNode->OperIs(GT_CAST));
+    assert(!treeNode->gtOverflow());
+
+    regNumber targetReg = treeNode->GetRegNum();
+    assert(genIsValidIntReg(targetReg));
+
+    GenTree* op1 = treeNode->AsCast()->CastOp();
+    assert(!op1->isContained());
+    assert(genIsValidFloatReg(op1->GetRegNum()));
+
+    var_types dstType = treeNode->AsCast()->CastToType();
+    var_types srcType = genActualType(op1->TypeGet());
+    assert(varTypeIsFloating(srcType) && !varTypeIsFloating(dstType));
+
+    NYI_IF(varTypeIsUnsigned(dstType), "unsigned floating-point to integer cast");
+
+    emitAttr dstSize = emitActualTypeSize(dstType);
+    noway_assert((dstSize == EA_4BYTE) || (dstSize == EA_8BYTE));
+
+    genConsumeOperands(treeNode->AsOp());
+
+    regNumber tempReg = internalRegisters.GetSingle(treeNode);
+    assert(genIsValidFloatReg(tempReg));
+
+    instruction convertIns = (dstSize == EA_4BYTE) ? INS_fctiwz : INS_fctidz;
+    GetEmitter()->emitIns_R_R(convertIns, emitActualTypeSize(srcType), tempReg, op1->GetRegNum());
+    GetEmitter()->emitIns_R_R(INS_mftgpr, dstSize, targetReg, tempReg);
+
+    if (dstSize == EA_4BYTE)
+    {
+        GetEmitter()->emitIns_R_R(INS_extsw, dstSize, targetReg, targetReg);
+    }
+
+    genProduceReg(treeNode);
 }
 
 void CodeGen::genIntToFloatCast(GenTree* treeNode)
 {
-    NYI_POWERPC64("genIntToFloatCast");
+    assert(treeNode->OperIs(GT_CAST));
+    assert(!treeNode->gtOverflow());
+
+    regNumber targetReg = treeNode->GetRegNum();
+    assert(genIsValidFloatReg(targetReg));
+
+    GenTree* op1 = treeNode->AsCast()->CastOp();
+    assert(!op1->isContained());
+    assert(genIsValidIntReg(op1->GetRegNum()));
+
+    var_types dstType = treeNode->AsCast()->CastToType();
+    var_types srcType = genActualType(op1->TypeGet());
+    assert(!varTypeIsFloating(srcType) && varTypeIsFloating(dstType));
+
+    bool     isUnsigned = treeNode->IsUnsigned();
+    emitAttr srcSize    = EA_ATTR(genTypeSize(srcType));
+    noway_assert((srcSize == EA_4BYTE) || (srcSize == EA_8BYTE));
+
+    NYI_IF(isUnsigned && (srcSize == EA_8BYTE), "unsigned long to floating-point cast");
+
+    genConsumeOperands(treeNode->AsOp());
+
+    regNumber sourceReg = op1->GetRegNum();
+    if (srcSize == EA_4BYTE)
+    {
+        if (isUnsigned)
+        {
+            GetEmitter()->emitIns_R_R_I(INS_clrldi, EA_8BYTE, REG_R0, sourceReg, 32);
+        }
+        else
+        {
+            GetEmitter()->emitIns_R_R(INS_extsw, EA_8BYTE, REG_R0, sourceReg);
+        }
+        sourceReg = REG_R0;
+    }
+
+    GetEmitter()->emitIns_R_R(INS_mffgpr, EA_8BYTE, targetReg, sourceReg);
+    GetEmitter()->emitIns_R_R((dstType == TYP_FLOAT) ? INS_fcfids : INS_fcfid, emitActualTypeSize(dstType), targetReg,
+                              targetReg);
+
+    genProduceReg(treeNode);
 }
 
 void CodeGen::genSimpleReturn(GenTree* treeNode)

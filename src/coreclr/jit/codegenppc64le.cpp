@@ -3445,7 +3445,36 @@ void CodeGen::genJmpPlaceVarArgs()
 
 void CodeGen::genCallFinally(BasicBlock* block)
 {
-    NYI_POWERPC64("genCallFinally");
+    assert(block->KindIs(BBJ_CALLFINALLY));
+
+    BasicBlock* const nextBlock = block->Next();
+
+    if (block->HasFlag(BBF_RETLESS_CALL))
+    {
+        GetEmitter()->emitIns_J(INS_bl, block->GetTarget());
+
+        if ((nextBlock == nullptr) || !BasicBlock::sameEHRegion(block, nextBlock))
+        {
+            instGen(INS_trap);
+        }
+
+        return;
+    }
+
+    GetEmitter()->emitDisableGC();
+    GetEmitter()->emitIns_J(INS_bl, block->GetTarget());
+
+    BasicBlock* const finallyContinuation = nextBlock->GetFinallyContinuation();
+    if (nextBlock->NextIs(finallyContinuation) && !m_compiler->fgInDifferentRegions(nextBlock, finallyContinuation))
+    {
+        instGen(INS_nop);
+    }
+    else
+    {
+        inst_JMP(EJ_jmp, finallyContinuation);
+    }
+
+    GetEmitter()->emitEnableGC();
 }
 
 void CodeGen::genEHCatchRet(BasicBlock* block)

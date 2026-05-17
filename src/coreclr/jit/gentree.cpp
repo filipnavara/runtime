@@ -5576,7 +5576,7 @@ bool Compiler::gtMarkAddrMode(GenTree* addr, int* pCostEx, int* pCostSz, var_typ
                 addrModeCostSz += 4;
             }
         }
-#elif defined(TARGET_RISCV64)
+#elif defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
         if (base)
         {
             addrModeCostEx += base->GetCostEx();
@@ -5592,7 +5592,7 @@ bool Compiler::gtMarkAddrMode(GenTree* addr, int* pCostEx, int* pCostSz, var_typ
         {
             if (!emitter::isValidSimm12(cns))
             {
-                // TODO-RISCV64-CQ: tune for RISCV64.
+                // TODO-PPC64LE-CQ, TODO-RISCV64-CQ: tune for this target.
                 addrModeCostEx += 1;
                 addrModeCostSz += 4;
             }
@@ -6050,7 +6050,11 @@ unsigned Compiler::gtSetEvalOrder(GenTree* tree)
                 }
                 else
                 {
+#ifdef TARGET_POWERPC64
+                    int instructionCount = emitter::isValidSimm16(imm) ? 1 : 2;
+#else
                     int instructionCount = GetEmitter()->emitLoadImmediate<false>(size, REG_NA, imm);
+#endif
 
                     assert(instructionCount != 0);
 
@@ -6067,6 +6071,25 @@ unsigned Compiler::gtSetEvalOrder(GenTree* tree)
                         costEx = instructionCount;
                     }
                 }
+                goto COMMON_CNS;
+            }
+#elif defined(TARGET_POWERPC64)
+            // TODO-PPC64LE-CQ: tune the costs.
+            case GT_CNS_STR:
+                costEx = IND_COST_EX + 2;
+                costSz = 4;
+                goto COMMON_CNS;
+
+            case GT_CNS_LNG:
+            case GT_CNS_INT:
+            {
+                GenTreeIntConCommon* con = tree->AsIntConCommon();
+                ssize_t              imm = static_cast<ssize_t>(con->LngValue());
+                bool                 needsReloc = con->ImmedValNeedsReloc(this);
+                int                  instructionCount = (!needsReloc && emitter::isValidSimm16(imm)) ? 1 : 2;
+
+                costSz = 4 * instructionCount;
+                costEx = instructionCount;
                 goto COMMON_CNS;
             }
 #elif defined(TARGET_WASM)
@@ -6156,7 +6179,7 @@ unsigned Compiler::gtSetEvalOrder(GenTree* tree)
                 // TODO-LoongArch64-CQ: tune the costs.
                 costEx = 2;
                 costSz = 8;
-#elif defined(TARGET_RISCV64)
+#elif defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
                 // TODO-RISCV64-CQ: tune the costs.
                 costEx = 2;
                 costSz = 8;
@@ -6725,7 +6748,7 @@ unsigned Compiler::gtSetEvalOrder(GenTree* tree)
                     // TODO-LoongArch64-CQ: tune the costs.
                     costEx = 1;
                     costSz = 4;
-#elif defined(TARGET_RISCV64)
+#elif defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
                     // TODO-RISCV64-CQ: tune the costs.
                     costEx = 1;
                     costSz = 4;

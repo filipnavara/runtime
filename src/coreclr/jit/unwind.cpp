@@ -458,6 +458,10 @@ UNATIVE_OFFSET Compiler::unwindGetCurrentOffset(FuncInfoDsc* func)
 
 // See unwindRiscv64.cpp
 
+#elif defined(TARGET_POWERPC64)
+
+// See unwindppc64le.cpp
+
 #else // TARGET*
 
 #error Unsupported or unset target architecture

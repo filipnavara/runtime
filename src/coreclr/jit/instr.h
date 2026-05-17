@@ -10,6 +10,8 @@
 #define BAD_CODE 0XFFFFFFFF
 #elif TARGET_RISCV64
 #define BAD_CODE 0X00000000
+#elif defined(TARGET_POWERPC64)
+#define BAD_CODE 0X00000000
 #else
 #define BAD_CODE 0x0BADC0DE // better not match a real encoding!
 #endif
@@ -76,6 +78,11 @@ enum instruction : uint32_t
     #include "instrs.h"
 
     INS_lea,   // Not a real instruction. It is used for load the address of stack locals
+#elif defined(TARGET_POWERPC64)
+    #define INST(id, nm, ldst, e1) INS_##id,
+    #include "instrs.h"
+
+    INS_lea,   // Not a real instruction. It is used for loading the address of stack locals
 #elif defined(TARGET_WASM)
     #define INST(id, nm, info, fmt, opcode         ) INS_##id,
     #define INST2(id, nm, info, fmt, prefix, opcode) INS_##id,
@@ -317,7 +324,8 @@ enum insOpts: unsigned
 
 };
 
-#elif defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_WASM)
+#elif defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) ||        \
+    defined(TARGET_POWERPC64) || defined(TARGET_WASM)
 // TODO-Cleanup: Move 'insFlags' under TARGET_ARM
 enum insFlags: unsigned
 {
@@ -560,7 +568,7 @@ enum insBarrier : unsigned
     INS_BARRIER_REL   =  INS_BARRIER_FULL,//18,
     INS_BARRIER_RMB   =  INS_BARRIER_FULL,//19,
 };
-#elif defined(TARGET_RISCV64)
+#elif defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 enum insOpts : unsigned
 {
     INS_OPTS_NONE,

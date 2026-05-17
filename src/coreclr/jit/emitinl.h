@@ -413,6 +413,11 @@ inline ssize_t emitter::emitGetInsAmdAny(const instrDesc* id) const
 
     id->idReg2((regNumber)encodeMask); // Save in idReg2
 
+#elif defined(TARGET_POWERPC64)
+    (void)encodeMask;
+    id->idReg1(REG_R0);
+    id->idReg2(REG_R0);
+
 #else
     NYI("unknown target");
 #endif
@@ -582,6 +587,10 @@ inline ssize_t emitter::emitGetInsAmdAny(const instrDesc* id) const
         regmask |= RBM_S10;
     if ((encodeMask & 0x10) != 0)
         regmask |= RBM_S11;
+
+#elif defined(TARGET_POWERPC64)
+    (void)encodeMask;
+    regmask = RBM_NONE;
 
 #else
     NYI("unknown target");

@@ -7511,13 +7511,31 @@ void CodeGen::genStructReturn(GenTree* treeNode)
 
 #if FEATURE_MULTIREG_RET
 #ifdef TARGET_POWERPC64
-    auto ppc64leLoadReturnRegFromLocal = [this](var_types type, regNumber toReg, unsigned lclNum, unsigned lclOffs) {
-        if (varTypeUsesIntReg(type))
+    regNumber ppc64leLargeOffsetLoadTmpReg = REG_NA;
+    auto ppc64leLoadReturnRegFromLocal =
+        [this, treeNode, &ppc64leLargeOffsetLoadTmpReg](var_types type,
+                                                        regNumber toReg,
+                                                        unsigned  lclNum,
+                                                        unsigned  lclOffs,
+                                                        bool      useInternalFloatTmp) {
+        bool      fpBased     = false;
+        int       frameOffset = m_compiler->lvaFrameAddress(lclNum, &fpBased) + static_cast<int>(lclOffs);
+        regNumber baseReg     = fpBased ? REG_FPBASE : REG_SPBASE;
+
+        if (varTypeUsesIntReg(type) || emitter::isValidSimm16(frameOffset))
         {
-            bool      fpBased     = false;
-            int       frameOffset = m_compiler->lvaFrameAddress(lclNum, &fpBased) + static_cast<int>(lclOffs);
-            regNumber baseReg     = fpBased ? REG_FPBASE : REG_SPBASE;
-            genInstrWithConstant(ins_Load(type), emitTypeSize(type), toReg, baseReg, frameOffset, toReg);
+            regNumber tmpReg = varTypeUsesIntReg(type) ? toReg : REG_NA;
+            genInstrWithConstant(ins_Load(type), emitTypeSize(type), toReg, baseReg, frameOffset, tmpReg);
+        }
+        else if (useInternalFloatTmp)
+        {
+            if (ppc64leLargeOffsetLoadTmpReg == REG_NA)
+            {
+                ppc64leLargeOffsetLoadTmpReg = internalRegisters.GetSingle(treeNode, RBM_ALLINT);
+            }
+
+            regNumber tmpReg = ppc64leLargeOffsetLoadTmpReg;
+            genInstrWithConstant(ins_Load(type), emitTypeSize(type), toReg, baseReg, frameOffset, tmpReg);
         }
         else
         {
@@ -7552,7 +7570,7 @@ void CodeGen::genStructReturn(GenTree* treeNode)
         regNumber toReg  = retTypeDesc.GetABIReturnReg(0, m_compiler->info.compCallConv);
 
 #ifdef TARGET_POWERPC64
-        ppc64leLoadReturnRegFromLocal(type, toReg, lclNode->GetLclNum(), offset);
+        ppc64leLoadReturnRegFromLocal(type, toReg, lclNode->GetLclNum(), offset, true);
 #else
         GetEmitter()->emitIns_R_S(ins_Load(type), emitTypeSize(type), toReg, lclNode->GetLclNum(), offset);
 #endif
@@ -7565,7 +7583,7 @@ void CodeGen::genStructReturn(GenTree* treeNode)
             toReg  = retTypeDesc.GetABIReturnReg(1, m_compiler->info.compCallConv);
 
 #ifdef TARGET_POWERPC64
-            ppc64leLoadReturnRegFromLocal(type, toReg, lclNode->GetLclNum(), offset);
+            ppc64leLoadReturnRegFromLocal(type, toReg, lclNode->GetLclNum(), offset, true);
 #else
             GetEmitter()->emitIns_R_S(ins_Load(type), emitTypeSize(type), toReg, lclNode->GetLclNum(), offset);
 #endif
@@ -7628,7 +7646,7 @@ void CodeGen::genStructReturn(GenTree* treeNode)
                 assert(m_compiler->lvaGetDesc(fieldVarNum)->lvOnFrame);
 
 #ifdef TARGET_POWERPC64
-                ppc64leLoadReturnRegFromLocal(type, toReg, fieldVarNum, 0);
+                ppc64leLoadReturnRegFromLocal(type, toReg, fieldVarNum, 0, false);
 #else
                 GetEmitter()->emitIns_R_S(ins_Load(type), emitTypeSize(type), toReg, fieldVarNum, 0);
 #endif

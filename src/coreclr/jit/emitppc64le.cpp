@@ -419,6 +419,12 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_and:
         case INS_or:
         case INS_xor:
+        case INS_slw:
+        case INS_sld:
+        case INS_sraw:
+        case INS_srad:
+        case INS_srw:
+        case INS_srd:
             code = code | (ppcReg(id->idReg2()) << 21) | (ppcReg(id->idReg1()) << 16) |
                    (ppcReg(id->idReg3()) << 11);
             break;

@@ -724,11 +724,24 @@ void CodeGen::genCodeForPhysReg(GenTreePhysReg* tree)
 void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
 {
     NYI_IF(tree->TypeIs(TYP_STRUCT), "GT_STOREIND: struct store not supported");
-    NYI_IF(gcInfo.gcIsWriteBarrierCandidate(tree) != GCInfo::WBF_NoBarrier, "GT_STOREIND: write barrier not supported");
 
     GenTree* addr = tree->Addr();
     GenTree* data = tree->Data();
     assert(!addr->isContained());
+
+    GCInfo::WriteBarrierForm writeBarrierForm = gcInfo.gcIsWriteBarrierCandidate(tree);
+    if (writeBarrierForm != GCInfo::WBF_NoBarrier)
+    {
+        genConsumeOperands(tree);
+
+        noway_assert(data->GetRegNum() != REG_WRITE_BARRIER_DST);
+
+        genCopyRegIfNeeded(addr, REG_WRITE_BARRIER_DST);
+        genCopyRegIfNeeded(data, REG_WRITE_BARRIER_SRC);
+
+        genGCWriteBarrier(tree, writeBarrierForm);
+        return;
+    }
 
     ssize_t offset = tree->Offset();
     if (!emitter::isValidSimm16(offset))

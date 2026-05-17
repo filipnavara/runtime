@@ -91,8 +91,27 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
 
         case GT_CNS_INT:
         {
-            regNumber targetReg = treeNode->GetRegNum();
-            instGen_Set_Reg_To_Imm(emitActualTypeSize(treeNode), targetReg, treeNode->AsIntConCommon()->IconValue());
+            regNumber targetReg  = treeNode->GetRegNum();
+            var_types targetType = treeNode->TypeGet();
+
+            if ((targetType == TYP_DOUBLE) || (targetType == TYP_FLOAT))
+            {
+                treeNode->gtOper = GT_CNS_DBL;
+                genSetRegToConst(targetReg, targetType, treeNode);
+                genProduceReg(treeNode);
+                break;
+            }
+
+            genSetRegToConst(targetReg, targetType, treeNode);
+            genProduceReg(treeNode);
+            break;
+        }
+
+        case GT_CNS_DBL:
+        {
+            regNumber targetReg  = treeNode->GetRegNum();
+            var_types targetType = treeNode->TypeGet();
+            genSetRegToConst(targetReg, targetType, treeNode);
             genProduceReg(treeNode);
             break;
         }
@@ -419,6 +438,53 @@ void CodeGen::genCodeForFloatingBinary(GenTreeOp* tree)
                                 op1->GetRegNum(), op2->GetRegNum());
 
     genProduceReg(tree);
+}
+
+void CodeGen::genSetRegToConst(regNumber targetReg, var_types targetType, GenTree* tree)
+{
+    switch (tree->OperGet())
+    {
+        case GT_CNS_INT:
+        {
+            GenTreeIntCon* con    = tree->AsIntCon();
+            ssize_t        cnsVal = con->IconValue();
+
+            emitAttr attr = emitActualTypeSize(targetType);
+            if (con->ImmedValNeedsReloc(m_compiler))
+            {
+                attr = EA_SET_FLG(attr, EA_CNS_RELOC_FLG);
+            }
+
+            if (targetType == TYP_BYREF)
+            {
+                attr = EA_SET_FLG(attr, EA_BYREF_FLG);
+            }
+
+            instGen_Set_Reg_To_Imm(attr, targetReg, cnsVal,
+                                   INS_FLAGS_DONT_CARE DEBUGARG(con->gtTargetHandle) DEBUGARG(con->gtFlags));
+            regSet.verifyRegUsed(targetReg);
+            break;
+        }
+
+        case GT_CNS_DBL:
+        {
+            assert(varTypeUsesFloatReg(targetType));
+            assert(emitter::isFloatReg(targetReg));
+
+            emitAttr size       = emitActualTypeSize(tree);
+            double   constValue = tree->AsDblCon()->DconValue();
+
+            CORINFO_FIELD_HANDLE hnd     = GetEmitter()->emitFltOrDblConst(constValue, size);
+            instruction          loadIns = (size == EA_4BYTE) ? INS_lfs : INS_lfd;
+            regNumber            addrReg = internalRegisters.GetSingle(tree);
+
+            GetEmitter()->emitIns_R_C(loadIns, size, targetReg, addrReg, hnd);
+            break;
+        }
+
+        default:
+            unreached();
+    }
 }
 
 void CodeGen::genCodeForShift(GenTree* tree)

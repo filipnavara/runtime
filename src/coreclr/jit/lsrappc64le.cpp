@@ -156,6 +156,9 @@ int LinearScan::BuildNode(GenTree* tree)
             return 1;
         }
 
+        case GT_STORE_BLK:
+            return BuildBlockStore(tree->AsBlk());
+
         case GT_PUTARG_STK:
             return BuildPutArgStk(tree->AsPutArgStk());
 
@@ -340,6 +343,129 @@ int LinearScan::BuildPutArgStk(GenTreePutArgStk* argNode)
 
     buildInternalRegisterUses();
     return srcCount;
+}
+
+//------------------------------------------------------------------------
+// BuildBlockStore: Build the RefPositions for a block store node.
+//
+// Arguments:
+//    blkNode - The block store node of interest
+//
+// Return Value:
+//    The number of sources consumed by this node.
+//
+int LinearScan::BuildBlockStore(GenTreeBlk* blkNode)
+{
+    GenTree* dstAddr = blkNode->Addr();
+    GenTree* src     = blkNode->Data();
+    unsigned size    = blkNode->Size();
+
+    GenTree* srcAddrOrFill = nullptr;
+
+    SingleTypeRegSet dstAddrRegMask = RBM_NONE;
+    SingleTypeRegSet srcRegMask     = RBM_NONE;
+
+    if (blkNode->OperIsInitBlkOp())
+    {
+        if (src->OperIs(GT_INIT_VAL))
+        {
+            assert(src->isContained());
+            src = src->AsUnOp()->gtGetOp1();
+        }
+
+        srcAddrOrFill = src;
+
+        switch (blkNode->gtBlkOpKind)
+        {
+            case GenTreeBlk::BlkOpKindUnroll:
+                if (dstAddr->isContained())
+                {
+                    buildInternalIntRegisterDefForNode(blkNode);
+                }
+                break;
+
+            case GenTreeBlk::BlkOpKindLoop:
+                buildInternalIntRegisterDefForNode(blkNode, availableIntRegs);
+                break;
+
+            default:
+                unreached();
+        }
+    }
+    else
+    {
+        if (src->OperIs(GT_IND))
+        {
+            assert(src->isContained());
+            srcAddrOrFill = src->AsIndir()->Addr();
+        }
+
+        switch (blkNode->gtBlkOpKind)
+        {
+            case GenTreeBlk::BlkOpKindCpObjUnroll:
+            {
+                SingleTypeRegSet internalIntCandidates =
+                    allRegs(TYP_INT) &
+                    ~(RBM_WRITE_BARRIER_DST_BYREF | RBM_WRITE_BARRIER_SRC_BYREF).GetRegSetForType(IntRegisterType);
+                buildInternalIntRegisterDefForNode(blkNode, internalIntCandidates);
+
+                if (size >= 2 * REGSIZE_BYTES)
+                {
+                    buildInternalIntRegisterDefForNode(blkNode, internalIntCandidates);
+                }
+
+                dstAddrRegMask = RBM_WRITE_BARRIER_DST_BYREF.GetIntRegSet();
+
+                if (srcAddrOrFill != nullptr)
+                {
+                    assert(!srcAddrOrFill->isContained());
+                    srcRegMask = RBM_WRITE_BARRIER_SRC_BYREF.GetIntRegSet();
+                }
+                break;
+            }
+
+            case GenTreeBlk::BlkOpKindUnroll:
+                buildInternalIntRegisterDefForNode(blkNode);
+                if (size >= 2 * REGSIZE_BYTES)
+                {
+                    buildInternalIntRegisterDefForNode(blkNode);
+                }
+                break;
+
+            default:
+                unreached();
+        }
+    }
+
+    int useCount = 0;
+
+    if (!dstAddr->isContained())
+    {
+        useCount++;
+        BuildUse(dstAddr, dstAddrRegMask);
+    }
+    else if (dstAddr->OperIsAddrMode())
+    {
+        useCount += BuildAddrUses(dstAddr->AsAddrMode()->Base());
+    }
+
+    if (srcAddrOrFill != nullptr)
+    {
+        if (!srcAddrOrFill->isContained())
+        {
+            useCount++;
+            BuildUse(srcAddrOrFill, srcRegMask);
+        }
+        else if (srcAddrOrFill->OperIsAddrMode())
+        {
+            useCount += BuildAddrUses(srcAddrOrFill->AsAddrMode()->Base());
+        }
+    }
+
+    buildInternalRegisterUses();
+    regMaskTP killMask = getKillSetForBlockStore(blkNode);
+    BuildKills(blkNode, killMask);
+    return useCount;
 }
 
 #endif // TARGET_POWERPC64

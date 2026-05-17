@@ -621,6 +621,7 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 
         case INS_ori:
         case INS_oris:
+        case INS_xori:
             code = code | (ppcReg(id->idReg2()) << 21) | (ppcReg(id->idReg1()) << 16) |
                    ((unsigned)emitGetInsSC(id) & 0xFFFF);
             break;
@@ -635,6 +636,10 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_cmpw:
         case INS_cmplw:
             code = code | (ppcReg(id->idReg1()) << 16) | (ppcReg(id->idReg2()) << 11);
+            break;
+
+        case INS_fcmpu:
+            code = code | (ppcFReg(id->idReg1()) << 16) | (ppcFReg(id->idReg2()) << 11);
             break;
 
         case INS_b:

@@ -47,6 +47,28 @@ static instruction ppcBranchInsForCondition(GenCondition cond)
     }
 }
 
+static instruction ppcReverseBranchIns(instruction ins)
+{
+    switch (ins)
+    {
+        case INS_beq:
+            return INS_bne;
+        case INS_bne:
+            return INS_beq;
+        case INS_blt:
+            return INS_bge;
+        case INS_bge:
+            return INS_blt;
+        case INS_bgt:
+            return INS_ble;
+        case INS_ble:
+            return INS_bgt;
+        default:
+            NO_WAY("unexpected PPC64LE branch instruction");
+            return INS_invalid;
+    }
+}
+
 void CodeGen::genFnEpilog(BasicBlock* block)
 {
     genPopCalleeSavedRegisters(/* jmpEpilog */ false);
@@ -676,7 +698,50 @@ void CodeGen::genJumpToThrowHlpBlk_la(SpecialCodeKind codeKind,
                                       BasicBlock*     failBlk,
                                       regNumber       reg2)
 {
-    NYI_POWERPC64("genJumpToThrowHlpBlk_la");
+    assert((ins == INS_beq) || (ins == INS_bne) || (ins == INS_blt) || (ins == INS_bge) || (ins == INS_bgt) ||
+           (ins == INS_ble));
+
+    if (reg2 == REG_NA)
+    {
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, 0);
+        reg2 = REG_R0;
+    }
+
+    GetEmitter()->emitIns_R_R(INS_cmpd, EA_PTRSIZE, reg1, reg2);
+
+    if (m_compiler->fgUseThrowHelperBlocks())
+    {
+        BasicBlock* excpRaisingBlock;
+
+        if (failBlk != nullptr)
+        {
+            excpRaisingBlock = failBlk;
+
+#ifdef DEBUG
+            Compiler::AddCodeDsc* add = m_compiler->fgGetExcptnTarget(codeKind, m_compiler->compCurBB);
+            assert(add->acdUsed);
+            assert(excpRaisingBlock == add->acdDstBlk);
+#endif
+        }
+        else
+        {
+            Compiler::AddCodeDsc* add = m_compiler->fgGetExcptnTarget(codeKind, m_compiler->compCurBB);
+            assert((add != nullptr) && "failed to find exception throw block");
+            assert(add->acdUsed);
+            excpRaisingBlock = add->acdDstBlk;
+        }
+
+        GetEmitter()->emitIns_J(ins, excpRaisingBlock);
+    }
+    else
+    {
+        BasicBlock* skipLabel = genCreateTempLabel();
+        GetEmitter()->emitIns_J(ppcReverseBranchIns(ins), skipLabel);
+
+        genEmitHelperCall(m_compiler->acdHelper(codeKind), 0, EA_UNKNOWN);
+
+        genDefineTempLabel(skipLabel);
+    }
 }
 
 bool CodeGen::genInstrWithConstant(

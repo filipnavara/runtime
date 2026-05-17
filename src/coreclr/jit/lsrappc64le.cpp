@@ -17,7 +17,21 @@ int LinearScan::BuildNode(GenTree* tree)
 {
     assert(!tree->isContained());
     clearBuildState();
-    return BuildSimple(tree);
+
+    switch (tree->OperGet())
+    {
+        case GT_EQ:
+        case GT_NE:
+        case GT_LT:
+        case GT_LE:
+        case GT_GE:
+        case GT_GT:
+        case GT_JCMP:
+            return BuildCmp(tree);
+
+        default:
+            return BuildSimple(tree);
+    }
 }
 
 #endif // TARGET_POWERPC64

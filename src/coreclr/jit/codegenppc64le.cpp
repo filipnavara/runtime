@@ -43,6 +43,10 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             break;
         }
 
+        case GT_JCMP:
+            genCodeForJumpCompare(treeNode->AsOpCC());
+            break;
+
         case GT_RETURN:
         case GT_RETFILT:
             genReturn(treeNode);
@@ -56,7 +60,71 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
 
 void CodeGen::genCodeForJumpCompare(GenTreeOpCC* tree)
 {
-    NYI_POWERPC64("genCodeForJumpCompare");
+    assert(m_compiler->compCurBB->KindIs(BBJ_COND));
+
+    assert(tree->OperIs(GT_JCMP));
+    assert(!varTypeIsFloating(tree));
+    assert(tree->TypeIs(TYP_VOID));
+    assert(tree->GetRegNum() == REG_NA);
+
+    GenTree* op1 = tree->gtGetOp1();
+    GenTree* op2 = tree->gtGetOp2();
+    assert(!op1->isUsedFromMemory());
+    assert(!op2->isUsedFromMemory());
+
+    var_types op1Type = genActualType(op1->TypeGet());
+    var_types op2Type = genActualType(op2->TypeGet());
+    assert(genTypeSize(op1Type) == genTypeSize(op2Type));
+    assert(varTypeIsIntegralOrI(op1Type));
+
+    genConsumeOperands(tree);
+
+    emitAttr  cmpSize = emitActualTypeSize(op1Type);
+    regNumber regOp1  = op1->GetRegNum();
+    regNumber regOp2  = op2->GetRegNum();
+
+    GenCondition cond = tree->gtCondition;
+    instruction  cmp  = cond.IsUnsigned() ? ((cmpSize == EA_4BYTE) ? INS_cmplw : INS_cmpld)
+                                          : ((cmpSize == EA_4BYTE) ? INS_cmpw : INS_cmpd);
+    GetEmitter()->emitIns_R_R(cmp, cmpSize, regOp1, regOp2);
+
+    instruction branch = INS_invalid;
+    switch (cond.GetCode())
+    {
+        case GenCondition::EQ:
+            branch = INS_beq;
+            break;
+        case GenCondition::NE:
+            branch = INS_bne;
+            break;
+        case GenCondition::SLT:
+        case GenCondition::ULT:
+            branch = INS_blt;
+            break;
+        case GenCondition::SLE:
+        case GenCondition::ULE:
+            branch = INS_ble;
+            break;
+        case GenCondition::SGE:
+        case GenCondition::UGE:
+            branch = INS_bge;
+            break;
+        case GenCondition::SGT:
+        case GenCondition::UGT:
+            branch = INS_bgt;
+            break;
+        default:
+            NO_WAY("unexpected branch condition");
+            break;
+    }
+
+    GetEmitter()->emitIns_J(branch, m_compiler->compCurBB->GetTrueTarget());
+
+    BasicBlock* falseTarget = m_compiler->compCurBB->GetFalseTarget();
+    if (!m_compiler->compCurBB->CanRemoveJumpToTarget(falseTarget, m_compiler))
+    {
+        inst_JMP(EJ_jmp, falseTarget);
+    }
 }
 
 void CodeGen::genJumpToThrowHlpBlk_la(SpecialCodeKind codeKind,
@@ -319,7 +387,26 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
 }
 
 // clang-format off
-const GenConditionDesc GenConditionDesc::map[32] = {};
+const GenConditionDesc GenConditionDesc::map[32]
+{
+    { },       // NONE
+    { },       // 1
+    { EJ_lt }, // SLT
+    { EJ_le }, // SLE
+    { EJ_ge }, // SGE
+    { EJ_gt }, // SGT
+    { },       // S
+    { },       // NS
+
+    { EJ_eq }, // EQ
+    { EJ_ne }, // NE
+    { EJ_lt }, // ULT
+    { EJ_le }, // ULE
+    { EJ_ge }, // UGE
+    { EJ_gt }, // UGT
+    { },       // C
+    { },       // NC
+};
 // clang-format on
 
 #endif // TARGET_POWERPC64

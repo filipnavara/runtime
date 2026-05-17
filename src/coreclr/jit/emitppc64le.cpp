@@ -387,10 +387,13 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 
         case INS_cmp:
         case INS_cmpd:
+        case INS_cmpl:
+        case INS_cmpld:
             code = code | (1u << 21) | (ppcReg(id->idReg1()) << 16) | (ppcReg(id->idReg2()) << 11);
             break;
 
         case INS_cmpw:
+        case INS_cmplw:
             code = code | (ppcReg(id->idReg1()) << 16) | (ppcReg(id->idReg2()) << 11);
             break;
 
@@ -398,16 +401,22 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_bl:
             if (id->idInsOpt() == INS_OPTS_JUMP)
             {
-                code = ppcEncodeIFormBranch(code, emitOutputInstrJumpDistance(dst, ig, static_cast<instrDescJmp*>(id)));
+                code =
+                    ppcEncodeIFormBranch(code, emitOutputInstrJumpDistance(dst, ig, static_cast<instrDescJmp*>(id)));
             }
             break;
 
         case INS_bc:
+        case INS_blt:
+        case INS_bge:
+        case INS_bgt:
+        case INS_ble:
         case INS_beq:
         case INS_bne:
             if (id->idInsOpt() == INS_OPTS_JUMP)
             {
-                code = ppcEncodeBFormBranch(code, emitOutputInstrJumpDistance(dst, ig, static_cast<instrDescJmp*>(id)));
+                code =
+                    ppcEncodeBFormBranch(code, emitOutputInstrJumpDistance(dst, ig, static_cast<instrDescJmp*>(id)));
             }
             break;
 
@@ -425,7 +434,7 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 
 void emitter::emitIns_J(instruction ins, BasicBlock* dst)
 {
-    assert(emitIsUncondJump(ins));
+    assert(emitIsUncondJump(ins) || emitIsCmpJump(ins));
     emitIns_Jump(ins, dst);
 }
 

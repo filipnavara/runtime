@@ -15304,6 +15304,8 @@ uint32_t CEEInfo::getExpectedTargetArchitecture()
     return CORINFO_ARCH_ARM64;
 #elif defined(TARGET_LOONGARCH64)
     return CORINFO_ARCH_LOONGARCH64;
+#elif defined(TARGET_POWERPC64)
+    return CORINFO_ARCH_PPC64LE;
 #elif defined(TARGET_RISCV64)
     return CORINFO_ARCH_RISCV64;
 #elif defined(TARGET_WASM32)

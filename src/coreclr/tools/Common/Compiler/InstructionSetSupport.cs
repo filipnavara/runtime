@@ -91,6 +91,10 @@ namespace ILCompiler
             {
                 return "";
             }
+            else if (architecture is TargetArchitecture.Ppc64le)
+            {
+                return "";
+            }
             else if (architecture is TargetArchitecture.RiscV64)
             {
                 return "";
@@ -147,6 +151,10 @@ namespace ILCompiler
                 return SimdVectorLength.None;
             }
             else if (_targetArchitecture == TargetArchitecture.LoongArch64)
+            {
+                return SimdVectorLength.None;
+            }
+            else if (_targetArchitecture == TargetArchitecture.Ppc64le)
             {
                 return SimdVectorLength.None;
             }

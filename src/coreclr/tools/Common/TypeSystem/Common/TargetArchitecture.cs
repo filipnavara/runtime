@@ -15,6 +15,7 @@ namespace Internal.TypeSystem
         X86,
         Wasm32,
         LoongArch64,
+        Ppc64le,
         RiscV64,
     }
 }

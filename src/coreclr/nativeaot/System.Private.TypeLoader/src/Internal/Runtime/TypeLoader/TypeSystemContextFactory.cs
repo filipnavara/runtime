@@ -43,6 +43,8 @@ namespace Internal.Runtime.TypeLoader
             TargetArchitecture.Wasm32,
 #elif TARGET_LOONGARCH64
             TargetArchitecture.LoongArch64,
+#elif TARGET_POWERPC64
+            TargetArchitecture.Ppc64le,
 #elif TARGET_RISCV64
             TargetArchitecture.RiscV64,
 #else

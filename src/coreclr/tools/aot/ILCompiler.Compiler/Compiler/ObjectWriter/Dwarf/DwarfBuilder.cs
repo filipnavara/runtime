@@ -87,6 +87,12 @@ namespace ILCompiler.ObjectWriter
                     _codeRelocType = RelocType.IMAGE_REL_BASED_DIR64;
                     break;
 
+                case TargetArchitecture.Ppc64le:
+                    _targetPointerSize = 8;
+                    _frameRegister = 31; // FP
+                    _codeRelocType = RelocType.IMAGE_REL_BASED_DIR64;
+                    break;
+
                 case TargetArchitecture.RiscV64:
                     _targetPointerSize = 8;
                     _frameRegister = 8; // FP

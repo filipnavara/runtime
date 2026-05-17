@@ -889,6 +889,7 @@ namespace Internal.JitInterface
         CORINFO_ARCH_ARM,
         CORINFO_ARCH_ARM64,
         CORINFO_ARCH_LOONGARCH64,
+        CORINFO_ARCH_PPC64LE,
         CORINFO_ARCH_RISCV64,
         CORINFO_ARCH_WASM32,
     }

@@ -166,8 +166,8 @@ namespace ILCompiler.ObjectWriter
             long addend)
         {
             if (!UsesSubsectionsViaSymbols &&
-                relocType is IMAGE_REL_BASED_REL32 or IMAGE_REL_BASED_RELPTR32 or IMAGE_REL_BASED_ARM64_BRANCH26
-                or IMAGE_REL_BASED_THUMB_BRANCH24 or IMAGE_REL_BASED_THUMB_MOV32_PCREL &&
+                (relocType is IMAGE_REL_BASED_REL32 or IMAGE_REL_BASED_RELPTR32 or IMAGE_REL_BASED_ARM64_BRANCH26
+                or IMAGE_REL_BASED_THUMB_BRANCH24 or IMAGE_REL_BASED_THUMB_MOV32_PCREL or IMAGE_REL_BASED_PPC64_REL24) &&
                 _definedSymbols.TryGetValue(symbolName, out SymbolDefinition definedSymbol) &&
                 definedSymbol.SectionIndex == sectionIndex)
             {
@@ -196,6 +196,10 @@ namespace ILCompiler.ObjectWriter
                     adjustedAddend -= offset;
 
                     if (relocType is IMAGE_REL_BASED_THUMB_BRANCH24 && !Relocation.FitsInThumb2BlRel24((int)adjustedAddend))
+                    {
+                        EmitRelocation(sectionIndex, offset, data, relocType, symbolName, addend);
+                    }
+                    else if (relocType is IMAGE_REL_BASED_PPC64_REL24 && !Relocation.FitsInPpc64Rel24(adjustedAddend))
                     {
                         EmitRelocation(sectionIndex, offset, data, relocType, symbolName, addend);
                     }

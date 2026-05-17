@@ -20,8 +20,8 @@
 #define FEATURE_FIXED_OUT_ARGS   1       // Preallocate the outgoing arg area in the prolog.
 #define FEATURE_STRUCTPROMOTE    1       // JIT optimization to promote fields of structs into registers.
 #define FEATURE_MULTIREG_STRUCT_PROMOTE 1
-#define FEATURE_FASTTAILCALL     1       // Tail calls made as epilog+jmp.
-#define FEATURE_TAILCALL_OPT     1       // Opportunistic tail calls made as fast tail calls.
+#define FEATURE_FASTTAILCALL     0       // Tail calls made as epilog+jmp.
+#define FEATURE_TAILCALL_OPT     0       // Opportunistic tail calls made as fast tail calls.
 #define FEATURE_IMPLICIT_BYREFS       1
 #define FEATURE_MULTIREG_ARGS_OR_RET  1
 #define FEATURE_MULTIREG_ARGS         1

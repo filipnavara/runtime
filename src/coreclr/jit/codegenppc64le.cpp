@@ -147,6 +147,10 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genCodeForMulHi(treeNode->AsOp());
             break;
 
+        case GT_INC_SATURATE:
+            genCodeForIncSaturate(treeNode);
+            break;
+
         case GT_DIV:
         case GT_UDIV:
         case GT_MOD:
@@ -486,6 +490,41 @@ void CodeGen::genCodeForMulHi(GenTreeOp* tree)
     }
 
     GetEmitter()->emitIns_R_R_R(ins, attr, tree->GetRegNum(), op1->GetRegNum(), op2->GetRegNum());
+
+    genProduceReg(tree);
+}
+
+//------------------------------------------------------------------------
+// genCodeForIncSaturate: Produce code for a GT_INC_SATURATE node.
+//
+// Arguments:
+//    tree - the GT_INC_SATURATE node
+//
+void CodeGen::genCodeForIncSaturate(GenTree* tree)
+{
+    assert(tree->OperIs(GT_INC_SATURATE));
+
+    regNumber targetReg = tree->GetRegNum();
+    assert(targetReg != REG_NA);
+
+    GenTree*  operand    = tree->gtGetOp1();
+    regNumber operandReg = genConsumeReg(operand);
+    emitAttr  attr       = emitActualTypeSize(tree);
+
+    assert(EA_SIZE(attr) == EA_PTRSIZE);
+    noway_assert(targetReg != operandReg);
+
+    instGen_Set_Reg_To_Imm(attr, REG_R0, -1);
+    GetEmitter()->emitIns_R_R(INS_cmpld, attr, operandReg, REG_R0);
+
+    BasicBlock* doneLabel = genCreateTempLabel();
+
+    instGen_Set_Reg_To_Imm(attr, targetReg, 0);
+    GetEmitter()->emitIns_J(INS_beq, doneLabel);
+    instGen_Set_Reg_To_Imm(attr, targetReg, 1);
+
+    genDefineTempLabel(doneLabel);
+    GetEmitter()->emitIns_R_R_R(INS_add, attr, targetReg, operandReg, targetReg);
 
     genProduceReg(tree);
 }

@@ -133,6 +133,14 @@ int LinearScan::BuildNode(GenTree* tree)
             return srcCount;
         }
 
+        case GT_INC_SATURATE:
+        {
+            RefPosition* use = BuildUse(tree->gtGetOp1());
+            setDelayFree(use);
+            BuildDef(tree);
+            return 1;
+        }
+
         case GT_EQ:
         case GT_NE:
         case GT_LT:

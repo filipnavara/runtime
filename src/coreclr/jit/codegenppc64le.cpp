@@ -43,6 +43,22 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             break;
         }
 
+        case GT_LCL_VAR:
+            genCodeForLclVar(treeNode->AsLclVar());
+            break;
+
+        case GT_LCL_FLD:
+            genCodeForLclFld(treeNode->AsLclFld());
+            break;
+
+        case GT_STORE_LCL_VAR:
+            genCodeForStoreLclVar(treeNode->AsLclVar());
+            break;
+
+        case GT_STORE_LCL_FLD:
+            genCodeForStoreLclFld(treeNode->AsLclFld());
+            break;
+
         case GT_JCMP:
             genCodeForJumpCompare(treeNode->AsOpCC());
             break;
@@ -55,6 +71,102 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
         default:
             NYI_POWERPC64("genCodeForTreeNode");
             break;
+    }
+}
+
+void CodeGen::genCodeForLclVar(GenTreeLclVar* tree)
+{
+    unsigned varNum = tree->GetLclNum();
+    assert(varNum < m_compiler->lvaCount);
+
+    LclVarDsc* varDsc = m_compiler->lvaGetDesc(varNum);
+    assert((tree->gtFlags & GTF_VAR_DEF) == 0);
+
+    if (!varDsc->lvIsRegCandidate() && !tree->IsMultiReg() && ((tree->gtFlags & GTF_SPILLED) == 0))
+    {
+        var_types targetType = varDsc->GetRegisterType(tree);
+        assert(targetType != TYP_STRUCT);
+
+        GetEmitter()->emitIns_R_S(ins_Load(targetType), emitTypeSize(targetType), tree->GetRegNum(), varNum, 0);
+        genProduceReg(tree);
+    }
+}
+
+void CodeGen::genCodeForLclFld(GenTreeLclFld* tree)
+{
+    assert(tree->OperIs(GT_LCL_FLD));
+    NYI_IF(tree->TypeIs(TYP_STRUCT), "GT_LCL_FLD: struct load local field not supported");
+
+    var_types targetType = tree->TypeGet();
+    regNumber targetReg  = tree->GetRegNum();
+    assert(targetReg != REG_NA);
+
+    GetEmitter()->emitIns_R_S(ins_Load(targetType), emitTypeSize(targetType), targetReg, tree->GetLclNum(),
+                              tree->GetLclOffs());
+    genProduceReg(tree);
+}
+
+void CodeGen::genCodeForStoreLclFld(GenTreeLclFld* tree)
+{
+    NYI_IF(tree->TypeIs(TYP_STRUCT), "GT_STORE_LCL_FLD: struct store local field not supported");
+
+    GenTree* data = tree->gtOp1;
+    genConsumeRegs(data);
+
+    if (data->isContained())
+    {
+        NYI_POWERPC64("contained local field store data");
+    }
+
+    var_types targetType = tree->TypeGet();
+    regNumber dataReg    = data->GetRegNum();
+    assert(dataReg != REG_NA);
+
+    GetEmitter()->emitIns_S_R(ins_StoreFromSrc(dataReg, targetType), emitTypeSize(targetType), dataReg,
+                              tree->GetLclNum(), tree->GetLclOffs());
+
+    genUpdateLife(tree);
+    m_compiler->lvaGetDesc(tree->GetLclNum())->SetRegNum(REG_STK);
+}
+
+void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* lclNode)
+{
+    GenTree* data = lclNode->gtOp1;
+
+    if (data->gtSkipReloadOrCopy()->IsMultiRegNode() || lclNode->IsMultiReg())
+    {
+        NYI_POWERPC64("multi-reg local store");
+    }
+
+    LclVarDsc* varDsc     = m_compiler->lvaGetDesc(lclNode);
+    regNumber  targetReg  = lclNode->GetRegNum();
+    unsigned   varNum     = lclNode->GetLclNum();
+    var_types  targetType = varDsc->GetRegisterType(lclNode);
+
+    genConsumeRegs(data);
+
+    if (data->isContained())
+    {
+        NYI_POWERPC64("contained local store data");
+    }
+
+    regNumber dataReg = data->GetRegNum();
+    assert(dataReg != REG_NA);
+
+    if (targetReg == REG_NA)
+    {
+        inst_set_SV_var(lclNode);
+
+        GetEmitter()->emitIns_S_R(ins_StoreFromSrc(dataReg, targetType), emitActualTypeSize(targetType), dataReg,
+                                  varNum, 0);
+
+        genUpdateLife(lclNode);
+        varDsc->SetRegNum(REG_STK);
+    }
+    else
+    {
+        GetEmitter()->emitIns_Mov(emitActualTypeSize(targetType), targetReg, dataReg, true);
+        genProduceReg(lclNode);
     }
 }
 

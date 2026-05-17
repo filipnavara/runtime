@@ -108,13 +108,28 @@ int LinearScan::BuildNode(GenTree* tree)
 
         case GT_CAST:
         {
-            int srcCount = BuildCastUses(tree->AsCast(), RBM_NONE);
-            if (varTypeIsIntegral(tree) && varTypeIsIntegral(tree->AsCast()->CastOp()) &&
-                (CodeGen::GenIntCastDesc(tree->AsCast()).CheckKind() != CodeGen::GenIntCastDesc::CHECK_NONE))
+            GenTreeCast* cast        = tree->AsCast();
+            int          srcCount    = BuildCastUses(cast, RBM_NONE);
+            bool         hasInternal = false;
+
+            if (varTypeIsIntegral(tree) && varTypeIsIntegral(cast->CastOp()) &&
+                (CodeGen::GenIntCastDesc(cast).CheckKind() != CodeGen::GenIntCastDesc::CHECK_NONE))
             {
                 buildInternalIntRegisterDefForNode(tree);
+                hasInternal = true;
+            }
+
+            if (varTypeIsIntegral(tree) && varTypeIsFloating(cast->CastOp()))
+            {
+                buildInternalFloatRegisterDefForNode(tree);
+                hasInternal = true;
+            }
+
+            if (hasInternal)
+            {
                 buildInternalRegisterUses();
             }
+
             BuildDef(tree);
             return srcCount;
         }

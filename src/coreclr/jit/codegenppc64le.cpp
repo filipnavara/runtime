@@ -257,6 +257,14 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genCall(treeNode->AsCall());
             break;
 
+        case GT_PHYSREG:
+            genCodeForPhysReg(treeNode->AsPhysReg());
+            break;
+
+        case GT_CATCH_ARG:
+            genCodeForCatchArg(treeNode);
+            break;
+
         case GT_JCMP:
             genCodeForJumpCompare(treeNode->AsOpCC());
             break;
@@ -685,6 +693,32 @@ void CodeGen::genCodeForNullCheck(GenTreeIndir* tree)
     regNumber baseReg = genConsumeReg(addr);
     GetEmitter()->emitIns_R_AR(ins_Load(tree->TypeGet()), emitActualTypeSize(tree), REG_R0, baseReg,
                                static_cast<int>(offset));
+}
+
+//---------------------------------------------------------------------
+// genCodeForPhysReg - generate code for a GT_PHYSREG node
+//
+// Arguments
+//    tree - the GT_PHYSREG node
+//
+// Return value:
+//    None
+//
+void CodeGen::genCodeForPhysReg(GenTreePhysReg* tree)
+{
+    assert(tree->OperIs(GT_PHYSREG));
+
+    var_types targetType = tree->TypeGet();
+    NYI_IF(!varTypeUsesIntReg(targetType), "floating-point GT_PHYSREG");
+
+    regNumber targetReg = tree->GetRegNum();
+    if (targetReg != tree->gtSrcReg)
+    {
+        inst_Mov(targetType, targetReg, tree->gtSrcReg, /* canSkip */ true);
+        genTransferRegGCState(targetReg, tree->gtSrcReg);
+    }
+
+    genProduceReg(tree);
 }
 
 void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)

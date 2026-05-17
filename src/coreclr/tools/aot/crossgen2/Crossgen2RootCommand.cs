@@ -308,7 +308,7 @@ namespace ILCompiler
             Console.WriteLine(SR.DashDashHelp);
             Console.WriteLine();
 
-            string[] ValidArchitectures = ["arm", "armel", "arm64", "x86", "x64", "riscv64", "loongarch64", "wasm"];
+            string[] ValidArchitectures = ["arm", "armel", "arm64", "x86", "x64", "ppc64le", "riscv64", "loongarch64", "wasm"];
             string[] ValidOS = ["windows", "linux", "osx", "ios", "iossimulator", "maccatalyst", "browser"];
 
             Console.WriteLine(String.Format(SR.SwitchWithDefaultHelp, "--targetos", String.Join("', '", ValidOS), Helpers.GetTargetOS(null).ToString().ToLowerInvariant()));

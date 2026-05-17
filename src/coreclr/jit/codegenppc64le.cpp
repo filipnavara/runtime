@@ -261,6 +261,10 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genCodeForJumpCompare(treeNode->AsOpCC());
             break;
 
+        case GT_BOUNDS_CHECK:
+            genRangeCheck(treeNode);
+            break;
+
         case GT_RETURN:
         case GT_RETFILT:
             genReturn(treeNode);
@@ -701,7 +705,7 @@ void CodeGen::genJumpToThrowHlpBlk_la(SpecialCodeKind codeKind,
     assert((ins == INS_beq) || (ins == INS_bne) || (ins == INS_blt) || (ins == INS_bge) || (ins == INS_bgt) ||
            (ins == INS_ble));
 
-    if (reg2 == REG_NA)
+    if ((reg2 == REG_NA) || (reg2 == REG_R0))
     {
         instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, 0);
         reg2 = REG_R0;
@@ -739,6 +743,62 @@ void CodeGen::genJumpToThrowHlpBlk_la(SpecialCodeKind codeKind,
         GetEmitter()->emitIns_J(ppcReverseBranchIns(ins), skipLabel);
 
         genEmitHelperCall(m_compiler->acdHelper(codeKind), 0, EA_UNKNOWN);
+
+        genDefineTempLabel(skipLabel);
+    }
+}
+
+void CodeGen::genRangeCheck(GenTree* oper)
+{
+    assert(oper->OperIs(GT_BOUNDS_CHECK));
+
+    GenTreeBoundsChk* bndsChk = oper->AsBoundsChk();
+    GenTree*          index   = bndsChk->GetIndex();
+    GenTree*          length  = bndsChk->GetArrayLength();
+
+    regNumber indexReg  = genConsumeReg(index);
+    regNumber lengthReg = genConsumeReg(length);
+
+    var_types indexType  = genActualType(index);
+    var_types lengthType = genActualType(length);
+
+    assert((indexType == TYP_INT) || (indexType == TYP_LONG));
+    assert((lengthType == TYP_INT) || (lengthType == TYP_LONG));
+
+    emitAttr cmpSize = ((indexType == TYP_LONG) || (lengthType == TYP_LONG)) ? EA_8BYTE : EA_4BYTE;
+    if (cmpSize == EA_8BYTE)
+    {
+        if (indexType == TYP_INT)
+        {
+            regNumber tempReg = internalRegisters.Extract(oper);
+            GetEmitter()->emitIns_R_R(INS_extsw, EA_PTRSIZE, tempReg, indexReg);
+            indexReg = tempReg;
+        }
+
+        if (lengthType == TYP_INT)
+        {
+            regNumber tempReg = internalRegisters.Extract(oper);
+            GetEmitter()->emitIns_R_R(INS_extsw, EA_PTRSIZE, tempReg, lengthReg);
+            lengthReg = tempReg;
+        }
+    }
+
+    GetEmitter()->emitIns_R_R((cmpSize == EA_4BYTE) ? INS_cmplw : INS_cmpld, cmpSize, indexReg, lengthReg);
+
+    if (m_compiler->fgUseThrowHelperBlocks())
+    {
+        Compiler::AddCodeDsc* add = m_compiler->fgGetExcptnTarget(bndsChk->gtThrowKind, m_compiler->compCurBB);
+        assert((add != nullptr) && "failed to find range check throw block");
+        assert(add->acdUsed);
+
+        GetEmitter()->emitIns_J(INS_bge, add->acdDstBlk);
+    }
+    else
+    {
+        BasicBlock* skipLabel = genCreateTempLabel();
+        GetEmitter()->emitIns_J(INS_blt, skipLabel);
+
+        genEmitHelperCall(m_compiler->acdHelper(bndsChk->gtThrowKind), 0, EA_UNKNOWN);
 
         genDefineTempLabel(skipLabel);
     }

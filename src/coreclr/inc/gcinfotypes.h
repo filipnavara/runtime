@@ -854,6 +854,64 @@ struct RISCV64GcInfoEncoding {
     static const bool HAS_FIXED_STACK_PARAMETER_SCRATCH_AREA = true;
 };
 
+#elif defined(TARGET_POWERPC64)
+#ifndef TARGET_POINTER_SIZE
+#define TARGET_POINTER_SIZE 8    // equal to sizeof(void*) and the managed pointer size in bytes for this target
+#endif
+
+#define TargetGcInfoEncoding PowerPC64GcInfoEncoding
+
+struct PowerPC64GcInfoEncoding {
+    static const uint32_t NUM_NORM_CODE_OFFSETS_PER_CHUNK = (64);
+    static const uint32_t NUM_NORM_CODE_OFFSETS_PER_CHUNK_LOG2 = (6);
+    // GC pointers are 8-byte aligned.
+    static inline constexpr int32_t NORMALIZE_STACK_SLOT (int32_t x) { return ((x)>>3); }
+    static inline constexpr int32_t DENORMALIZE_STACK_SLOT (int32_t x) { return ((x)<<3); }
+    // All PPC64 instructions are 4 bytes long.
+    static inline constexpr uint32_t NORMALIZE_CODE_LENGTH (uint32_t x) { return ((x)>>2); }
+    static inline constexpr uint32_t DENORMALIZE_CODE_LENGTH (uint32_t x) { return ((x)<<2); }
+    // Encode frame pointer r31 as zero, stack pointer r1 as one.
+    static inline constexpr uint32_t NORMALIZE_STACK_BASE_REGISTER (uint32_t x) { return ((x) == 31 ? 0u : 1u); }
+    static inline constexpr uint32_t DENORMALIZE_STACK_BASE_REGISTER (uint32_t x) { return ((x) == 0 ? 31u : 1u); }
+    static inline constexpr uint32_t NORMALIZE_SIZE_OF_STACK_AREA (uint32_t x) { return ((x)>>3); }
+    static inline constexpr uint32_t DENORMALIZE_SIZE_OF_STACK_AREA (uint32_t x) { return ((x)<<3); }
+    static const bool CODE_OFFSETS_NEED_NORMALIZATION = true;
+    static inline constexpr uint32_t NORMALIZE_CODE_OFFSET (uint32_t x) { return ((x)>>2); }
+    static inline constexpr uint32_t DENORMALIZE_CODE_OFFSET (uint32_t x) { return ((x)<<2); }
+
+    static const int PSP_SYM_STACK_SLOT_ENCBASE = 6;
+    static const int GENERICS_INST_CONTEXT_STACK_SLOT_ENCBASE = 6;
+    static const int SECURITY_OBJECT_STACK_SLOT_ENCBASE = 6;
+    static const int GS_COOKIE_STACK_SLOT_ENCBASE = 6;
+    static const int CODE_LENGTH_ENCBASE = 8;
+    static const int SIZE_OF_RETURN_KIND_IN_SLIM_HEADER = 2;
+    static const int SIZE_OF_RETURN_KIND_IN_FAT_HEADER = 4;
+    static const int STACK_BASE_REGISTER_ENCBASE = 2;
+    static const int SIZE_OF_STACK_AREA_ENCBASE = 3;
+    static const int SIZE_OF_EDIT_AND_CONTINUE_PRESERVED_AREA_ENCBASE = 4;
+    static const int SIZE_OF_EDIT_AND_CONTINUE_FIXED_STACK_FRAME_ENCBASE = 4;
+    static const int REVERSE_PINVOKE_FRAME_ENCBASE = 6;
+    static const int NUM_REGISTERS_ENCBASE = 3;
+    static const int NUM_STACK_SLOTS_ENCBASE = 2;
+    static const int NUM_UNTRACKED_SLOTS_ENCBASE = 1;
+    static const int NORM_PROLOG_SIZE_ENCBASE = 5;
+    static const int NORM_EPILOG_SIZE_ENCBASE = 3;
+    static const int NORM_CODE_OFFSET_DELTA_ENCBASE = 3;
+    static const int INTERRUPTIBLE_RANGE_DELTA1_ENCBASE = 6;
+    static const int INTERRUPTIBLE_RANGE_DELTA2_ENCBASE = 6;
+    static const int REGISTER_ENCBASE = 3;
+    static const int REGISTER_DELTA_ENCBASE = 2;
+    static const int STACK_SLOT_ENCBASE = 6;
+    static const int STACK_SLOT_DELTA_ENCBASE = 4;
+    static const int NUM_SAFE_POINTS_ENCBASE = 3;
+    static const int NUM_INTERRUPTIBLE_RANGES_ENCBASE = 1;
+    static const int NUM_EH_CLAUSES_ENCBASE = 2;
+    static const int POINTER_SIZE_ENCBASE = 3;
+    static const int LIVESTATE_RLE_RUN_ENCBASE = 2;
+    static const int LIVESTATE_RLE_SKIP_ENCBASE = 4;
+    static const bool HAS_FIXED_STACK_PARAMETER_SCRATCH_AREA = true;
+};
+
 #elif defined(TARGET_X86)
 
 #ifndef TARGET_POINTER_SIZE

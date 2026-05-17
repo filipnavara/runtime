@@ -16,6 +16,8 @@
 #include "emitloongarch64.h"
 #elif defined(TARGET_RISCV64)
 #include "emitriscv64.h"
+#elif defined(TARGET_POWERPC64)
+#include "emitppc64le.h"
 #elif defined(TARGET_WASM)
 #include "emitwasm.h"
 #else

@@ -192,7 +192,7 @@ private:
 #if defined(TARGET_XARCH)
     static const insFlags instInfo[INS_count];
 #elif defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) ||        \
-    defined(TARGET_WASM)
+    defined(TARGET_POWERPC64) || defined(TARGET_WASM)
     static const BYTE instInfo[INS_count];
 #else
 #error Unsupported target architecture
@@ -462,7 +462,7 @@ public:
         m_cgInterruptible = value;
     }
 
-#if defined(TARGET_ARMARCH) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARMARCH) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 
     bool GetHasTailCalls()
     {
@@ -472,13 +472,13 @@ public:
     {
         m_cgHasTailCalls = value;
     }
-#endif // TARGET_ARMARCH || TARGET_LOONGARCH64 || TARGET_RISCV64
+#endif // TARGET_ARMARCH || TARGET_LOONGARCH64 || TARGET_RISCV64 || TARGET_POWERPC64
 
 private:
     bool m_cgInterruptible;
-#if defined(TARGET_ARMARCH) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARMARCH) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     bool m_cgHasTailCalls;
-#endif // TARGET_ARMARCH || TARGET_LOONGARCH64 || TARGET_RISCV64
+#endif // TARGET_ARMARCH || TARGET_LOONGARCH64 || TARGET_RISCV64 || TARGET_POWERPC64
 
     //  The following will be set to true if we've determined that we need to
     //  generate a full-blown pointer register map for the current method.

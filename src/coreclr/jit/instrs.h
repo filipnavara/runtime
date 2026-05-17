@@ -11,6 +11,8 @@
 #include "instrsloongarch64.h"
 #elif defined(TARGET_RISCV64)
 #include "instrsriscv64.h"
+#elif defined(TARGET_POWERPC64)
+#include "instrsppc64le.h"
 #elif defined(TARGET_WASM)
 #include "instrswasm.h"
 #else

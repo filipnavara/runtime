@@ -210,6 +210,20 @@
 #define REG_ARG_FP_LAST          REG_F13
 #define INIT_ARG_STACK_SLOT      0
 
+#define REG_FLTARG_0             REG_F1
+#define REG_FLTARG_1             REG_F2
+#define REG_FLTARG_2             REG_F3
+#define REG_FLTARG_3             REG_F4
+#define REG_FLTARG_4             REG_F5
+#define REG_FLTARG_5             REG_F6
+#define REG_FLTARG_6             REG_F7
+#define REG_FLTARG_7             REG_F8
+#define REG_FLTARG_8             REG_F9
+#define REG_FLTARG_9             REG_F10
+#define REG_FLTARG_10            REG_F11
+#define REG_FLTARG_11            REG_F12
+#define REG_FLTARG_12            REG_F13
+
 #define REG_ARG_0                REG_R3
 #define REG_ARG_1                REG_R4
 #define REG_ARG_2                REG_R5

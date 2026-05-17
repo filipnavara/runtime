@@ -490,7 +490,8 @@ template <typename GcInfoEncoding> TGcInfoEncoder<GcInfoEncoding>::TGcInfoEncode
     m_ReversePInvokeFrameSlot = NO_REVERSE_PINVOKE_FRAME;
 #ifdef TARGET_AMD64
     m_WantsReportOnlyLeaf = false;
-#elif defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) ||        \
+    defined(TARGET_POWERPC64)
     m_HasTailCalls = false;
 #endif // TARGET_AMD64
     m_IsVarArg = false;
@@ -746,7 +747,8 @@ template <typename GcInfoEncoding> void TGcInfoEncoder<GcInfoEncoding>::SetWants
 {
     m_WantsReportOnlyLeaf = true;
 }
-#elif defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) ||        \
+    defined(TARGET_POWERPC64)
 template <typename GcInfoEncoding> void TGcInfoEncoder<GcInfoEncoding>::SetHasTailCalls()
 {
     m_HasTailCalls = true;
@@ -949,7 +951,8 @@ template <typename GcInfoEncoding> void TGcInfoEncoder<GcInfoEncoding>::Build()
         ((m_StackBaseRegister == NO_STACK_BASE_REGISTER) || (GcInfoEncoding::NORMALIZE_STACK_BASE_REGISTER(m_StackBaseRegister) == 0))) &&
 #ifdef TARGET_AMD64
         !m_WantsReportOnlyLeaf &&
-#elif defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) ||        \
+    defined(TARGET_POWERPC64)
         !m_HasTailCalls &&
 #endif // TARGET_AMD64
         (m_SizeOfEditAndContinuePreservedArea == NO_SIZE_OF_EDIT_AND_CONTINUE_PRESERVED_AREA);
@@ -983,7 +986,8 @@ template <typename GcInfoEncoding> void TGcInfoEncoder<GcInfoEncoding>::Build()
         GCINFO_WRITE(m_Info1, ((m_StackBaseRegister != NO_STACK_BASE_REGISTER) ? 1 : 0), 1, FlagsSize);
 #ifdef TARGET_AMD64
         GCINFO_WRITE(m_Info1, (m_WantsReportOnlyLeaf ? 1 : 0), 1, FlagsSize);
-#elif defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) ||        \
+    defined(TARGET_POWERPC64)
         GCINFO_WRITE(m_Info1, (m_HasTailCalls ? 1 : 0), 1, FlagsSize);
 #else
         GCINFO_WRITE(m_Info1, 0, 1, FlagsSize); // unused

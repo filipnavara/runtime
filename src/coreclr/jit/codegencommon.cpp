@@ -431,9 +431,9 @@ CodeGen::CodeGen(Compiler* theCompiler)
     /* Assume that we not fully interruptible */
 
     SetInterruptible(false);
-#if defined(TARGET_ARMARCH) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARMARCH) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     SetHasTailCalls(false);
-#endif // TARGET_ARMARCH || TARGET_LOONGARCH64 || TARGET_RISCV64
+#endif // TARGET_ARMARCH || TARGET_LOONGARCH64 || TARGET_RISCV64 || TARGET_POWERPC64
 #ifdef DEBUG
     genInterruptibleUsed = false;
     genCurDispOffset     = (unsigned)-1;
@@ -1896,7 +1896,7 @@ void CodeGen::genJumpToThrowHlpBlk(emitJumpKind jumpKind, SpecialCodeKind codeKi
  * have set the flags. Check if the operation caused an overflow.
  */
 
-#if !defined(TARGET_LOONGARCH64) && !defined(TARGET_RISCV64)
+#if !defined(TARGET_LOONGARCH64) && !defined(TARGET_RISCV64) && !defined(TARGET_POWERPC64)
 // inline
 void CodeGen::genCheckOverflow(GenTree* tree)
 {
@@ -3955,6 +3955,8 @@ void CodeGen::genZeroInitFltRegs(const regMaskTP& initFltRegs, const regMaskTP& 
                 GetEmitter()->emitIns_R_R(INS_movgr2fr_d, EA_8BYTE, reg, REG_R0);
 #elif defined(TARGET_RISCV64)
                 GetEmitter()->emitIns_R_R(INS_fmv_w_x, EA_4BYTE, reg, REG_R0);
+#elif defined(TARGET_POWERPC64)
+                inst_Mov(TYP_FLOAT, reg, initReg, /* canSkip */ false);
 #else // TARGET*
 #error Unsupported or unset target architecture
 #endif
@@ -3994,6 +3996,8 @@ void CodeGen::genZeroInitFltRegs(const regMaskTP& initFltRegs, const regMaskTP& 
                 GetEmitter()->emitIns_R_R(INS_movgr2fr_d, EA_8BYTE, reg, REG_R0);
 #elif defined(TARGET_RISCV64)
                 GetEmitter()->emitIns_R_R(INS_fmv_d_x, EA_8BYTE, reg, REG_R0);
+#elif defined(TARGET_POWERPC64)
+                inst_Mov(TYP_DOUBLE, reg, initReg, /* canSkip */ false);
 #else // TARGET*
 #error Unsupported or unset target architecture
 #endif
@@ -7375,6 +7379,8 @@ void CodeGen::genPatchpoint(GenTreeOp* treeNode)
     GetEmitter()->emitIns_R_R_I(INS_jirl, EA_PTRSIZE, REG_R0, REG_INTRET, 0);
 #elif defined(TARGET_RISCV64)
     GetEmitter()->emitIns_R_R_I(INS_jalr, EA_PTRSIZE, REG_R0, REG_INTRET, 0);
+#elif defined(TARGET_POWERPC64)
+    GetEmitter()->emitIns_R_R_I(INS_bclr, EA_PTRSIZE, REG_R0, REG_INTRET, 0);
 #else
 #error "Unsupported target architecture for GT_PATCHPOINT"
 #endif

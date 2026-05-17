@@ -613,6 +613,9 @@ static const regMaskTP LsraLimitSmallFPSet  = (RBM_F0 | RBM_F1 | RBM_F2 | RBM_F8
 #elif defined(TARGET_RISCV64)
 static const regMaskTP LsraLimitSmallIntSet = (RBM_T1 | RBM_T3 | RBM_A0 | RBM_A1 | RBM_T0);
 static const regMaskTP LsraLimitSmallFPSet  = (RBM_FT0 | RBM_FT1 | RBM_FT2 | RBM_FS0 | RBM_FS1);
+#elif defined(TARGET_POWERPC64)
+static const regMaskTP LsraLimitSmallIntSet = (RBM_R3 | RBM_R4 | RBM_R11 | RBM_R12 | RBM_R14);
+static const regMaskTP LsraLimitSmallFPSet  = (RBM_F0 | RBM_F1 | RBM_F2 | RBM_F14 | RBM_F15);
 #else
 #error Unsupported or unset target architecture
 #endif // target

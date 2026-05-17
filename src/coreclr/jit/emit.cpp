@@ -3881,6 +3881,9 @@ const size_t hexEncodingSize = 19;
 #elif defined(TARGET_RISCV64)
 const size_t basicIndent     = 12;
 const size_t hexEncodingSize = 19;
+#elif defined(TARGET_POWERPC64)
+const size_t basicIndent     = 12;
+const size_t hexEncodingSize = 19;
 #elif defined(TARGET_WASM)
 const size_t basicIndent     = 12;
 const size_t hexEncodingSize = 19; // 8 bytes (wasm-objdump default) + 1 space.
@@ -5097,10 +5100,10 @@ AGAIN:
         }
 #endif // TARGET_ARM64
 
-#ifdef TARGET_RISCV64
+#if defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
         /* Figure out the smallest size we can end up with */
 
-        // TODO-RISC64-RVC: add compressed branches and jumps
+        // TODO-RISC64-RVC, TODO-PPC64LE-CQ: add compressed branches and jumps where applicable.
         if (emitIsCmpJump(jmp))
         {
             ssz = sizeof(code_t);
@@ -5109,9 +5112,11 @@ AGAIN:
 
             // 2 instructions: "reverse cmp-and-branch; jal offset;"
             // Move bounds to the right by 'ssz' to account for the reversed branch instruction size.
+#ifndef TARGET_POWERPC64
             msz = sizeof(code_t) * 2;
             nmd = J_DIST_SMALL_MAX_NEG + ssz;
             pmd = J_DIST_SMALL_MAX_POS + ssz;
+#endif // !TARGET_POWERPC64
         }
         else if (emitIsUncondJump(jmp))
         {
@@ -5123,7 +5128,7 @@ AGAIN:
         {
             assert(!"Unknown jump instruction");
         }
-#endif // TARGET_RISCV64
+#endif // TARGET_RISCV64 || TARGET_POWERPC64
 
         /* Make sure the jumps are properly ordered */
 
@@ -5527,7 +5532,7 @@ AGAIN:
         // The size of IF_LARGEJMP/IF_LARGEADR/IF_LARGELDC are 8 or 12.
         // All other code size is 4.
         assert((sizeDif == 4) || (sizeDif == 8));
-#elif defined(TARGET_RISCV64)
+#elif defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
         assert((sizeDif == 0) || (sizeDif == 4) || (sizeDif == 8));
 #elif defined(TARGET_WASM)
         // TODO-WASM: likely the whole thing needs to be made unreachable.
@@ -7673,8 +7678,8 @@ unsigned emitter::emitEndCodeGen(Compiler*             comp,
                     *(short int*)(adr + writeableOffset) -= (short)adj;
 #elif defined(TARGET_ARM64)
                     emitOutputLJ(NULL, adr, jmp);
-#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
-                    // For LoongArch64 and RiscV64 `emitFwdJumps` is always false.
+#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+                    // For LoongArch64, RiscV64, and PPC64 `emitFwdJumps` is always false.
                     unreached();
 #elif defined(TARGET_WASM)
                     NYI_WASM("Short jump distance adjustment");
@@ -7689,8 +7694,8 @@ unsigned emitter::emitEndCodeGen(Compiler*             comp,
                     *(int*)(adr + writeableOffset) -= adj;
 #elif defined(TARGET_ARMARCH)
                     emitOutputLJ(NULL, adr, jmp);
-#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
-                    // For LoongArch64 and RiscV64 `emitFwdJumps` is always false.
+#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+                    // For LoongArch64, RiscV64, and PPC64 `emitFwdJumps` is always false.
                     unreached();
 #elif defined(TARGET_WASM)
                     NYI_WASM("Jump distance adjustment");

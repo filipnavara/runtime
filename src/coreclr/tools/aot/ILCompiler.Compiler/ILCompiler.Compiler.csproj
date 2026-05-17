@@ -332,6 +332,9 @@
     <Compile Include="..\..\Common\Compiler\DependencyAnalysis\Target_LoongArch64\LoongArch64Emitter.cs" Link="Compiler\DependencyAnalysis\Target_LoongArch64\LoongArch64Emitter.cs" />
     <Compile Include="..\..\Common\Compiler\DependencyAnalysis\Target_LoongArch64\Register.cs" Link="Compiler\DependencyAnalysis\Target_LoongArch64\Register.cs" />
     <Compile Include="..\..\Common\Compiler\DependencyAnalysis\Target_LoongArch64\TargetRegisterMap.cs" Link="Compiler\DependencyAnalysis\Target_LoongArch64\TargetRegisterMap.cs" />
+    <Compile Include="..\..\Common\Compiler\DependencyAnalysis\Target_Ppc64le\Ppc64leEmitter.cs" Link="Compiler\DependencyAnalysis\Target_Ppc64le\Ppc64leEmitter.cs" />
+    <Compile Include="..\..\Common\Compiler\DependencyAnalysis\Target_Ppc64le\Register.cs" Link="Compiler\DependencyAnalysis\Target_Ppc64le\Register.cs" />
+    <Compile Include="..\..\Common\Compiler\DependencyAnalysis\Target_Ppc64le\TargetRegisterMap.cs" Link="Compiler\DependencyAnalysis\Target_Ppc64le\TargetRegisterMap.cs" />
     <Compile Include="..\..\Common\Compiler\DependencyAnalysis\Target_RiscV64\AddrMode.cs" Link="Compiler\DependencyAnalysis\Target_RiscV64\AddrMode.cs" />
     <Compile Include="..\..\Common\Compiler\DependencyAnalysis\Target_RiscV64\RiscV64Emitter.cs" Link="Compiler\DependencyAnalysis\Target_RiscV64\RiscV64Emitter.cs" />
     <Compile Include="..\..\Common\Compiler\DependencyAnalysis\Target_RiscV64\Register.cs" Link="Compiler\DependencyAnalysis\Target_RiscV64\Register.cs" />
@@ -644,6 +647,11 @@
     <Compile Include="Compiler\DependencyAnalysis\Target_LoongArch64\LoongArch64ReadyToRunHelperNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\Target_LoongArch64\LoongArch64ReadyToRunGenericHelperNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\Target_LoongArch64\LoongArch64UnboxingStubNode.cs" />
+    <Compile Include="Compiler\DependencyAnalysis\Target_Ppc64le\Ppc64leJumpStubNode.cs" />
+    <Compile Include="Compiler\DependencyAnalysis\Target_Ppc64le\Ppc64leReadyToRunHelperNode.cs" />
+    <Compile Include="Compiler\DependencyAnalysis\Target_Ppc64le\Ppc64leReadyToRunGenericHelperNode.cs" />
+    <Compile Include="Compiler\DependencyAnalysis\Target_Ppc64le\Ppc64leTentativeMethodNode.cs" />
+    <Compile Include="Compiler\DependencyAnalysis\Target_Ppc64le\Ppc64leUnboxingStubNode.cs" />
     <Compile Include="Compiler\ReadOnlyFieldPolicy.cs" />
     <Compile Include="Compiler\DependencyAnalysis\Target_RiscV64\RiscV64JumpStubNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\Target_RiscV64\RiscV64ReadyToRunHelperNode.cs" />

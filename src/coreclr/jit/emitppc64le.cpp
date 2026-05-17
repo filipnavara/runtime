@@ -262,13 +262,32 @@ void emitter::emitIns_R_R_R(
 
 void emitter::emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int varx, int offs)
 {
-    (void)varx;
-    instrDesc* id = emitNewInstrSC(attr, offs);
+    ssize_t imm = offs;
+    bool    FPbased = false;
+
+    if (varx != BAD_VAR_NUM)
+    {
+        int base = m_compiler->lvaFrameAddress(varx, &FPbased);
+        imm      = base + offs;
+    }
+
+    if (!isValidSimm16(imm))
+    {
+        NYI_POWERPC64("large stack local offset");
+    }
+
+    instrDesc* id = emitNewInstrSC(attr, imm);
 
     id->idIns(ins);
     id->idReg1(ireg);
-    id->idReg2(REG_SPBASE);
+    id->idReg2(FPbased ? REG_FPBASE : REG_SPBASE);
     id->idCodeSize(sizeof(code_t));
+
+    if (varx != BAD_VAR_NUM)
+    {
+        id->idAddr()->iiaLclVar.initLclVarAddr(varx, offs);
+        id->idSetIsLclVar();
+    }
 
     dispIns(id);
     appendToCurIG(id);
@@ -284,13 +303,32 @@ void emitter::emitIns_R_S_I(
 
 void emitter::emitIns_S_R(instruction ins, emitAttr attr, regNumber ireg, int varx, int offs)
 {
-    (void)varx;
-    instrDesc* id = emitNewInstrSC(attr, offs);
+    ssize_t imm = offs;
+    bool    FPbased = false;
+
+    if (varx != BAD_VAR_NUM)
+    {
+        int base = m_compiler->lvaFrameAddress(varx, &FPbased);
+        imm      = base + offs;
+    }
+
+    if (!isValidSimm16(imm))
+    {
+        NYI_POWERPC64("large stack local offset");
+    }
+
+    instrDesc* id = emitNewInstrSC(attr, imm);
 
     id->idIns(ins);
     id->idReg1(ireg);
-    id->idReg2(REG_SPBASE);
+    id->idReg2(FPbased ? REG_FPBASE : REG_SPBASE);
     id->idCodeSize(sizeof(code_t));
+
+    if (varx != BAD_VAR_NUM)
+    {
+        id->idAddr()->iiaLclVar.initLclVarAddr(varx, offs);
+        id->idSetIsLclVar();
+    }
 
     dispIns(id);
     appendToCurIG(id);

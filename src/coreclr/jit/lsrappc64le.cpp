@@ -20,6 +20,21 @@ int LinearScan::BuildNode(GenTree* tree)
 
     switch (tree->OperGet())
     {
+        case GT_LCL_VAR:
+            if (checkContainedOrCandidateLclVar(tree->AsLclVar()))
+            {
+                return 0;
+            }
+            FALLTHROUGH;
+
+        case GT_LCL_FLD:
+            BuildDef(tree);
+            return 0;
+
+        case GT_STORE_LCL_VAR:
+        case GT_STORE_LCL_FLD:
+            return BuildStoreLoc(tree->AsLclVarCommon());
+
         case GT_EQ:
         case GT_NE:
         case GT_LT:

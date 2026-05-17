@@ -151,6 +151,16 @@ int LinearScan::BuildNode(GenTree* tree)
             return srcCount;
         }
 
+        case GT_BSWAP:
+        case GT_BSWAP16:
+        {
+            int srcCount = BuildOperandUses(tree->gtGetOp1());
+            buildInternalIntRegisterDefForNode(tree);
+            buildInternalRegisterUses();
+            BuildDef(tree);
+            return srcCount;
+        }
+
         case GT_EQ:
         case GT_NE:
         case GT_LT:

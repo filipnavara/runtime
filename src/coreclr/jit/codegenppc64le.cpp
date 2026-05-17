@@ -12,6 +12,8 @@
 #include "lower.h"
 #include "gcinfo.h"
 
+static constexpr int PPC_LINK_REGISTER_SAVE_SIZE = REGSIZE_BYTES;
+
 static instruction ppcCompareInsForCondition(GenCondition cond, emitAttr cmpSize)
 {
     assert((cmpSize == EA_4BYTE) || (cmpSize == EA_8BYTE));
@@ -917,7 +919,8 @@ int CodeGenInterface::genTotalFrameSize() const
 {
     assert(!IsUninitialized(m_compiler->compCalleeRegsPushed));
 
-    int totalFrameSize = (m_compiler->compCalleeRegsPushed * REGSIZE_BYTES) + m_compiler->compLclFrameSize;
+    int totalFrameSize = PPC_LINK_REGISTER_SAVE_SIZE + (m_compiler->compCalleeRegsPushed * REGSIZE_BYTES) +
+                         m_compiler->compLclFrameSize;
     assert(totalFrameSize >= 0);
     return totalFrameSize;
 }
@@ -966,7 +969,42 @@ void CodeGen::genCreateAndStoreGCInfo(unsigned codeSize, unsigned prologSize, un
 
 void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize, regNumber callTargetReg)
 {
-    NYI_POWERPC64("genEmitHelperCall");
+    EmitCallParams params;
+
+    CORINFO_CONST_LOOKUP helperFunction = m_compiler->compGetHelperFtn(static_cast<CorInfoHelpFunc>(helper));
+    regMaskTP            killSet        = m_compiler->compHelperCallKillSet(static_cast<CorInfoHelpFunc>(helper));
+
+    if (callTargetReg == REG_NA)
+    {
+        callTargetReg = REG_DEFAULT_HELPER_CALL_TARGET;
+    }
+
+    regMaskTP callTargetMask = genRegMask(callTargetReg);
+    noway_assert((callTargetMask & killSet) == callTargetMask);
+
+    if (helperFunction.accessType == IAT_VALUE)
+    {
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, callTargetReg, reinterpret_cast<ssize_t>(helperFunction.addr));
+    }
+    else
+    {
+        assert(helperFunction.accessType == IAT_PVALUE);
+
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, callTargetReg, reinterpret_cast<ssize_t>(helperFunction.addr));
+        GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, callTargetReg, callTargetReg, 0);
+    }
+
+    regSet.verifyRegUsed(callTargetReg);
+
+    params.callType = EC_INDIR_R;
+    params.ireg     = callTargetReg;
+    params.methHnd  = m_compiler->eeFindHelper(helper);
+    params.argSize  = argSize;
+    params.retSize  = retSize;
+
+    genEmitCallWithCurrentGC(params);
+
+    regSet.verifyRegistersUsed(killSet);
 }
 
 void CodeGen::genPushCalleeSavedRegisters(regNumber initReg, bool* pInitRegZeroed)
@@ -1015,8 +1053,17 @@ void CodeGen::genPopCalleeSavedRegisters(bool jmpEpilog)
         NYI_POWERPC64("floating-point callee-saved registers");
     }
 
-    int calleeSaveOffset = m_compiler->compLclFrameSize;
+    int linkRegisterOffset = m_compiler->compLclFrameSize;
+    int calleeSaveOffset   = linkRegisterOffset + PPC_LINK_REGISTER_SAVE_SIZE;
     genRestoreCalleeSavedRegistersHelp(regsToRestoreMask, REG_SPBASE, calleeSaveOffset, /* reportUnwindData */ true);
+
+    if (!emitter::isValidSimm16(linkRegisterOffset))
+    {
+        NYI_POWERPC64("large link register save offset");
+    }
+
+    GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_R0, REG_SPBASE, linkRegisterOffset);
+    GetEmitter()->emitIns_R_R(INS_mtlr, EA_PTRSIZE, REG_R0, REG_R0);
 
     int totalFrameSize = genTotalFrameSize();
     if (totalFrameSize != 0)
@@ -1032,12 +1079,22 @@ void CodeGen::genOSRHandleTier0CalleeSavedRegistersAndFrame()
 void CodeGen::genAllocLclFrame(unsigned frameSize, regNumber initReg, bool* pInitRegZeroed, regMaskTP maskArgRegsLiveIn)
 {
     unsigned calleeSaveSize = m_compiler->compCalleeRegsPushed * REGSIZE_BYTES;
-    unsigned totalFrameSize = frameSize + calleeSaveSize;
+    unsigned totalFrameSize = frameSize + PPC_LINK_REGISTER_SAVE_SIZE + calleeSaveSize;
 
     if (totalFrameSize != 0)
     {
         genStackPointerAdjustment(-static_cast<ssize_t>(totalFrameSize), initReg, pInitRegZeroed, true);
-        genSaveCalleeSavedRegistersHelp(regSet.rsMaskCalleeSaved, static_cast<int>(frameSize));
+
+        if (!emitter::isValidSimm16(frameSize) || (frameSize > 2047))
+        {
+            NYI_POWERPC64("large link register save offset");
+        }
+
+        GetEmitter()->emitIns_R_R(INS_mflr, EA_PTRSIZE, REG_R0, REG_R0);
+        GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R0, REG_SPBASE, static_cast<int>(frameSize));
+
+        genSaveCalleeSavedRegistersHelp(regSet.rsMaskCalleeSaved,
+                                        static_cast<int>(frameSize + PPC_LINK_REGISTER_SAVE_SIZE));
     }
 }
 

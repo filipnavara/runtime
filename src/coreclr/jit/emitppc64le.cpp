@@ -171,6 +171,22 @@ static emitter::code_t ppcEncodeRldicl(emitter::code_t code, regNumber ra, regNu
            (((sh >> 5) & 0x1) << 1);
 }
 
+static emitter::code_t ppcEncodeSpr(unsigned spr)
+{
+    assert(spr < 1024);
+    return ((spr & 0x1F) << 16) | ((spr >> 5) << 11);
+}
+
+static emitter::code_t ppcEncodeMfspr(emitter::code_t code, regNumber rt, unsigned spr)
+{
+    return code | (ppcReg(rt) << 21) | ppcEncodeSpr(spr);
+}
+
+static emitter::code_t ppcEncodeMtspr(emitter::code_t code, regNumber rs, unsigned spr)
+{
+    return code | (ppcReg(rs) << 21) | ppcEncodeSpr(spr);
+}
+
 static emitter::code_t ppcEncodeIFormBranch(emitter::code_t code, ssize_t dist)
 {
     assert((dist & 0x3) == 0);
@@ -401,6 +417,13 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
     size_t size = id->idCodeSize();
     code_t code = emitInsCode(id->idIns());
 
+    if (id->idInsOpt() == INS_OPTS_C)
+    {
+        size = emitOutputCall(dst, id);
+        *dp  = dst + size;
+        return size;
+    }
+
     switch (id->idIns())
     {
         case INS_nop:
@@ -408,6 +431,19 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_sync:
         case INS_bclr:
         case INS_blr:
+        case INS_bctrl:
+            break;
+
+        case INS_mflr:
+            code = ppcEncodeMfspr(code, id->idReg1(), 8);
+            break;
+
+        case INS_mtlr:
+            code = ppcEncodeMtspr(code, id->idReg1(), 8);
+            break;
+
+        case INS_mtctr:
+            code = ppcEncodeMtspr(code, id->idReg1(), 9);
             break;
 
         case INS_add:
@@ -653,6 +689,10 @@ ssize_t emitter::emitOutputInstrJumpDistance(const BYTE* src, const insGroup* ig
 
 void emitter::emitIns_Call(const EmitCallParams& params)
 {
+    assert(params.callType == EC_INDIR_R);
+    assert(isGeneralRegister(params.ireg));
+    assert(params.addr == nullptr);
+
     regMaskTP savedSet  = emitGetGCRegsSavedOrModified(params.methHnd);
     regMaskTP gcrefRegs = params.gcrefRegs & savedSet;
     regMaskTP byrefRegs = params.byrefRegs & savedSet;
@@ -674,9 +714,136 @@ void emitter::emitIns_Call(const EmitCallParams& params)
                                  params.hasAsyncRet);
     }
 
-    id->idIns(INS_bl);
-    id->idCodeSize(sizeof(code_t));
+    if (params.retSize == EA_GCREF)
+    {
+        gcrefRegs |= RBM_INTRET;
+    }
+    else if (params.retSize == EA_BYREF)
+    {
+        byrefRegs |= RBM_INTRET;
+    }
+
+    if (params.secondRetSize == EA_GCREF)
+    {
+        gcrefRegs |= RBM_INTRET_1;
+    }
+    else if (params.secondRetSize == EA_BYREF)
+    {
+        byrefRegs |= RBM_INTRET_1;
+    }
+
+    VarSetOps::Assign(m_compiler, emitThisGCrefVars, params.ptrVars);
+    emitThisGCrefRegs = gcrefRegs;
+    emitThisByrefRegs = byrefRegs;
+
+    id->idSetIsNoGC(params.isJump || params.noSafePoint || emitNoGChelper(params.methHnd));
+    id->idIns(INS_bctrl);
+    id->idInsOpt(INS_OPTS_C);
+    id->idReg1(params.ireg);
+    id->idCodeSize(2 * sizeof(code_t));
+
+    if (m_debugInfoSize > 0)
+    {
+        INDEBUG(id->idDebugOnlyInfo()->idCallSig = params.sigInfo);
+        id->idDebugOnlyInfo()->idMemCookie = reinterpret_cast<size_t>(params.methHnd);
+    }
+
     appendToCurIG(id);
+}
+
+unsigned emitter::emitOutputCall(BYTE* dst, instrDesc* id)
+{
+    regMaskTP gcrefRegs;
+    regMaskTP byrefRegs;
+
+    VARSET_TP GCvars(VarSetOps::UninitVal());
+
+    if (id->idIsLargeCall())
+    {
+        instrDescCGCA* idCall = (instrDescCGCA*)id;
+        gcrefRegs             = idCall->idcGcrefRegs;
+        byrefRegs             = idCall->idcByrefRegs;
+        VarSetOps::Assign(m_compiler, GCvars, idCall->idcGCvars);
+    }
+    else
+    {
+        assert(!id->idIsLargeDsp());
+        assert(!id->idIsLargeCns());
+
+        gcrefRegs = emitDecodeCallGCregs(id);
+        byrefRegs = 0;
+        VarSetOps::AssignNoCopy(m_compiler, GCvars, VarSetOps::MakeEmpty(m_compiler));
+    }
+
+    emitUpdateLiveGCvars(GCvars, dst);
+
+#ifdef DEBUG
+    if (EMIT_GC_VERBOSE || m_compiler->opts.disasmWithGC)
+    {
+        emitDispGCVarDelta();
+    }
+#endif
+
+    emitOutput_Instr(dst, ppcEncodeMtspr(emitInsCode(INS_mtctr), id->idReg1(), 9));
+    emitOutput_Instr(dst + sizeof(code_t), emitInsCode(INS_bctrl));
+
+    if (id->idGCref() == GCT_GCREF)
+    {
+        gcrefRegs |= RBM_INTRET;
+    }
+    else if (id->idGCref() == GCT_BYREF)
+    {
+        byrefRegs |= RBM_INTRET;
+    }
+
+    if (id->idIsLargeCall())
+    {
+        instrDescCGCA* idCall = (instrDescCGCA*)id;
+#if MULTIREG_HAS_SECOND_GC_RET
+        if (idCall->idSecondGCref() == GCT_GCREF)
+        {
+            gcrefRegs |= RBM_INTRET_1;
+        }
+        else if (idCall->idSecondGCref() == GCT_BYREF)
+        {
+            byrefRegs |= RBM_INTRET_1;
+        }
+#endif
+        if (idCall->hasAsyncContinuationRet())
+        {
+            gcrefRegs |= RBM_ASYNC_CONTINUATION_RET;
+        }
+    }
+
+    BYTE* callInstr = dst + sizeof(code_t);
+
+    if (gcrefRegs != emitThisGCrefRegs)
+    {
+        emitUpdateLiveGCregs(GCT_GCREF, gcrefRegs, callInstr);
+    }
+    if (byrefRegs != emitThisByrefRegs)
+    {
+        emitUpdateLiveGCregs(GCT_BYREF, byrefRegs, callInstr);
+    }
+
+    if (!id->idIsNoGC())
+    {
+        emitStackPop(callInstr, /* isCall */ true, sizeof(code_t), /* args */ 0);
+
+        if (!emitFullGCinfo)
+        {
+            emitRecordGCcall(callInstr, sizeof(code_t));
+        }
+    }
+
+#ifdef DEBUG
+    if (EMIT_GC_VERBOSE || m_compiler->opts.disasmWithGC)
+    {
+        emitDispGCVarDelta();
+    }
+#endif
+
+    return 2 * sizeof(code_t);
 }
 
 void emitter::emitSetShortJump(instrDescJmp* id)

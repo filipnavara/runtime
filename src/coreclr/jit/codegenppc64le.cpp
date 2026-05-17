@@ -223,6 +223,18 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genCodeForStoreInd(treeNode->AsStoreInd());
             break;
 
+        case GT_PUTARG_STK:
+            genPutArgStk(treeNode->AsPutArgStk());
+            break;
+
+        case GT_PUTARG_REG:
+            genPutArgReg(treeNode->AsOp());
+            break;
+
+        case GT_CALL:
+            genCall(treeNode->AsCall());
+            break;
+
         case GT_JCMP:
             genCodeForJumpCompare(treeNode->AsOpCC());
             break;
@@ -1005,6 +1017,221 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize, 
     genEmitCallWithCurrentGC(params);
 
     regSet.verifyRegistersUsed(killSet);
+}
+
+void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
+{
+    assert(treeNode->OperIs(GT_PUTARG_STK));
+
+    if (treeNode->putInIncomingArgArea())
+    {
+        NYI_POWERPC64("fast tail call stack arguments");
+    }
+
+    GenTree* source = treeNode->gtGetOp1();
+    if (source->TypeIs(TYP_STRUCT))
+    {
+        NYI_POWERPC64("struct stack arguments");
+    }
+
+    unsigned  argOffsetOut = treeNode->getArgOffset();
+    var_types slotType     = genActualType(source);
+    instruction storeIns   = ins_Store(slotType);
+    emitAttr    storeAttr  = emitTypeSize(slotType);
+
+    if ((EA_SIZE(storeAttr) < EA_PTRSIZE) && varTypeUsesIntReg(slotType))
+    {
+        storeAttr = EA_PTRSIZE;
+        storeIns  = INS_std;
+    }
+
+    if (source->isContained())
+    {
+        assert(source->OperIs(GT_CNS_INT));
+        assert(source->AsIntConCommon()->IconValue() == 0);
+
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, 0);
+        GetEmitter()->emitIns_S_R(storeIns, storeAttr, REG_R0, m_compiler->lvaOutgoingArgSpaceVar, argOffsetOut);
+    }
+    else
+    {
+        genConsumeReg(source);
+        GetEmitter()->emitIns_S_R(storeIns, storeAttr, source->GetRegNum(), m_compiler->lvaOutgoingArgSpaceVar,
+                                  argOffsetOut);
+    }
+
+    assert((argOffsetOut + EA_SIZE_IN_BYTES(storeAttr)) <= m_compiler->lvaOutgoingArgSpaceSize);
+}
+
+void CodeGen::genPutArgReg(GenTreeOp* tree)
+{
+    assert(tree->OperIs(GT_PUTARG_REG));
+
+    var_types targetType = tree->TypeGet();
+    regNumber targetReg  = tree->GetRegNum();
+
+    assert(targetType != TYP_STRUCT);
+
+    GenTree* op1 = tree->gtOp1;
+    genConsumeReg(op1);
+
+    if (varTypeIsFloating(tree) && emitter::isGeneralRegister(targetReg))
+    {
+        targetType = (emitActualTypeSize(targetType) == EA_4BYTE) ? TYP_INT : TYP_LONG;
+    }
+
+    GetEmitter()->emitIns_Mov(ins_Copy(op1->GetRegNum(), targetType), emitActualTypeSize(targetType), targetReg,
+                              op1->GetRegNum(), /* canSkip */ true);
+    genProduceReg(tree);
+}
+
+void CodeGen::genCall(GenTreeCall* call)
+{
+    genCallPlaceRegArgs(call);
+
+    if (call->NeedsNullCheck())
+    {
+        const regNumber regThis = genGetThisArgReg(call);
+        GetEmitter()->emitIns_R_R_I(INS_lwz, EA_4BYTE, REG_R0, regThis, 0);
+    }
+
+    if (call->IsFastTailCall())
+    {
+        NYI_POWERPC64("fast tail calls");
+    }
+
+    if (m_compiler->killGCRefs(call))
+    {
+        genDefineTempLabel(genCreateTempLabel());
+    }
+
+    genCallInstruction(call);
+    genDefinePendingCallLabel(call);
+
+#ifdef DEBUG
+    regMaskTP killMask = call->IsHelperCall() ? m_compiler->compHelperCallKillSet(call->GetHelperNum())
+                                              : RBM_CALLEE_TRASH;
+
+    assert((gcInfo.gcRegGCrefSetCur & killMask) == 0);
+    assert((gcInfo.gcRegByrefSetCur & killMask) == 0);
+#endif
+
+    var_types returnType = call->TypeGet();
+    if (returnType != TYP_VOID)
+    {
+        if (call->HasMultiRegRetVal())
+        {
+            const ReturnTypeDesc* retTypeDesc = call->GetReturnTypeDesc();
+            assert(retTypeDesc != nullptr);
+
+            unsigned regCount = retTypeDesc->GetReturnRegCount();
+            for (unsigned i = 0; i < regCount; i++)
+            {
+                var_types regType      = retTypeDesc->GetReturnRegType(i);
+                regNumber abiReg       = retTypeDesc->GetABIReturnReg(i, call->GetUnmanagedCallConv());
+                regNumber allocatedReg = call->GetRegNumByIdx(i);
+                inst_Mov(regType, allocatedReg, abiReg, /* canSkip */ true);
+            }
+        }
+        else
+        {
+            regNumber returnReg = varTypeUsesFloatArgReg(returnType) ? REG_FLOATRET : REG_INTRET;
+            if (call->GetRegNum() != returnReg)
+            {
+                inst_Mov(returnType, call->GetRegNum(), returnReg, /* canSkip */ false);
+            }
+        }
+
+        genProduceReg(call);
+    }
+
+    if ((call->gtNext == nullptr) && !m_compiler->opts.MinOpts() && !m_compiler->opts.compDbgCode)
+    {
+        gcInfo.gcMarkRegSetNpt(RBM_INTRET);
+    }
+}
+
+void CodeGen::genCallInstruction(GenTreeCall* call)
+{
+    const ReturnTypeDesc* retTypeDesc = call->GetReturnTypeDesc();
+    EmitCallParams        params;
+
+    if (!call->IsUnusedValue())
+    {
+        if (call->HasMultiRegRetVal())
+        {
+            params.retSize       = emitTypeSize(retTypeDesc->GetReturnRegType(0));
+            params.secondRetSize = emitTypeSize(retTypeDesc->GetReturnRegType(1));
+        }
+        else if (call->TypeIs(TYP_REF))
+        {
+            params.retSize = EA_GCREF;
+        }
+        else if (call->TypeIs(TYP_BYREF))
+        {
+            params.retSize = EA_BYREF;
+        }
+    }
+
+    params.hasAsyncRet = call->IsAsync();
+
+    if (m_compiler->opts.compDbgInfo && (m_compiler->genCallSite2DebugInfoMap != nullptr) && !call->IsTailCall())
+    {
+        DebugInfo di;
+        (void)m_compiler->genCallSite2DebugInfoMap->Lookup(call, &di);
+        params.debugInfo = di;
+    }
+
+#ifdef DEBUG
+    if (!call->IsHelperCall())
+    {
+        params.sigInfo = call->callSig;
+    }
+#endif
+
+    GenTree* target = getCallTarget(call, &params.methHnd);
+    if (target != nullptr)
+    {
+        if (!target->isContainedIntOrIImmed())
+        {
+            genConsumeReg(target);
+            params.ireg = target->GetRegNum();
+        }
+        else
+        {
+            params.ireg = internalRegisters.GetSingle(call);
+            instGen_Set_Reg_To_Imm(EA_PTRSIZE, params.ireg, target->AsIntCon()->IconValue());
+        }
+    }
+    else
+    {
+        regNumber callThroughIndirReg = REG_NA;
+        if (!call->IsHelperCall(CORINFO_HELP_DISPATCH_INDIRECT_CALL))
+        {
+            callThroughIndirReg = getCallIndirectionCellReg(call);
+        }
+
+        if (callThroughIndirReg != REG_NA)
+        {
+            params.ireg = internalRegisters.GetSingle(call);
+            GetEmitter()->emitIns_R_R_I(ins_Load(TYP_I_IMPL), emitActualTypeSize(TYP_I_IMPL), params.ireg,
+                                        callThroughIndirReg, 0);
+        }
+        else
+        {
+            assert(call->IsHelperCall() || (call->gtCallType == CT_USER_FUNC));
+            assert(call->gtDirectCallAddress != nullptr);
+
+            params.ireg = REG_DEFAULT_HELPER_CALL_TARGET;
+            instGen_Set_Reg_To_Imm(EA_PTRSIZE, params.ireg, reinterpret_cast<ssize_t>(call->gtDirectCallAddress));
+        }
+    }
+
+    assert(genIsValidIntReg(params.ireg));
+    regSet.verifyRegUsed(params.ireg);
+
+    params.callType = EC_INDIR_R;
+    genEmitCallWithCurrentGC(params);
 }
 
 void CodeGen::genPushCalleeSavedRegisters(regNumber initReg, bool* pInitRegZeroed)

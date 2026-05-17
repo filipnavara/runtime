@@ -159,6 +159,12 @@ static unsigned ppcRegOrFReg(regNumber reg)
     return (unsigned)reg - (unsigned)REG_F0;
 }
 
+static unsigned ppcFReg(regNumber reg)
+{
+    assert((REG_F0 <= reg) && (reg <= REG_F31));
+    return (unsigned)reg - (unsigned)REG_F0;
+}
+
 static emitter::code_t ppcEncodeDForm(emitter::code_t code, regNumber rt, regNumber ra, ssize_t imm)
 {
     assert(emitter::isValidSimm16(imm));
@@ -168,6 +174,16 @@ static emitter::code_t ppcEncodeDForm(emitter::code_t code, regNumber rt, regNum
 static emitter::code_t ppcEncodeXForm(emitter::code_t code, regNumber rt, regNumber ra, regNumber rb)
 {
     return code | (ppcReg(rt) << 21) | (ppcReg(ra) << 16) | (ppcReg(rb) << 11);
+}
+
+static emitter::code_t ppcEncodeFpBinaryB(emitter::code_t code, regNumber frt, regNumber fra, regNumber frb)
+{
+    return code | (ppcFReg(frt) << 21) | (ppcFReg(fra) << 16) | (ppcFReg(frb) << 11);
+}
+
+static emitter::code_t ppcEncodeFpBinaryC(emitter::code_t code, regNumber frt, regNumber fra, regNumber frc)
+{
+    return code | (ppcFReg(frt) << 21) | (ppcFReg(fra) << 16) | (ppcFReg(frc) << 6);
 }
 
 static unsigned ppcSplit5_1(unsigned value)
@@ -509,7 +525,22 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
             break;
 
         case INS_fmr:
-            code = code | (ppcRegOrFReg(id->idReg1()) << 21) | (ppcRegOrFReg(id->idReg2()) << 11);
+        case INS_fneg:
+            code = code | (ppcFReg(id->idReg1()) << 21) | (ppcFReg(id->idReg2()) << 11);
+            break;
+
+        case INS_fadd:
+        case INS_fadds:
+        case INS_fsub:
+        case INS_fsubs:
+        case INS_fdiv:
+        case INS_fdivs:
+            code = ppcEncodeFpBinaryB(code, id->idReg1(), id->idReg2(), id->idReg3());
+            break;
+
+        case INS_fmul:
+        case INS_fmuls:
+            code = ppcEncodeFpBinaryC(code, id->idReg1(), id->idReg2(), id->idReg3());
             break;
 
         case INS_clrldi:

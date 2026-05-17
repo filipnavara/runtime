@@ -99,6 +99,12 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
 
         case GT_ADD:
         {
+            if (varTypeIsFloating(treeNode))
+            {
+                genCodeForFloatingBinary(treeNode->AsOp());
+                break;
+            }
+
             GenTree*  op1       = treeNode->gtGetOp1();
             GenTree*  op2       = treeNode->gtGetOp2();
             regNumber targetReg = treeNode->GetRegNum();
@@ -113,6 +119,12 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
 
         case GT_SUB:
         {
+            if (varTypeIsFloating(treeNode))
+            {
+                genCodeForFloatingBinary(treeNode->AsOp());
+                break;
+            }
+
             GenTree*  op1       = treeNode->gtGetOp1();
             GenTree*  op2       = treeNode->gtGetOp2();
             regNumber targetReg = treeNode->GetRegNum();
@@ -127,6 +139,12 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
 
         case GT_MUL:
         {
+            if (varTypeIsFloating(treeNode))
+            {
+                genCodeForFloatingBinary(treeNode->AsOp());
+                break;
+            }
+
             if (treeNode->gtOverflow())
             {
                 NYI_POWERPC64("overflow-checking multiply");
@@ -153,6 +171,13 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             break;
 
         case GT_DIV:
+            if (varTypeIsFloating(treeNode))
+            {
+                genCodeForFloatingBinary(treeNode->AsOp());
+                break;
+            }
+            FALLTHROUGH;
+
         case GT_UDIV:
         case GT_MOD:
         case GT_UMOD:
@@ -373,9 +398,25 @@ void CodeGen::genCodeForNegNot(GenTreeOp* tree)
     regNumber targetReg  = tree->GetRegNum();
 
     assert(targetReg != REG_NA);
-    assert(!varTypeIsFloating(tree));
+    assert(tree->OperIs(GT_NEG) || !varTypeIsFloating(tree));
 
     GetEmitter()->emitIns_R_R(genGetInsForOper(tree), emitActualTypeSize(tree), targetReg, operandReg);
+
+    genProduceReg(tree);
+}
+
+void CodeGen::genCodeForFloatingBinary(GenTreeOp* tree)
+{
+    assert(tree->OperIs(GT_ADD, GT_SUB, GT_MUL, GT_DIV));
+    assert(varTypeIsFloating(tree));
+
+    GenTree* op1 = tree->gtGetOp1();
+    GenTree* op2 = tree->gtGetOp2();
+
+    genConsumeOperands(tree);
+
+    GetEmitter()->emitIns_R_R_R(genGetInsForOper(tree), emitActualTypeSize(tree), tree->GetRegNum(),
+                                op1->GetRegNum(), op2->GetRegNum());
 
     genProduceReg(tree);
 }
@@ -2032,12 +2073,28 @@ instruction CodeGen::genGetInsForOper(GenTree* treeNode)
     switch (treeNode->OperGet())
     {
         case GT_ADD:
+            if (varTypeIsFloating(treeNode))
+            {
+                return (treeNode->TypeGet() == TYP_FLOAT) ? INS_fadds : INS_fadd;
+            }
             return INS_add;
         case GT_SUB:
+            if (varTypeIsFloating(treeNode))
+            {
+                return (treeNode->TypeGet() == TYP_FLOAT) ? INS_fsubs : INS_fsub;
+            }
             return INS_subf;
         case GT_MUL:
+            if (varTypeIsFloating(treeNode))
+            {
+                return (treeNode->TypeGet() == TYP_FLOAT) ? INS_fmuls : INS_fmul;
+            }
             return (emitActualTypeSize(treeNode) == EA_4BYTE) ? INS_mullw : INS_mulld;
         case GT_DIV:
+            if (varTypeIsFloating(treeNode))
+            {
+                return (treeNode->TypeGet() == TYP_FLOAT) ? INS_fdivs : INS_fdiv;
+            }
             return (emitActualTypeSize(treeNode) == EA_4BYTE) ? INS_divw : INS_divd;
         case GT_UDIV:
             return (emitActualTypeSize(treeNode) == EA_4BYTE) ? INS_divwu : INS_divdu;
@@ -2064,6 +2121,10 @@ instruction CodeGen::genGetInsForOper(GenTree* treeNode)
         case GT_XOR_NOT:
             return INS_eqv;
         case GT_NEG:
+            if (varTypeIsFloating(treeNode))
+            {
+                return INS_fneg;
+            }
             return INS_neg;
         case GT_NOT:
             return INS_not;

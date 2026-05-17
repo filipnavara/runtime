@@ -73,6 +73,10 @@ int LinearScan::BuildNode(GenTree* tree)
         case GT_IND:
             return BuildIndir(tree->AsIndir());
 
+        case GT_CATCH_ARG:
+            BuildDef(tree, RBM_EXCEPTION_OBJECT.GetIntRegSet());
+            return 0;
+
         case GT_CAST:
         {
             int srcCount = BuildCastUses(tree->AsCast(), RBM_NONE);

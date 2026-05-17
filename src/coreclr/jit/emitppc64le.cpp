@@ -157,6 +157,20 @@ static emitter::code_t ppcEncodeXForm(emitter::code_t code, regNumber rt, regNum
     return code | (ppcReg(rt) << 21) | (ppcReg(ra) << 16) | (ppcReg(rb) << 11);
 }
 
+static unsigned ppcSplit5_1(unsigned value)
+{
+    assert(value < 64);
+    return ((value & 0x1F) << 1) | ((value >> 5) & 0x1);
+}
+
+static emitter::code_t ppcEncodeRldicl(emitter::code_t code, regNumber ra, regNumber rs, unsigned sh, unsigned mb)
+{
+    assert(sh < 64);
+    assert(mb < 64);
+    return code | (ppcReg(rs) << 21) | (ppcReg(ra) << 16) | ((sh & 0x1F) << 11) | (ppcSplit5_1(mb) << 5) |
+           (((sh >> 5) & 0x1) << 1);
+}
+
 static emitter::code_t ppcEncodeIFormBranch(emitter::code_t code, ssize_t dist)
 {
     assert((dist & 0x3) == 0);
@@ -405,6 +419,16 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_xor:
             code = code | (ppcReg(id->idReg2()) << 21) | (ppcReg(id->idReg1()) << 16) |
                    (ppcReg(id->idReg3()) << 11);
+            break;
+
+        case INS_extsb:
+        case INS_extsh:
+        case INS_extsw:
+            code = code | (ppcReg(id->idReg2()) << 21) | (ppcReg(id->idReg1()) << 16);
+            break;
+
+        case INS_clrldi:
+            code = ppcEncodeRldicl(code, id->idReg1(), id->idReg2(), 0, static_cast<unsigned>(emitGetInsSC(id)));
             break;
 
         case INS_mr:

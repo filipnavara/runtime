@@ -35,6 +35,13 @@ int LinearScan::BuildNode(GenTree* tree)
         case GT_STORE_LCL_FLD:
             return BuildStoreLoc(tree->AsLclVarCommon());
 
+        case GT_CAST:
+        {
+            int srcCount = BuildCastUses(tree->AsCast(), RBM_NONE);
+            BuildDef(tree);
+            return srcCount;
+        }
+
         case GT_EQ:
         case GT_NE:
         case GT_LT:

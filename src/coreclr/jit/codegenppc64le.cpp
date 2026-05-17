@@ -586,13 +586,21 @@ void CodeGen::genCodeForStoreLclFld(GenTreeLclFld* tree)
     GenTree* data = tree->gtOp1;
     genConsumeRegs(data);
 
+    var_types targetType = tree->TypeGet();
+    regNumber dataReg    = REG_NA;
+
     if (data->isContained())
     {
-        NYI_POWERPC64("contained local field store data");
+        assert(data->OperIs(GT_CNS_INT));
+        assert(data->AsIntConCommon()->IconValue() == 0);
+        dataReg = REG_R0;
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, dataReg, 0);
+    }
+    else
+    {
+        dataReg = data->GetRegNum();
     }
 
-    var_types targetType = tree->TypeGet();
-    regNumber dataReg    = data->GetRegNum();
     assert(dataReg != REG_NA);
 
     GetEmitter()->emitIns_S_R(ins_StoreFromSrc(dataReg, targetType), emitTypeSize(targetType), dataReg,
@@ -618,12 +626,28 @@ void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* lclNode)
 
     genConsumeRegs(data);
 
+    regNumber dataReg = REG_NA;
+
     if (data->isContained())
     {
-        NYI_POWERPC64("contained local store data");
+        assert(data->OperIs(GT_CNS_INT));
+        assert(data->AsIntConCommon()->IconValue() == 0);
+
+        if (targetReg != REG_NA)
+        {
+            instGen_Set_Reg_To_Imm(emitActualTypeSize(targetType), targetReg, 0);
+            genProduceReg(lclNode);
+            return;
+        }
+
+        dataReg = REG_R0;
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, dataReg, 0);
+    }
+    else
+    {
+        dataReg = data->GetRegNum();
     }
 
-    regNumber dataReg = data->GetRegNum();
     assert(dataReg != REG_NA);
 
     if (targetReg == REG_NA)
@@ -752,13 +776,21 @@ void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
     regNumber baseReg = genConsumeReg(addr);
 
     genConsumeRegs(data);
+
+    regNumber dataReg = REG_NA;
     if (data->isContained())
     {
-        NYI_POWERPC64("GT_STOREIND: contained data");
+        assert(data->OperIs(GT_CNS_INT));
+        assert(data->AsIntConCommon()->IconValue() == 0);
+        dataReg = REG_R0;
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, dataReg, 0);
+    }
+    else
+    {
+        dataReg = data->GetRegNum();
     }
 
     var_types type    = tree->TypeGet();
-    regNumber dataReg = data->GetRegNum();
     assert(dataReg != REG_NA);
 
     if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)

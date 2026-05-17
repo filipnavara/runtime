@@ -181,6 +181,11 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genCodeForShift(treeNode);
             break;
 
+        case GT_ROL:
+        case GT_ROR:
+            genCodeForRotate(treeNode);
+            break;
+
         case GT_NEG:
         case GT_NOT:
             genCodeForNegNot(treeNode->AsOp());
@@ -380,6 +385,41 @@ void CodeGen::genCodeForShift(GenTree* tree)
     GetEmitter()->emitIns_R_R_R(genGetInsForOper(tree), emitActualTypeSize(tree), tree->GetRegNum(),
                                 operand->GetRegNum(), shiftBy->GetRegNum());
 
+    genProduceReg(tree);
+}
+
+void CodeGen::genCodeForRotate(GenTree* tree)
+{
+    assert(tree->OperIs(GT_ROL, GT_ROR));
+    assert(!varTypeIsFloating(tree));
+
+    GenTree* operand = tree->gtGetOp1();
+    GenTree* shiftBy = tree->gtGetOp2();
+
+    genConsumeOperands(tree->AsOp());
+
+    emitAttr    attr        = emitActualTypeSize(tree);
+    regNumber   targetReg   = tree->GetRegNum();
+    regNumber   operandReg  = operand->GetRegNum();
+    regNumber   shiftByReg  = shiftBy->GetRegNum();
+    regNumber   tempReg     = internalRegisters.GetSingle(tree);
+    instruction leftShift   = (attr == EA_4BYTE) ? INS_slw : INS_sld;
+    instruction rightShift  = (attr == EA_4BYTE) ? INS_srw : INS_srd;
+
+    if (tree->OperIs(GT_ROL))
+    {
+        GetEmitter()->emitIns_R_R_R(leftShift, attr, REG_R0, operandReg, shiftByReg);
+        GetEmitter()->emitIns_R_R(INS_neg, attr, tempReg, shiftByReg);
+        GetEmitter()->emitIns_R_R_R(rightShift, attr, tempReg, operandReg, tempReg);
+    }
+    else
+    {
+        GetEmitter()->emitIns_R_R_R(rightShift, attr, REG_R0, operandReg, shiftByReg);
+        GetEmitter()->emitIns_R_R(INS_neg, attr, tempReg, shiftByReg);
+        GetEmitter()->emitIns_R_R_R(leftShift, attr, tempReg, operandReg, tempReg);
+    }
+
+    GetEmitter()->emitIns_R_R_R(INS_or, attr, targetReg, REG_R0, tempReg);
     genProduceReg(tree);
 }
 

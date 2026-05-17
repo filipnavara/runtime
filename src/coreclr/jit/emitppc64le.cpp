@@ -458,8 +458,11 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
             break;
 
         case INS_and:
+        case INS_andc:
         case INS_or:
+        case INS_orc:
         case INS_xor:
+        case INS_eqv:
         case INS_slw:
         case INS_sld:
         case INS_sraw:

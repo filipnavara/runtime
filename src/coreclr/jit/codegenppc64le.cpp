@@ -160,8 +160,11 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             break;
 
         case GT_AND:
+        case GT_AND_NOT:
         case GT_OR:
+        case GT_OR_NOT:
         case GT_XOR:
+        case GT_XOR_NOT:
         {
             GenTree*  op1       = treeNode->gtGetOp1();
             GenTree*  op2       = treeNode->gtGetOp2();
@@ -2050,10 +2053,16 @@ instruction CodeGen::genGetInsForOper(GenTree* treeNode)
             return (emitActualTypeSize(treeNode) == EA_4BYTE) ? INS_srw : INS_srd;
         case GT_AND:
             return INS_and;
+        case GT_AND_NOT:
+            return INS_andc;
         case GT_OR:
             return INS_or;
+        case GT_OR_NOT:
+            return INS_orc;
         case GT_XOR:
             return INS_xor;
+        case GT_XOR_NOT:
+            return INS_eqv;
         case GT_NEG:
             return INS_neg;
         case GT_NOT:

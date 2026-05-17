@@ -201,7 +201,14 @@ int LinearScan::BuildIndir(GenTreeIndir* indirTree)
 {
     assert(!indirTree->TypeIs(TYP_STRUCT));
 
+    if (!emitter::isValidSimm16(indirTree->Offset()))
+    {
+        buildInternalIntRegisterDefForNode(indirTree);
+    }
+
     int srcCount = BuildIndirUses(indirTree);
+
+    buildInternalRegisterUses();
 
     if (!indirTree->OperIs(GT_STOREIND, GT_NULLCHECK))
     {

@@ -1264,45 +1264,148 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize, 
 void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
 {
     assert(treeNode->OperIs(GT_PUTARG_STK));
+    emitter* emit = GetEmitter();
 
     if (treeNode->putInIncomingArgArea())
     {
         NYI_POWERPC64("fast tail call stack arguments");
     }
 
-    GenTree* source = treeNode->gtGetOp1();
-    if (source->TypeIs(TYP_STRUCT))
+    unsigned varNumOut    = m_compiler->lvaOutgoingArgSpaceVar;
+    unsigned argOffsetOut = treeNode->getArgOffset();
+    unsigned argOffsetMax = m_compiler->lvaOutgoingArgSpaceSize;
+    GenTree* source       = treeNode->gtGetOp1();
+
+    if (!source->TypeIs(TYP_STRUCT))
     {
-        NYI_POWERPC64("struct stack arguments");
+        var_types   slotType  = genActualType(source);
+        instruction storeIns  = ins_Store(slotType);
+        emitAttr    storeAttr = emitTypeSize(slotType);
+
+        if ((EA_SIZE(storeAttr) < EA_PTRSIZE) && varTypeUsesIntReg(slotType))
+        {
+            storeAttr = EA_PTRSIZE;
+            storeIns  = INS_std;
+        }
+
+        if (source->isContained())
+        {
+            assert(source->OperIs(GT_CNS_INT));
+            assert(source->AsIntConCommon()->IconValue() == 0);
+
+            instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, 0);
+            emit->emitIns_S_R(storeIns, storeAttr, REG_R0, varNumOut, argOffsetOut);
+        }
+        else
+        {
+            genConsumeReg(source);
+            emit->emitIns_S_R(storeIns, storeAttr, source->GetRegNum(), varNumOut, argOffsetOut);
+        }
+
+        argOffsetOut += EA_SIZE_IN_BYTES(storeAttr);
+        assert(argOffsetOut <= argOffsetMax);
+        return;
     }
 
-    unsigned  argOffsetOut = treeNode->getArgOffset();
-    var_types slotType     = genActualType(source);
-    instruction storeIns   = ins_Store(slotType);
-    emitAttr    storeAttr  = emitTypeSize(slotType);
+    assert(source->isContained());
 
-    if ((EA_SIZE(storeAttr) < EA_PTRSIZE) && varTypeUsesIntReg(slotType))
+    if (source->OperIs(GT_FIELD_LIST))
     {
-        storeAttr = EA_PTRSIZE;
-        storeIns  = INS_std;
+        genPutArgStkFieldList(treeNode, varNumOut);
+        return;
     }
 
-    if (source->isContained())
-    {
-        assert(source->OperIs(GT_CNS_INT));
-        assert(source->AsIntConCommon()->IconValue() == 0);
+    noway_assert(source->OperIsLocalRead() || source->OperIs(GT_BLK));
 
-        instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, 0);
-        GetEmitter()->emitIns_S_R(storeIns, storeAttr, REG_R0, m_compiler->lvaOutgoingArgSpaceVar, argOffsetOut);
+    regNumber loReg = internalRegisters.Extract(treeNode);
+
+    GenTreeLclVarCommon* srcLclNode = nullptr;
+    regNumber            addrReg    = REG_NA;
+    ClassLayout*         layout     = nullptr;
+
+    if (source->OperIsLocalRead())
+    {
+        srcLclNode        = source->AsLclVarCommon();
+        layout            = srcLclNode->GetLayout(m_compiler);
+        LclVarDsc* varDsc = m_compiler->lvaGetDesc(srcLclNode);
+
+        assert(varDsc->lvOnFrame && !varDsc->lvRegister);
     }
     else
     {
-        genConsumeReg(source);
-        GetEmitter()->emitIns_S_R(storeIns, storeAttr, source->GetRegNum(), m_compiler->lvaOutgoingArgSpaceVar,
-                                  argOffsetOut);
+        layout  = source->AsBlk()->GetLayout();
+        addrReg = genConsumeReg(source->AsBlk()->Addr());
     }
 
-    assert((argOffsetOut + EA_SIZE_IN_BYTES(storeAttr)) <= m_compiler->lvaOutgoingArgSpaceSize);
+    unsigned srcSize = layout->GetSize();
+    noway_assert(srcSize <= MAX_PASS_MULTIREG_BYTES);
+
+    unsigned dstSize = treeNode->GetStackByteSize();
+
+    if ((dstSize != srcSize) && (srcLclNode != nullptr))
+    {
+        unsigned widenedSrcSize = roundUp(srcSize, TARGET_POINTER_SIZE);
+        if (widenedSrcSize <= dstSize)
+        {
+            srcSize = widenedSrcSize;
+        }
+    }
+
+    assert(srcSize <= dstSize);
+
+    int      remainingSize = srcSize;
+    unsigned structOffset  = 0;
+    unsigned lclOffset     = (srcLclNode != nullptr) ? srcLclNode->GetLclOffs() : 0;
+
+    while (remainingSize > 0)
+    {
+        unsigned  nextIndex = structOffset / TARGET_POINTER_SIZE;
+        var_types type;
+
+        if (remainingSize >= TARGET_POINTER_SIZE)
+        {
+            type = layout->GetGCPtrType(nextIndex);
+        }
+        else
+        {
+            assert(!layout->IsGCPtr(nextIndex));
+
+            if (remainingSize >= 4)
+            {
+                type = TYP_INT;
+            }
+            else if (remainingSize >= 2)
+            {
+                type = TYP_USHORT;
+            }
+            else
+            {
+                assert(remainingSize == 1);
+                type = TYP_UBYTE;
+            }
+        }
+
+        emitAttr attr     = emitActualTypeSize(type);
+        unsigned moveSize = genTypeSize(type);
+        remainingSize -= moveSize;
+
+        instruction loadIns = ins_Load(type);
+        if (srcLclNode != nullptr)
+        {
+            emit->emitIns_R_S(loadIns, attr, loReg, srcLclNode->GetLclNum(), lclOffset + structOffset);
+        }
+        else
+        {
+            assert(loReg != addrReg);
+            emit->emitIns_R_R_I(loadIns, attr, loReg, addrReg, structOffset);
+        }
+
+        emit->emitIns_S_R(ins_Store(type), attr, loReg, varNumOut, argOffsetOut);
+        argOffsetOut += moveSize;
+        assert(argOffsetOut <= argOffsetMax);
+
+        structOffset += moveSize;
+    }
 }
 
 void CodeGen::genPutArgReg(GenTreeOp* tree)

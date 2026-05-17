@@ -229,6 +229,11 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genCodeForBitCast(treeNode->AsOp());
             break;
 
+        case GT_BSWAP:
+        case GT_BSWAP16:
+            genCodeForBswap(treeNode);
+            break;
+
         case GT_LCL_VAR:
             genCodeForLclVar(treeNode->AsLclVar());
             break;
@@ -420,6 +425,55 @@ void CodeGen::genCodeForRotate(GenTree* tree)
     }
 
     GetEmitter()->emitIns_R_R_R(INS_or, attr, targetReg, REG_R0, tempReg);
+    genProduceReg(tree);
+}
+
+void CodeGen::genCodeForBswap(GenTree* tree)
+{
+    assert(tree->OperIs(GT_BSWAP, GT_BSWAP16));
+
+    GenTree*  operand   = tree->gtGetOp1();
+    regNumber sourceReg = genConsumeReg(operand);
+    regNumber targetReg = tree->GetRegNum();
+    regNumber tempReg   = internalRegisters.GetSingle(tree);
+
+    unsigned byteCount = tree->OperIs(GT_BSWAP16) ? 2 : genTypeSize(genActualType(tree));
+    assert((byteCount == 2) || (byteCount == 4) || (byteCount == 8));
+
+    auto extractByte = [=](regNumber dstReg, unsigned sourceByte) {
+        unsigned shift = sourceByte * BITS_PER_BYTE;
+        if (shift == 0)
+        {
+            GetEmitter()->emitIns_Mov(EA_PTRSIZE, dstReg, sourceReg, false);
+        }
+        else
+        {
+            instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, shift);
+            GetEmitter()->emitIns_R_R_R(INS_srd, EA_PTRSIZE, dstReg, sourceReg, REG_R0);
+        }
+
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, 0xFF);
+        GetEmitter()->emitIns_R_R_R(INS_and, EA_PTRSIZE, dstReg, dstReg, REG_R0);
+    };
+
+    auto shiftByteLeft = [=](regNumber reg, unsigned shift) {
+        assert(shift < 64);
+        if (shift != 0)
+        {
+            instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, shift);
+            GetEmitter()->emitIns_R_R_R(INS_sld, EA_PTRSIZE, reg, reg, REG_R0);
+        }
+    };
+
+    extractByte(targetReg, byteCount - 1);
+
+    for (unsigned sourceByte = 0; sourceByte < byteCount - 1; sourceByte++)
+    {
+        extractByte(tempReg, sourceByte);
+        shiftByteLeft(tempReg, (byteCount - 1 - sourceByte) * BITS_PER_BYTE);
+        GetEmitter()->emitIns_R_R_R(INS_or, EA_PTRSIZE, targetReg, targetReg, tempReg);
+    }
+
     genProduceReg(tree);
 }
 

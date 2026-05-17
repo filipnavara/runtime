@@ -282,6 +282,14 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genReturn(treeNode);
             break;
 
+        case GT_RETURN_SUSPEND:
+            genReturnSuspend(treeNode->AsUnOp());
+            break;
+
+        case GT_ASYNC_CONTINUATION:
+            genCodeForAsyncContinuation(treeNode);
+            break;
+
         case GT_MEMORYBARRIER:
         {
             BarrierKind barrierKind =
@@ -296,6 +304,7 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
         case GT_RELOAD:
         case GT_COPY:
         case GT_NOP:
+        case GT_IL_OFFSET:
             break;
 
         case GT_KEEPALIVE:

@@ -2594,6 +2594,12 @@ void LinearScan::setFrameType()
     }
 #endif // TARGET_ARMARCH || TARGET_RISCV64
 
+#if defined(TARGET_POWERPC64)
+    // PPC64LE LSRA checks stack local offsets to decide whether individual
+    // memory nodes need an internal register for large displacements.
+    (void)m_compiler->lvaFrameSize(Compiler::REGALLOC_FRAME_LAYOUT);
+#endif // TARGET_POWERPC64
+
 #ifdef TARGET_ARM
     if (m_compiler->compLocallocUsed)
     {

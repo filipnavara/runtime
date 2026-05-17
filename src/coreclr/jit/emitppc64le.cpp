@@ -51,13 +51,36 @@ size_t emitter::emitSizeOfInsDsc(instrDesc* id) const
             return sizeof(instrDescJmp);
 
         case INS_OPTS_C:
-            return id->idIsLargeCall() ? sizeof(instrDescCGCA) : sizeof(instrDesc);
+            if (id->idIsLargeCall())
+            {
+                return sizeof(instrDescCGCA);
+            }
+            else
+            {
+                assert(!id->idIsLargeDsp());
+                assert(!id->idIsLargeCns());
+                return sizeof(instrDesc);
+            }
 
         case INS_OPTS_NONE:
         case INS_OPTS_RC:
         case INS_OPTS_RL:
         case INS_OPTS_RELOC:
         case INS_OPTS_I:
+            if (id->idIsLargeCns())
+            {
+                if (id->idIsLargeDsp())
+                {
+                    return sizeof(instrDescCnsDsp);
+                }
+
+                return sizeof(instrDescCns);
+            }
+            else if (id->idIsLargeDsp())
+            {
+                return sizeof(instrDescDsp);
+            }
+
             return sizeof(instrDesc);
 
         default:
@@ -138,7 +161,7 @@ bool emitter::emitInsMayWriteToGCReg(instruction ins)
 unsigned emitter::emitOutput_Instr(BYTE* dst, code_t code) const
 {
     assert((reinterpret_cast<uintptr_t>(dst) % sizeof(code_t)) == 0);
-    *reinterpret_cast<code_t*>(dst) = code;
+    *reinterpret_cast<code_t*>(dst + writeableOffset) = code;
     return sizeof(code_t);
 }
 
@@ -254,7 +277,7 @@ void emitter::emitIns(instruction ins)
 
 void emitter::emitIns_I(instruction ins, emitAttr attr, ssize_t imm)
 {
-    instrDesc* id = emitNewInstrSC(attr, imm);
+    instrDesc* id = emitNewInstrCns(attr, imm);
 
     id->idIns(ins);
     id->idInsOpt(INS_OPTS_I);
@@ -266,7 +289,7 @@ void emitter::emitIns_I(instruction ins, emitAttr attr, ssize_t imm)
 
 void emitter::emitIns_R_I(instruction ins, emitAttr attr, regNumber reg, ssize_t imm, insOpts opt)
 {
-    instrDesc* id = emitNewInstrSC(attr, imm);
+    instrDesc* id = emitNewInstrCns(attr, imm);
 
     id->idIns(ins);
     id->idInsOpt(opt);
@@ -302,7 +325,7 @@ void emitter::emitIns_R_R(instruction ins, emitAttr attr, regNumber reg1, regNum
 
 void emitter::emitIns_R_R_I(instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, ssize_t imm, insOpts opt)
 {
-    instrDesc* id = emitNewInstrSC(attr, imm);
+    instrDesc* id = emitNewInstrCns(attr, imm);
 
     id->idIns(ins);
     id->idInsOpt(opt);
@@ -369,7 +392,7 @@ void emitter::emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int va
         NYI_POWERPC64("large stack local offset");
     }
 
-    instrDesc* id = emitNewInstrSC(attr, imm);
+    instrDesc* id = emitNewInstrCns(attr, imm);
 
     id->idIns(ins);
     id->idReg1(ireg);
@@ -410,7 +433,7 @@ void emitter::emitIns_S_R(instruction ins, emitAttr attr, regNumber ireg, int va
         NYI_POWERPC64("large stack local offset");
     }
 
-    instrDesc* id = emitNewInstrSC(attr, imm);
+    instrDesc* id = emitNewInstrCns(attr, imm);
 
     id->idIns(ins);
     id->idReg1(ireg);
@@ -483,22 +506,22 @@ emitter::instrDesc* emitter::emitNewInstrLoadImm(emitAttr attr, cnsval_ssize_t c
 
 size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 {
-    BYTE*  dst  = *dp;
-    size_t size = id->idCodeSize();
-    code_t code = emitInsCode(id->idIns());
+    BYTE*  dst      = *dp;
+    size_t codeSize = id->idCodeSize();
+    code_t code     = emitInsCode(id->idIns());
 
     if (id->idInsOpt() == INS_OPTS_C)
     {
-        size = emitOutputCall(dst, id);
-        *dp  = dst + size;
-        return size;
+        codeSize = emitOutputCall(dst, id);
+        *dp      = dst + codeSize;
+        return emitSizeOfInsDsc(id);
     }
 
     if (id->idInsOpt() == INS_OPTS_RC)
     {
-        size = emitOutputConstLoad(dst, id);
-        *dp  = dst + size;
-        return size;
+        codeSize = emitOutputConstLoad(dst, id);
+        *dp      = dst + codeSize;
+        return emitSizeOfInsDsc(id);
     }
 
     switch (id->idIns())
@@ -682,14 +705,14 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 
         default:
             code = emitInsCode(INS_trap);
-            size = sizeof(code_t);
+            codeSize = sizeof(code_t);
             break;
     }
 
     emitOutput_Instr(dst, code);
 
-    *dp = dst + size;
-    return size;
+    *dp = dst + codeSize;
+    return emitSizeOfInsDsc(id);
 }
 
 unsigned emitter::emitOutputConstLoad(BYTE* dst, instrDesc* id)

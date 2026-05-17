@@ -840,7 +840,7 @@ void CodeGen::genCodeForStoreBlk(GenTreeBlk* blkOp)
     switch (blkOp->gtBlkOpKind)
     {
         case GenTreeBlk::BlkOpKindCpObjUnroll:
-            NYI_POWERPC64("CpObj block stores");
+            genCodeForCpObj(blkOp->AsBlk());
             break;
 
         case GenTreeBlk::BlkOpKindLoop:
@@ -984,6 +984,172 @@ void CodeGen::genCodeForInitBlkUnroll(GenTreeBlk* node)
             emit->emitIns_R_R_I(storeIns, attr, srcReg, dstAddrBaseReg, dstOffset);
         }
     }
+}
+
+//------------------------------------------------------------------------
+// genCodeForCpObj: Produce code for a CpObj block store with GC pointers.
+//
+// Arguments:
+//    cpObjNode - the block store node
+//
+void CodeGen::genCodeForCpObj(GenTreeBlk* cpObjNode)
+{
+    GenTree*  dstAddr     = cpObjNode->Addr();
+    GenTree*  source      = cpObjNode->Data();
+    var_types srcAddrType = TYP_BYREF;
+
+    assert(source->isContained());
+    if (source->OperIs(GT_IND))
+    {
+        GenTree* srcAddr = source->gtGetOp1();
+        assert(!srcAddr->isContained());
+        srcAddrType = srcAddr->TypeGet();
+    }
+    else
+    {
+        noway_assert(source->IsLocal());
+    }
+
+    bool dstOnStack = cpObjNode->IsAddressNotOnHeap(m_compiler);
+
+#ifdef DEBUG
+    assert(!dstAddr->isContained());
+    assert(cpObjNode->GetLayout()->HasGCPtr());
+#endif
+
+    genConsumeBlockOp(cpObjNode, REG_WRITE_BARRIER_DST_BYREF, REG_WRITE_BARRIER_SRC_BYREF, REG_NA);
+    gcInfo.gcMarkRegPtrVal(REG_WRITE_BARRIER_SRC_BYREF, srcAddrType);
+    gcInfo.gcMarkRegPtrVal(REG_WRITE_BARRIER_DST_BYREF, dstAddr->TypeGet());
+
+    ClassLayout* layout = cpObjNode->GetLayout();
+    unsigned     slots  = layout->GetSlotCount();
+
+    regNumber tmpReg  = internalRegisters.Extract(cpObjNode);
+    regNumber tmpReg2 = REG_NA;
+
+    assert(genIsValidIntReg(tmpReg));
+    assert(tmpReg != REG_WRITE_BARRIER_SRC_BYREF);
+    assert(tmpReg != REG_WRITE_BARRIER_DST_BYREF);
+
+    if (slots > 1)
+    {
+        tmpReg2 = internalRegisters.GetSingle(cpObjNode);
+        assert(tmpReg2 != tmpReg);
+        assert(genIsValidIntReg(tmpReg2));
+        assert(tmpReg2 != REG_WRITE_BARRIER_DST_BYREF);
+        assert(tmpReg2 != REG_WRITE_BARRIER_SRC_BYREF);
+    }
+
+    if (cpObjNode->IsVolatile())
+    {
+        instGen_MemoryBarrier(BARRIER_FULL);
+    }
+
+    emitter* emit = GetEmitter();
+
+    emitAttr attrSrcAddr = emitActualTypeSize(srcAddrType);
+    emitAttr attrDstAddr = emitActualTypeSize(dstAddr->TypeGet());
+
+    if (dstOnStack)
+    {
+        unsigned i = 0;
+        while (i < slots - 1)
+        {
+            emitAttr attr0 = emitTypeSize(layout->GetGCPtrType(i + 0));
+            emitAttr attr1 = emitTypeSize(layout->GetGCPtrType(i + 1));
+            if ((i + 2) == slots)
+            {
+                attrSrcAddr = EA_8BYTE;
+                attrDstAddr = EA_8BYTE;
+            }
+
+            emit->emitIns_R_R_I(INS_ld, attr0, tmpReg, REG_WRITE_BARRIER_SRC_BYREF, 0);
+            emit->emitIns_R_R_I(INS_ld, attr1, tmpReg2, REG_WRITE_BARRIER_SRC_BYREF, TARGET_POINTER_SIZE);
+            emit->emitIns_R_R_I(INS_addi, attrSrcAddr, REG_WRITE_BARRIER_SRC_BYREF, REG_WRITE_BARRIER_SRC_BYREF,
+                                2 * TARGET_POINTER_SIZE);
+            emit->emitIns_R_R_I(INS_std, attr0, tmpReg, REG_WRITE_BARRIER_DST_BYREF, 0);
+            emit->emitIns_R_R_I(INS_std, attr1, tmpReg2, REG_WRITE_BARRIER_DST_BYREF, TARGET_POINTER_SIZE);
+            emit->emitIns_R_R_I(INS_addi, attrDstAddr, REG_WRITE_BARRIER_DST_BYREF, REG_WRITE_BARRIER_DST_BYREF,
+                                2 * TARGET_POINTER_SIZE);
+            i += 2;
+        }
+
+        if (i < slots)
+        {
+            emitAttr attr0 = emitTypeSize(layout->GetGCPtrType(i));
+            if (i + 1 >= slots)
+            {
+                attrSrcAddr = EA_8BYTE;
+                attrDstAddr = EA_8BYTE;
+            }
+
+            emit->emitIns_R_R_I(INS_ld, attr0, tmpReg, REG_WRITE_BARRIER_SRC_BYREF, 0);
+            emit->emitIns_R_R_I(INS_addi, attrSrcAddr, REG_WRITE_BARRIER_SRC_BYREF, REG_WRITE_BARRIER_SRC_BYREF,
+                                TARGET_POINTER_SIZE);
+            emit->emitIns_R_R_I(INS_std, attr0, tmpReg, REG_WRITE_BARRIER_DST_BYREF, 0);
+            emit->emitIns_R_R_I(INS_addi, attrDstAddr, REG_WRITE_BARRIER_DST_BYREF, REG_WRITE_BARRIER_DST_BYREF,
+                                TARGET_POINTER_SIZE);
+        }
+    }
+    else
+    {
+        unsigned gcPtrCount = cpObjNode->GetLayout()->GetGCPtrCount();
+
+        unsigned i = 0;
+        while (i < slots)
+        {
+            if (!layout->IsGCPtr(i))
+            {
+                if ((i + 1 < slots) && !layout->IsGCPtr(i + 1))
+                {
+                    if ((i + 2) == slots)
+                    {
+                        attrSrcAddr = EA_8BYTE;
+                        attrDstAddr = EA_8BYTE;
+                    }
+
+                    emit->emitIns_R_R_I(INS_ld, EA_8BYTE, tmpReg, REG_WRITE_BARRIER_SRC_BYREF, 0);
+                    emit->emitIns_R_R_I(INS_ld, EA_8BYTE, tmpReg2, REG_WRITE_BARRIER_SRC_BYREF, TARGET_POINTER_SIZE);
+                    emit->emitIns_R_R_I(INS_addi, attrSrcAddr, REG_WRITE_BARRIER_SRC_BYREF,
+                                        REG_WRITE_BARRIER_SRC_BYREF, 2 * TARGET_POINTER_SIZE);
+                    emit->emitIns_R_R_I(INS_std, EA_8BYTE, tmpReg, REG_WRITE_BARRIER_DST_BYREF, 0);
+                    emit->emitIns_R_R_I(INS_std, EA_8BYTE, tmpReg2, REG_WRITE_BARRIER_DST_BYREF, TARGET_POINTER_SIZE);
+                    emit->emitIns_R_R_I(INS_addi, attrDstAddr, REG_WRITE_BARRIER_DST_BYREF,
+                                        REG_WRITE_BARRIER_DST_BYREF, 2 * TARGET_POINTER_SIZE);
+                    ++i;
+                }
+                else
+                {
+                    if (i + 1 >= slots)
+                    {
+                        attrSrcAddr = EA_8BYTE;
+                        attrDstAddr = EA_8BYTE;
+                    }
+
+                    emit->emitIns_R_R_I(INS_ld, EA_8BYTE, tmpReg, REG_WRITE_BARRIER_SRC_BYREF, 0);
+                    emit->emitIns_R_R_I(INS_addi, attrSrcAddr, REG_WRITE_BARRIER_SRC_BYREF,
+                                        REG_WRITE_BARRIER_SRC_BYREF, TARGET_POINTER_SIZE);
+                    emit->emitIns_R_R_I(INS_std, EA_8BYTE, tmpReg, REG_WRITE_BARRIER_DST_BYREF, 0);
+                    emit->emitIns_R_R_I(INS_addi, attrDstAddr, REG_WRITE_BARRIER_DST_BYREF,
+                                        REG_WRITE_BARRIER_DST_BYREF, TARGET_POINTER_SIZE);
+                }
+            }
+            else
+            {
+                genEmitHelperCall(CORINFO_HELP_ASSIGN_BYREF, 0, EA_PTRSIZE);
+                gcPtrCount--;
+            }
+            ++i;
+        }
+        assert(gcPtrCount == 0);
+    }
+
+    if (cpObjNode->IsVolatile())
+    {
+        instGen_MemoryBarrier(BARRIER_FULL);
+    }
+
+    gcInfo.gcMarkRegSetNpt(RBM_WRITE_BARRIER_SRC_BYREF | RBM_WRITE_BARRIER_DST_BYREF);
 }
 
 //------------------------------------------------------------------------

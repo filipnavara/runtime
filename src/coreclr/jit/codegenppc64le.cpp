@@ -197,6 +197,10 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genCodeForIndir(treeNode->AsIndir());
             break;
 
+        case GT_NULLCHECK:
+            genCodeForNullCheck(treeNode->AsIndir());
+            break;
+
         case GT_STOREIND:
             genCodeForStoreInd(treeNode->AsStoreInd());
             break;
@@ -430,6 +434,24 @@ void CodeGen::genCodeForIndir(GenTreeIndir* tree)
                                static_cast<int>(offset));
 
     genProduceReg(tree);
+}
+
+void CodeGen::genCodeForNullCheck(GenTreeIndir* tree)
+{
+    assert(tree->OperIs(GT_NULLCHECK));
+
+    GenTree* addr = tree->Addr();
+    assert(!addr->isContained());
+
+    ssize_t offset = tree->Offset();
+    if (!emitter::isValidSimm16(offset))
+    {
+        NYI_POWERPC64("GT_NULLCHECK: large offset");
+    }
+
+    regNumber baseReg = genConsumeReg(addr);
+    GetEmitter()->emitIns_R_AR(ins_Load(tree->TypeGet()), emitActualTypeSize(tree), REG_R0, baseReg,
+                               static_cast<int>(offset));
 }
 
 void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)

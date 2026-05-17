@@ -125,14 +125,6 @@ int LinearScan::BuildNode(GenTree* tree)
                 hasInternal = true;
             }
 
-            if (varTypeIsFloating(tree) && varTypeIsIntegral(cast->CastOp()) && cast->IsUnsigned() &&
-                (genActualType(cast->CastOp()->TypeGet()) == TYP_LONG))
-            {
-                buildInternalIntRegisterDefForNode(tree);
-                buildInternalIntRegisterDefForNode(tree);
-                hasInternal = true;
-            }
-
             if (hasInternal)
             {
                 buildInternalRegisterUses();

@@ -2518,7 +2518,6 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize, 
 void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
 {
     assert(treeNode->OperIs(GT_PUTARG_STK));
-    emitter* emit = GetEmitter();
 
     if (treeNode->putInIncomingArgArea())
     {
@@ -2619,6 +2618,14 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
     unsigned structOffset  = 0;
     unsigned lclOffset     = (srcLclNode != nullptr) ? srcLclNode->GetLclOffs() : 0;
 
+    regNumber dstTmpReg = REG_NA;
+    {
+        regNumber baseReg             = REG_NA;
+        int       initialDstOffset    = ppcGetLclFrameOffset(m_compiler, varNumOut, argOffsetOut, &baseReg);
+        bool      dstOffsetRangeFits  = ppcOffsetRangeFitsSimm16(initialDstOffset, srcSize);
+        dstTmpReg = dstOffsetRangeFits ? REG_NA : internalRegisters.Extract(treeNode);
+    }
+
     while (remainingSize > 0)
     {
         unsigned  nextIndex = structOffset / TARGET_POINTER_SIZE;
@@ -2654,15 +2661,21 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
         instruction loadIns = ins_Load(type);
         if (srcLclNode != nullptr)
         {
-            emit->emitIns_R_S(loadIns, attr, loReg, srcLclNode->GetLclNum(), lclOffset + structOffset);
+            regNumber baseReg = REG_NA;
+            int       offset  = ppcGetLclFrameOffset(m_compiler, srcLclNode->GetLclNum(), lclOffset + structOffset,
+                                                     &baseReg);
+            genInstrWithConstant(loadIns, attr, loReg, baseReg, offset, loReg);
         }
         else
         {
             assert(loReg != addrReg);
-            emit->emitIns_R_R_I(loadIns, attr, loReg, addrReg, structOffset);
+            genInstrWithConstant(loadIns, attr, loReg, addrReg, structOffset, loReg);
         }
 
-        emit->emitIns_S_R(ins_Store(type), attr, loReg, varNumOut, argOffsetOut);
+        regNumber baseReg = REG_NA;
+        int       offset  = ppcGetLclFrameOffset(m_compiler, varNumOut, argOffsetOut, &baseReg);
+        genInstrWithConstant(ins_Store(type), attr, loReg, baseReg, offset, dstTmpReg);
+
         argOffsetOut += moveSize;
         assert(argOffsetOut <= argOffsetMax);
 

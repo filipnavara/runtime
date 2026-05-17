@@ -4340,7 +4340,40 @@ int LinearScan::BuildReturn(GenTree* tree)
                 // op1 has to be either a lclvar or a multi-reg returning call
                 if (op1->OperIs(GT_LCL_VAR) && !op1->IsMultiRegLclVar())
                 {
+#ifdef TARGET_POWERPC64
+                    bool           hasInternal    = false;
+                    GenTreeLclVar* lclNode        = op1->AsLclVar();
+                    ReturnTypeDesc retTypeDesc    = m_compiler->compRetTypeDesc;
+                    unsigned       returnRegCount = retTypeDesc.GetReturnRegCount();
+                    bool           fpBased        = false;
+                    int            lclBaseOffset  = m_compiler->lvaFrameAddress(lclNode->GetLclNum(), &fpBased);
+
+                    for (unsigned i = 0; i < returnRegCount; i++)
+                    {
+                        var_types type = retTypeDesc.GetReturnRegType(i);
+                        if (!varTypeUsesFloatReg(type))
+                        {
+                            continue;
+                        }
+
+                        int fieldOffset = lclBaseOffset + static_cast<int>(retTypeDesc.GetReturnFieldOffset(i));
+                        if (!emitter::isValidSimm16(fieldOffset))
+                        {
+                            buildInternalIntRegisterDefForNode(tree);
+                            hasInternal = true;
+                            break;
+                        }
+                    }
+#endif // TARGET_POWERPC64
+
                     BuildUse(op1, useCandidates);
+
+#ifdef TARGET_POWERPC64
+                    if (hasInternal)
+                    {
+                        buildInternalRegisterUses();
+                    }
+#endif // TARGET_POWERPC64
                 }
                 else
                 {

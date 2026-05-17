@@ -2947,12 +2947,64 @@ void CodeGen::instGen_MemoryBarrier(BarrierKind barrierKind)
 #ifdef PROFILING_SUPPORTED
 void CodeGen::genProfilingEnterCallback(regNumber initReg, bool* pInitRegZeroed)
 {
-    NYI_POWERPC64("genProfilingEnterCallback");
+    assert(m_compiler->compGeneratingProlog);
+
+    if (!m_compiler->compIsProfilerHookNeeded())
+    {
+        return;
+    }
+
+    instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_PROFILER_ENTER_ARG_FUNC_ID,
+                           reinterpret_cast<ssize_t>(m_compiler->compProfilerMethHnd));
+
+    if (m_compiler->compProfilerMethHndIndirected)
+    {
+        GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_PROFILER_ENTER_ARG_FUNC_ID,
+                                    REG_PROFILER_ENTER_ARG_FUNC_ID, 0);
+    }
+
+    ssize_t callerSPOffset = -m_compiler->lvaToCallerSPRelativeOffset(0, isFramePointerUsed());
+    genInstrWithConstant(INS_addi, EA_PTRSIZE, REG_PROFILER_ENTER_ARG_CALLER_SP, genFramePointerReg(),
+                         callerSPOffset, REG_PROFILER_ENTER_ARG_CALLER_SP);
+
+    genEmitHelperCall(CORINFO_HELP_PROF_FCN_ENTER, 0, EA_UNKNOWN);
+
+    if (((RBM_PROFILER_ENTER_TRASH | RBM_PROFILER_ENTER_ARG_FUNC_ID | RBM_PROFILER_ENTER_ARG_CALLER_SP) &
+         genRegMask(initReg)) != RBM_NONE)
+    {
+        *pInitRegZeroed = false;
+    }
 }
 
 void CodeGen::genProfilingLeaveCallback(unsigned helper)
 {
-    NYI_POWERPC64("genProfilingLeaveCallback");
+    assert((helper == CORINFO_HELP_PROF_FCN_LEAVE) || (helper == CORINFO_HELP_PROF_FCN_TAILCALL));
+
+    if (!m_compiler->compIsProfilerHookNeeded())
+    {
+        return;
+    }
+
+    m_compiler->info.compProfilerCallback = true;
+
+    instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_PROFILER_LEAVE_ARG_FUNC_ID,
+                           reinterpret_cast<ssize_t>(m_compiler->compProfilerMethHnd));
+
+    if (m_compiler->compProfilerMethHndIndirected)
+    {
+        GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_PROFILER_LEAVE_ARG_FUNC_ID,
+                                    REG_PROFILER_LEAVE_ARG_FUNC_ID, 0);
+    }
+
+    gcInfo.gcMarkRegSetNpt(RBM_PROFILER_LEAVE_ARG_FUNC_ID);
+
+    ssize_t callerSPOffset = -m_compiler->lvaToCallerSPRelativeOffset(0, isFramePointerUsed());
+    genInstrWithConstant(INS_addi, EA_PTRSIZE, REG_PROFILER_LEAVE_ARG_CALLER_SP, genFramePointerReg(), callerSPOffset,
+                         REG_PROFILER_LEAVE_ARG_CALLER_SP);
+
+    gcInfo.gcMarkRegSetNpt(RBM_PROFILER_LEAVE_ARG_CALLER_SP);
+
+    genEmitHelperCall(helper, 0, EA_UNKNOWN);
 }
 #endif // PROFILING_SUPPORTED
 

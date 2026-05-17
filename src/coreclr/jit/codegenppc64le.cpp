@@ -282,10 +282,24 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
         }
 
         case GT_BITCAST:
-            NYI_IF(varTypeUsesFloatReg(treeNode) || varTypeUsesFloatReg(treeNode->gtGetOp1()),
-                   "floating-point bitcast");
+        {
+            GenTree* op1           = treeNode->gtGetOp1();
+            bool     targetIsFloat = varTypeUsesFloatReg(treeNode);
+            bool     sourceIsFloat = varTypeUsesFloatReg(op1);
+            if (!op1->isContained() && (targetIsFloat != sourceIsFloat))
+            {
+                NYI_IF((genTypeSize(treeNode) != 8) || (genTypeSize(op1) != 8), "32-bit floating-point bitcast");
+
+                regNumber sourceReg = genConsumeReg(op1);
+                regNumber targetReg = treeNode->GetRegNum();
+                GetEmitter()->emitIns_R_R(targetIsFloat ? INS_mffgpr : INS_mftgpr, EA_8BYTE, targetReg, sourceReg);
+                genProduceReg(treeNode);
+                break;
+            }
+
             genCodeForBitCast(treeNode->AsOp());
             break;
+        }
 
         case GT_BSWAP:
         case GT_BSWAP16:

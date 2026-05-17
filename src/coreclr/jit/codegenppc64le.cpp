@@ -114,6 +114,13 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             break;
         }
 
+        case GT_DIV:
+        case GT_UDIV:
+        case GT_MOD:
+        case GT_UMOD:
+            genCodeForDivMod(treeNode->AsOp());
+            break;
+
         case GT_AND:
         case GT_OR:
         case GT_XOR:
@@ -252,6 +259,42 @@ void CodeGen::genCodeForShift(GenTree* tree)
 
     GetEmitter()->emitIns_R_R_R(genGetInsForOper(tree), emitActualTypeSize(tree), tree->GetRegNum(),
                                 operand->GetRegNum(), shiftBy->GetRegNum());
+
+    genProduceReg(tree);
+}
+
+void CodeGen::genCodeForDivMod(GenTreeOp* tree)
+{
+    assert(tree->OperIs(GT_DIV, GT_UDIV, GT_MOD, GT_UMOD));
+    NYI_IF(varTypeIsFloating(tree), "floating point div/mod");
+
+    if (tree->OperExceptions(m_compiler) != ExceptionSetFlags::None)
+    {
+        NYI_POWERPC64("exception-checking integer div/mod");
+    }
+
+    GenTree*  op1       = tree->gtGetOp1();
+    GenTree*  op2       = tree->gtGetOp2();
+    emitAttr  attr      = emitActualTypeSize(tree);
+    regNumber targetReg = tree->GetRegNum();
+
+    genConsumeRegs(op1);
+    genConsumeRegs(op2);
+
+    instruction divIns = genGetInsForOper(tree);
+    if (tree->OperIs(GT_DIV, GT_UDIV))
+    {
+        GetEmitter()->emitIns_R_R_R(divIns, attr, targetReg, op1->GetRegNum(), op2->GetRegNum());
+    }
+    else
+    {
+        regNumber quotientReg = internalRegisters.GetSingle(tree);
+        instruction mulIns    = (attr == EA_4BYTE) ? INS_mullw : INS_mulld;
+
+        GetEmitter()->emitIns_R_R_R(divIns, attr, quotientReg, op1->GetRegNum(), op2->GetRegNum());
+        GetEmitter()->emitIns_R_R_R(mulIns, attr, quotientReg, quotientReg, op2->GetRegNum());
+        GetEmitter()->emitIns_R_R_R(INS_subf, attr, targetReg, quotientReg, op1->GetRegNum());
+    }
 
     genProduceReg(tree);
 }
@@ -691,6 +734,14 @@ instruction CodeGen::genGetInsForOper(GenTree* treeNode)
             return INS_subf;
         case GT_MUL:
             return (emitActualTypeSize(treeNode) == EA_4BYTE) ? INS_mullw : INS_mulld;
+        case GT_DIV:
+            return (emitActualTypeSize(treeNode) == EA_4BYTE) ? INS_divw : INS_divd;
+        case GT_UDIV:
+            return (emitActualTypeSize(treeNode) == EA_4BYTE) ? INS_divwu : INS_divdu;
+        case GT_MOD:
+            return (emitActualTypeSize(treeNode) == EA_4BYTE) ? INS_divw : INS_divd;
+        case GT_UMOD:
+            return (emitActualTypeSize(treeNode) == EA_4BYTE) ? INS_divwu : INS_divdu;
         case GT_LSH:
             return (emitActualTypeSize(treeNode) == EA_4BYTE) ? INS_slw : INS_sld;
         case GT_RSH:

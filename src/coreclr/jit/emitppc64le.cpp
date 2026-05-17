@@ -357,18 +357,29 @@ void emitter::emitIns_R_C(
     instruction ins, emitAttr attr, regNumber targetReg, regNumber addrReg, CORINFO_FIELD_HANDLE fldHnd)
 {
     assert(!EA_IS_RELOC(attr));
-    assert(emitInsIsLoad(ins));
     assert(isFloatReg(targetReg) || isGeneralRegister(targetReg));
-    assert(isGeneralRegister(addrReg));
-    assert(addrReg != REG_R0);
+
+    const bool isAddressLoad = ins == INS_addi;
+    if (isAddressLoad)
+    {
+        assert(attr == EA_PTRSIZE);
+        assert(isGeneralRegister(targetReg));
+        assert(addrReg == REG_NA);
+    }
+    else
+    {
+        assert(emitInsIsLoad(ins));
+        assert(isGeneralRegister(addrReg));
+        assert(addrReg != REG_R0);
+    }
 
     instrDesc* id = emitNewInstr(attr);
 
     id->idIns(ins);
     id->idInsOpt(INS_OPTS_RC);
     id->idReg1(targetReg);
-    id->idReg2(addrReg);
-    id->idCodeSize(6 * sizeof(code_t));
+    id->idReg2(isAddressLoad ? REG_R0 : addrReg);
+    id->idCodeSize((isAddressLoad ? 5 : 6) * sizeof(code_t));
     id->idSetIsBound();
     id->idAddr()->iiaFieldHnd = fldHnd;
 
@@ -543,7 +554,7 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 
     if (id->idInsOpt() == INS_OPTS_RC)
     {
-        codeSize = emitOutputConstLoad(dst, id);
+        codeSize = (id->idIns() == INS_addi) ? emitOutputConstAddr(dst, id) : emitOutputConstLoad(dst, id);
         *dp      = dst + codeSize;
         return emitSizeOfInsDsc(id);
     }
@@ -569,6 +580,7 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_sync:
         case INS_bclr:
         case INS_blr:
+        case INS_bctr:
         case INS_bctrl:
             break;
 
@@ -681,6 +693,7 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_addi:
         case INS_addis:
         case INS_ld:
+        case INS_lwa:
         case INS_lwz:
         case INS_lhz:
         case INS_lbz:
@@ -725,6 +738,10 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
                 code =
                     ppcEncodeIFormBranch(code, emitOutputInstrJumpDistance(dst, ig, static_cast<instrDescJmp*>(id)));
             }
+            else if (id->idInsOpt() == INS_OPTS_I)
+            {
+                code = ppcEncodeIFormBranch(code, emitGetInsSC(id));
+            }
             break;
 
         case INS_bc:
@@ -738,6 +755,10 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
             {
                 code =
                     ppcEncodeBFormBranch(code, emitOutputInstrJumpDistance(dst, ig, static_cast<instrDescJmp*>(id)));
+            }
+            else if (id->idInsOpt() == INS_OPTS_I)
+            {
+                code = ppcEncodeBFormBranch(code, emitGetInsSC(id));
             }
             break;
 
@@ -762,6 +783,48 @@ unsigned emitter::emitOutputLabelLoad(BYTE* dst, instrDesc* id)
 
     const uintptr_t value = reinterpret_cast<uintptr_t>(emitCodeBlock + id->idAddr()->iiaIGlabel->igOffs);
     const regNumber reg  = id->idReg1();
+
+    BYTE* cur = dst;
+
+    emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), reg, REG_R0, ppcSignExtend16(value >> 48)));
+    cur += sizeof(code_t);
+
+    emitOutput_Instr(cur,
+                     emitInsCode(INS_ori) | (ppcReg(reg) << 21) | (ppcReg(reg) << 16) |
+                         (ppcUnsigned16(value >> 32) & 0xFFFF));
+    cur += sizeof(code_t);
+
+    emitOutput_Instr(cur, ppcEncodeRldicl(emitInsCode(INS_sldi), reg, reg, 32, 31));
+    cur += sizeof(code_t);
+
+    emitOutput_Instr(cur,
+                     emitInsCode(INS_oris) | (ppcReg(reg) << 21) | (ppcReg(reg) << 16) |
+                         (ppcUnsigned16(value >> 16) & 0xFFFF));
+    cur += sizeof(code_t);
+
+    emitOutput_Instr(cur,
+                     emitInsCode(INS_ori) | (ppcReg(reg) << 21) | (ppcReg(reg) << 16) |
+                         (ppcUnsigned16(value) & 0xFFFF));
+    cur += sizeof(code_t);
+
+    return static_cast<unsigned>(cur - dst);
+}
+
+unsigned emitter::emitOutputConstAddr(BYTE* dst, instrDesc* id)
+{
+    assert(id->idInsOpt() == INS_OPTS_RC);
+    assert(id->idIns() == INS_addi);
+    assert(id->idAddr()->iiaIsJitDataOffset());
+    assert(id->idGCref() == GCT_NONE);
+    assert(id->idCodeSize() == 5 * sizeof(code_t));
+    assert(isGeneralRegister(id->idReg1()));
+
+    const int offset = id->idAddr()->iiaGetJitDataOffset();
+    assert(offset >= 0);
+    assert(static_cast<UNATIVE_OFFSET>(offset) < emitDataSize());
+
+    const uintptr_t value = reinterpret_cast<uintptr_t>(emitDataOffsetToPtr(offset));
+    const regNumber reg   = id->idReg1();
 
     BYTE* cur = dst;
 

@@ -5959,7 +5959,12 @@ void Compiler::lvaAlignFrame()
 
     // Ensure that the stack is always 16-byte aligned by grabbing an unused QWORD
     // if needed.
+#if defined(TARGET_POWERPC64)
+    // PPC64 frames also reserve a link register save slot.
+    bool regPushedCountAligned = ((compCalleeRegsPushed + 1) % (16 / REGSIZE_BYTES)) == 0;
+#else
     bool regPushedCountAligned = (compCalleeRegsPushed % (16 / REGSIZE_BYTES)) == 0;
+#endif
     bool lclFrameSizeAligned   = (compLclFrameSize % 16) == 0;
 
     // If this isn't the final frame layout, assume we have to push an extra QWORD

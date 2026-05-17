@@ -2810,6 +2810,9 @@ public:
     instrDesc* emitFirstInstrDesc(BYTE* idData) const;
     void       emitAdvanceInstrDesc(instrDesc** id, size_t idSize) const;
     size_t     emitIssue1Instr(insGroup* ig, instrDesc* id, BYTE** dp);
+#if defined(TARGET_POWERPC64)
+    unsigned emitOutputCall(BYTE* dst, instrDesc* id);
+#endif
     size_t     emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp);
 
     bool emitHasFramePtr;

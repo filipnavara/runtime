@@ -26,6 +26,10 @@ INST(nop,           "nop",            0,    0x60000000)
 INST(trap,          "trap",           0,    0x7FE00008)
 INST(sync,          "sync",           0,    0x7C0004AC)
 
+INST(mflr,          "mflr",           0,    0x7C0802A6)
+INST(mtlr,          "mtlr",           0,    0x7C0803A6)
+INST(mtctr,         "mtctr",          0,    0x7C0903A6)
+
 INST(add,           "add",            0,    0x7C000214)
 INST(subf,          "subf",           0,    0x7C000050)
 INST(mullw,         "mullw",          0,    0x7C0001D6)
@@ -84,6 +88,7 @@ INST(beq,           "beq",            0,    0x41820000)
 INST(bne,           "bne",            0,    0x40820000)
 INST(bclr,          "bclr",           0,    0x4C000020)
 INST(blr,           "blr",            0,    0x4E800020)
+INST(bctrl,         "bctrl",          0,    0x4E800421)
 
 // clang-format on
 /*****************************************************************************/

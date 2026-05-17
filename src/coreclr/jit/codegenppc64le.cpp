@@ -70,6 +70,36 @@ static instruction ppcReverseBranchIns(instruction ins)
     }
 }
 
+static void ppcEmitBranchOnFloatRelop(emitter* emit, genTreeOps oper, BasicBlock* target)
+{
+    switch (oper)
+    {
+        case GT_EQ:
+            emit->emitIns_J(INS_beq, target);
+            break;
+        case GT_NE:
+            emit->emitIns_J(INS_blt, target);
+            emit->emitIns_J(INS_bgt, target);
+            break;
+        case GT_LT:
+            emit->emitIns_J(INS_blt, target);
+            break;
+        case GT_LE:
+            emit->emitIns_J(INS_blt, target);
+            emit->emitIns_J(INS_beq, target);
+            break;
+        case GT_GE:
+            emit->emitIns_J(INS_bgt, target);
+            emit->emitIns_J(INS_beq, target);
+            break;
+        case GT_GT:
+            emit->emitIns_J(INS_bgt, target);
+            break;
+        default:
+            unreached();
+    }
+}
+
 void CodeGen::genFnEpilog(BasicBlock* block)
 {
     genPopCalleeSavedRegisters(/* jmpEpilog */ false);
@@ -772,15 +802,51 @@ void CodeGen::genCodeForCompare(GenTreeOp* tree)
     var_types op1Type = genActualType(op1->TypeGet());
     var_types op2Type = genActualType(op2->TypeGet());
     assert(genTypeSize(op1Type) == genTypeSize(op2Type));
-    assert(varTypeIsIntegralOrI(op1Type));
 
     genConsumeOperands(tree);
+
+    regNumber targetReg = tree->GetRegNum();
+    assert(targetReg != REG_NA);
+
+    if (varTypeIsFloating(op1Type))
+    {
+        assert(varTypeIsFloating(op2Type));
+
+        GetEmitter()->emitIns_R_R(INS_fcmpu, emitActualTypeSize(op1Type), op1->GetRegNum(), op2->GetRegNum());
+
+        genTreeOps oper     = tree->OperGet();
+        bool       reversed = (tree->gtFlags & GTF_RELOP_NAN_UN) != 0;
+        if (reversed)
+        {
+            oper = GenTree::ReverseRelop(oper);
+        }
+
+        BasicBlock* trueLabel = genCreateTempLabel();
+        BasicBlock* doneLabel = genCreateTempLabel();
+
+        instGen_Set_Reg_To_Imm(emitActualTypeSize(tree), targetReg, 0);
+        ppcEmitBranchOnFloatRelop(GetEmitter(), oper, trueLabel);
+        GetEmitter()->emitIns_J(INS_b, doneLabel);
+
+        genDefineTempLabel(trueLabel);
+        instGen_Set_Reg_To_Imm(emitActualTypeSize(tree), targetReg, 1);
+
+        genDefineTempLabel(doneLabel);
+
+        if (reversed)
+        {
+            GetEmitter()->emitIns_R_R_I(INS_xori, emitActualTypeSize(tree), targetReg, targetReg, 1);
+        }
+
+        genProduceReg(tree);
+        return;
+    }
+
+    assert(varTypeIsIntegralOrI(op1Type));
 
     emitAttr     cmpSize   = emitActualTypeSize(op1Type);
     GenCondition cond      = GenCondition::FromIntegralRelop(tree);
     instruction  cmp       = ppcCompareInsForCondition(cond, cmpSize);
-    regNumber    targetReg = tree->GetRegNum();
-    assert(targetReg != REG_NA);
 
     GetEmitter()->emitIns_R_R(cmp, cmpSize, op1->GetRegNum(), op2->GetRegNum());
 

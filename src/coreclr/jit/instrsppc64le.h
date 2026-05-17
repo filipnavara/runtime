@@ -27,6 +27,8 @@ INST(trap,          "trap",           0,    0x7FE00008)
 
 INST(add,           "add",            0,    0x7C000214)
 INST(subf,          "subf",           0,    0x7C000050)
+INST(mullw,         "mullw",          0,    0x7C0001D6)
+INST(mulld,         "mulld",          0,    0x7C0001D2)
 INST(and,           "and",            0,    0x7C000038)
 INST(or,            "or",             0,    0x7C000378)
 INST(xor,           "xor",            0,    0x7C000278)

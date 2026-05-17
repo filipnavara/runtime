@@ -95,6 +95,25 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             break;
         }
 
+        case GT_MUL:
+        {
+            if (treeNode->gtOverflow())
+            {
+                NYI_POWERPC64("overflow-checking multiply");
+            }
+
+            GenTree*  op1       = treeNode->gtGetOp1();
+            GenTree*  op2       = treeNode->gtGetOp2();
+            regNumber targetReg = treeNode->GetRegNum();
+
+            genConsumeRegs(op1);
+            genConsumeRegs(op2);
+            GetEmitter()->emitIns_R_R_R(genGetInsForOper(treeNode), emitActualTypeSize(treeNode), targetReg,
+                                        op1->GetRegNum(), op2->GetRegNum());
+            genProduceReg(treeNode);
+            break;
+        }
+
         case GT_AND:
         case GT_OR:
         case GT_XOR:
@@ -432,6 +451,8 @@ instruction CodeGen::genGetInsForOper(GenTree* treeNode)
             return INS_add;
         case GT_SUB:
             return INS_subf;
+        case GT_MUL:
+            return (emitActualTypeSize(treeNode) == EA_4BYTE) ? INS_mullw : INS_mulld;
         case GT_AND:
             return INS_and;
         case GT_OR:

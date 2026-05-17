@@ -461,6 +461,14 @@ int LinearScan::BuildPutArgStk(GenTreePutArgStk* argNode)
     }
     else
     {
+        bool fpBased = false;
+        int  offset = m_compiler->lvaFrameAddress(m_compiler->lvaOutgoingArgSpaceVar, &fpBased) +
+                     static_cast<int>(argNode->getArgOffset());
+        if (!emitter::isValidSimm16(offset))
+        {
+            buildInternalIntRegisterDefForNode(argNode);
+        }
+
         assert(!src->isContained());
         srcCount = BuildOperandUses(src);
     }

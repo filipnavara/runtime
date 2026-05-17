@@ -1129,7 +1129,13 @@ void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* lclNode)
 {
     GenTree* data = lclNode->gtOp1;
 
-    if (data->gtSkipReloadOrCopy()->IsMultiRegNode() || lclNode->IsMultiReg())
+    if (data->gtSkipReloadOrCopy()->IsMultiRegNode())
+    {
+        genMultiRegStoreToLocal(lclNode);
+        return;
+    }
+
+    if (lclNode->IsMultiReg())
     {
         NYI_POWERPC64("multi-reg local store");
     }

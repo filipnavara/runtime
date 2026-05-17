@@ -870,14 +870,18 @@ void CodeGen::genCodeForIndir(GenTreeIndir* tree)
     assert(!addr->isContained());
 
     ssize_t offset = tree->Offset();
-    if (!emitter::isValidSimm16(offset))
-    {
-        NYI_POWERPC64("GT_IND: large offset");
-    }
-
     regNumber baseReg   = genConsumeReg(addr);
     var_types targetType = tree->TypeGet();
     regNumber targetReg  = tree->GetRegNum();
+
+    if (!emitter::isValidSimm16(offset))
+    {
+        regNumber tempReg = internalRegisters.GetSingle(tree);
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, tempReg, offset);
+        GetEmitter()->emitIns_R_R_R(INS_add, EA_PTRSIZE, tempReg, baseReg, tempReg);
+        baseReg = tempReg;
+        offset  = 0;
+    }
 
     if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
     {
@@ -903,12 +907,17 @@ void CodeGen::genCodeForNullCheck(GenTreeIndir* tree)
     assert(!addr->isContained());
 
     ssize_t offset = tree->Offset();
+    regNumber baseReg = genConsumeReg(addr);
+
     if (!emitter::isValidSimm16(offset))
     {
-        NYI_POWERPC64("GT_NULLCHECK: large offset");
+        regNumber tempReg = internalRegisters.GetSingle(tree);
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, tempReg, offset);
+        GetEmitter()->emitIns_R_R_R(INS_add, EA_PTRSIZE, tempReg, baseReg, tempReg);
+        baseReg = tempReg;
+        offset  = 0;
     }
 
-    regNumber baseReg = genConsumeReg(addr);
     GetEmitter()->emitIns_R_AR(ins_Load(tree->TypeGet()), emitActualTypeSize(tree), REG_R0, baseReg,
                                static_cast<int>(offset));
 }
@@ -957,17 +966,37 @@ void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
         genCopyRegIfNeeded(addr, REG_WRITE_BARRIER_DST);
         genCopyRegIfNeeded(data, REG_WRITE_BARRIER_SRC);
 
+        ssize_t offset = tree->Offset();
+        if (offset != 0)
+        {
+            if (emitter::isValidSimm16(offset))
+            {
+                GetEmitter()->emitIns_R_R_I(INS_addi, EA_PTRSIZE, REG_WRITE_BARRIER_DST, REG_WRITE_BARRIER_DST,
+                                            offset);
+            }
+            else
+            {
+                instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, offset);
+                GetEmitter()->emitIns_R_R_R(INS_add, EA_PTRSIZE, REG_WRITE_BARRIER_DST, REG_WRITE_BARRIER_DST,
+                                            REG_R0);
+            }
+        }
+
         genGCWriteBarrier(tree, writeBarrierForm);
         return;
     }
 
     ssize_t offset = tree->Offset();
+    regNumber baseReg = genConsumeReg(addr);
+
     if (!emitter::isValidSimm16(offset))
     {
-        NYI_POWERPC64("GT_STOREIND: large offset");
+        regNumber tempReg = internalRegisters.GetSingle(tree);
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, tempReg, offset);
+        GetEmitter()->emitIns_R_R_R(INS_add, EA_PTRSIZE, tempReg, baseReg, tempReg);
+        baseReg = tempReg;
+        offset  = 0;
     }
-
-    regNumber baseReg = genConsumeReg(addr);
 
     genConsumeRegs(data);
 

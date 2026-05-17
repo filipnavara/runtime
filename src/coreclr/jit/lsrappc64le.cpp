@@ -82,6 +82,10 @@ int LinearScan::BuildNode(GenTree* tree)
             BuildDef(tree, RBM_EXCEPTION_OBJECT.GetIntRegSet());
             return 0;
 
+        case GT_ASYNC_CONTINUATION:
+            BuildDef(tree, RBM_ASYNC_CONTINUATION_RET.GetIntRegSet());
+            return 0;
+
         case GT_CAST:
         {
             int srcCount = BuildCastUses(tree->AsCast(), RBM_NONE);

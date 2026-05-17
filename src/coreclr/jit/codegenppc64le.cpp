@@ -571,7 +571,70 @@ void CodeGen::genJumpToThrowHlpBlk_la(SpecialCodeKind codeKind,
 bool CodeGen::genInstrWithConstant(
     instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, ssize_t imm, regNumber tmpReg, bool inUnwindRegion)
 {
-    NYI_POWERPC64("genInstrWithConstant");
+    assert(tmpReg != reg2);
+
+#ifdef DEBUG
+    switch (ins)
+    {
+        case INS_addi:
+        case INS_ld:
+        case INS_lwz:
+        case INS_lhz:
+        case INS_lbz:
+        case INS_std:
+        case INS_stw:
+        case INS_sth:
+        case INS_stb:
+            break;
+
+        default:
+            assert(!"Unexpected instruction in genInstrWithConstant");
+            break;
+    }
+#endif
+
+    if (emitter::isValidSimm16(imm))
+    {
+        GetEmitter()->emitIns_R_R_I(ins, attr, reg1, reg2, imm);
+        return true;
+    }
+
+    assert(tmpReg != REG_NA);
+    assert(!EA_IS_RELOC(EA_SIZE(attr)));
+
+    instGen_Set_Reg_To_Imm(EA_PTRSIZE, tmpReg, imm);
+    regSet.verifyRegUsed(tmpReg);
+
+    if (inUnwindRegion)
+    {
+        m_compiler->unwindPadding();
+    }
+
+    if (ins == INS_addi)
+    {
+        GetEmitter()->emitIns_R_R_R(INS_add, attr, reg1, reg2, tmpReg);
+    }
+    else
+    {
+#ifdef DEBUG
+        bool isStore = false;
+        switch (ins)
+        {
+            case INS_std:
+            case INS_stw:
+            case INS_sth:
+            case INS_stb:
+                isStore = true;
+                break;
+            default:
+                break;
+        }
+        assert(!isStore || (tmpReg != reg1));
+#endif
+        GetEmitter()->emitIns_R_R_R(INS_add, EA_PTRSIZE, tmpReg, reg2, tmpReg);
+        GetEmitter()->emitIns_R_R_I(ins, attr, reg1, tmpReg, 0);
+    }
+
     return false;
 }
 

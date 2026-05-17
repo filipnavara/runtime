@@ -157,6 +157,20 @@ static emitter::code_t ppcEncodeXForm(emitter::code_t code, regNumber rt, regNum
     return code | (ppcReg(rt) << 21) | (ppcReg(ra) << 16) | (ppcReg(rb) << 11);
 }
 
+static emitter::code_t ppcEncodeIFormBranch(emitter::code_t code, ssize_t dist)
+{
+    assert((dist & 0x3) == 0);
+    assert((J_DIST_SMALL_MAX_NEG <= dist) && (dist <= J_DIST_SMALL_MAX_POS));
+    return code | (static_cast<emitter::code_t>(dist) & 0x03FFFFFC);
+}
+
+static emitter::code_t ppcEncodeBFormBranch(emitter::code_t code, ssize_t dist)
+{
+    assert((dist & 0x3) == 0);
+    assert((B_DIST_SMALL_MAX_NEG <= dist) && (dist <= B_DIST_SMALL_MAX_POS));
+    return code | (static_cast<emitter::code_t>(dist) & 0x0000FFFC);
+}
+
 void emitter::emitIns(instruction ins)
 {
     instrDesc* id = emitNewInstr(EA_4BYTE);
@@ -382,10 +396,19 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 
         case INS_b:
         case INS_bl:
+            if (id->idInsOpt() == INS_OPTS_JUMP)
+            {
+                code = ppcEncodeIFormBranch(code, emitOutputInstrJumpDistance(dst, ig, static_cast<instrDescJmp*>(id)));
+            }
+            break;
+
         case INS_bc:
         case INS_beq:
         case INS_bne:
-            // Branch displacement binding is still skeletal; keep offset zero for now.
+            if (id->idInsOpt() == INS_OPTS_JUMP)
+            {
+                code = ppcEncodeBFormBranch(code, emitOutputInstrJumpDistance(dst, ig, static_cast<instrDescJmp*>(id)));
+            }
             break;
 
         default:
@@ -402,7 +425,121 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 
 void emitter::emitIns_J(instruction ins, BasicBlock* dst)
 {
-    NYI_POWERPC64("emitIns_J");
+    assert(emitIsUncondJump(ins));
+    emitIns_Jump(ins, dst);
+}
+
+void emitter::emitIns_Jump(instruction ins, BasicBlock* dst)
+{
+    assert(dst != nullptr);
+    assert(dst->HasFlag(BBF_HAS_LABEL));
+    assert(emitIsUncondJump(ins) || emitIsCmpJump(ins));
+
+    instrDescJmp* id = emitNewInstrJmp();
+
+    id->idIns(ins);
+    id->idjShort = false;
+    id->idCodeSize(sizeof(code_t));
+    id->idInsOpt(INS_OPTS_JUMP);
+    id->idAddr()->iiaBBlabel = dst;
+
+    id->idjKeepLong = m_compiler->fgInDifferentRegions(m_compiler->compCurBB, dst);
+#ifdef DEBUG
+    if (m_compiler->opts.compLongAddress)
+    {
+        id->idjKeepLong = true;
+    }
+#endif // DEBUG
+
+    id->idjIG   = emitCurIG;
+    id->idjOffs = emitCurIGsize;
+
+    id->idjNext      = emitCurIGjmpList;
+    emitCurIGjmpList = id;
+
+#if EMITTER_STATS
+    emitTotalIGjmps++;
+#endif // EMITTER_STATS
+
+    insGroup* tgt = static_cast<insGroup*>(emitCodeGetCookie(dst));
+    if (!id->idjKeepLong && (tgt != nullptr))
+    {
+        UNATIVE_OFFSET srcOffs = emitCurCodeOffset + emitCurIGsize;
+        int            jmpDist = srcOffs - tgt->igOffs;
+        assert(jmpDist >= 0);
+
+        if (emitIsCmpJump(id))
+        {
+            if (B_DIST_SMALL_MAX_NEG <= -jmpDist)
+            {
+                emitSetShortJump(id);
+            }
+        }
+        else if (J_DIST_SMALL_MAX_NEG <= -jmpDist)
+        {
+            emitSetShortJump(id);
+        }
+    }
+
+    dispIns(id);
+    appendToCurIG(id);
+}
+
+void emitter::emitOutputInstrJumpDistanceHelper(const insGroup* ig,
+                                                instrDescJmp*   jmp,
+                                                UNATIVE_OFFSET& dstOffs,
+                                                const BYTE*&    dstAddr) const
+{
+    if (jmp->idAddr()->iiaHasInstrCount())
+    {
+        assert(ig != nullptr);
+        int      instrCount = jmp->idAddr()->iiaGetInstrCount();
+        unsigned insNum     = emitFindInsNum(ig, jmp);
+        if (instrCount < 0)
+        {
+            assert(insNum + 1 >= static_cast<unsigned>(-instrCount));
+        }
+        dstOffs = ig->igOffs + emitFindOffset(ig, insNum + 1 + instrCount);
+        dstAddr = emitOffsetToPtr(dstOffs);
+        return;
+    }
+
+    assert(jmp->idIsBound());
+    dstOffs = jmp->idAddr()->iiaIGlabel->igOffs;
+    dstAddr = emitOffsetToPtr(dstOffs);
+}
+
+ssize_t emitter::emitOutputInstrJumpDistance(const BYTE* src, const insGroup* ig, instrDescJmp* jmp)
+{
+    UNATIVE_OFFSET srcOffs = emitCurCodeOffs(src);
+    const BYTE*    srcAddr = emitOffsetToPtr(srcOffs);
+
+    assert(!jmp->idAddr()->iiaIsJitDataOffset());
+
+    UNATIVE_OFFSET dstOffs = 0;
+    const BYTE*    dstAddr = nullptr;
+    emitOutputInstrJumpDistanceHelper(ig, jmp, dstOffs, dstAddr);
+
+    ssize_t distVal = static_cast<ssize_t>(dstAddr - srcAddr);
+
+    if (dstOffs > srcOffs)
+    {
+        emitFwdJumps = true;
+
+        if (!emitJumpCrossHotColdBoundary(srcOffs, dstOffs))
+        {
+            distVal -= emitOffsAdj;
+            dstOffs -= emitOffsAdj;
+        }
+
+        jmp->idjOffs = dstOffs;
+        if (jmp->idjOffs != dstOffs)
+        {
+            IMPL_LIMITATION("Method is too large");
+        }
+    }
+
+    return distVal;
 }
 
 void emitter::emitIns_Call(const EmitCallParams& params)

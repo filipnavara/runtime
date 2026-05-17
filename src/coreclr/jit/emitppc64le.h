@@ -90,6 +90,13 @@ void emitDispInsName(code_t code, const instrDesc* id);
 static emitter::code_t emitInsCode(instruction ins);
 unsigned emitOutput_Instr(BYTE* dst, code_t code) const;
 
+void emitIns_Jump(instruction ins, BasicBlock* dst);
+void emitOutputInstrJumpDistanceHelper(const insGroup* ig,
+                                       instrDescJmp*   jmp,
+                                       UNATIVE_OFFSET& dstOffs,
+                                       const BYTE*&    dstAddr) const;
+ssize_t emitOutputInstrJumpDistance(const BYTE* src, const insGroup* ig, instrDescJmp* jmp);
+
 inline static bool emitIsCmpJump(instruction ins)
 {
     return (ins == INS_bc) || (ins == INS_beq) || (ins == INS_bne);

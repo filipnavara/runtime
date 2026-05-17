@@ -185,6 +185,10 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genCodeForLclAddr(treeNode->AsLclFld());
             break;
 
+        case GT_LEA:
+            genLeaInstruction(treeNode->AsAddrMode());
+            break;
+
         case GT_STORE_LCL_VAR:
             genCodeForStoreLclVar(treeNode->AsLclVar());
             break;
@@ -345,6 +349,37 @@ void CodeGen::genCodeForLclAddr(GenTreeLclFld* lclAddrNode)
     }
 
     genProduceReg(lclAddrNode);
+}
+
+void CodeGen::genLeaInstruction(GenTreeAddrMode* lea)
+{
+    assert(lea->OperIs(GT_LEA));
+    assert(lea->HasBase());
+    assert(!lea->HasIndex());
+    assert(lea->gtScale <= 1);
+
+    genConsumeOperands(lea);
+
+    emitAttr  size      = emitTypeSize(lea);
+    int       offset    = lea->Offset();
+    regNumber baseReg   = lea->Base()->GetRegNum();
+    regNumber targetReg = lea->GetRegNum();
+
+    if (emitter::isValidSimm16(offset))
+    {
+        if ((offset != 0) || (targetReg != baseReg))
+        {
+            GetEmitter()->emitIns_R_R_I(INS_addi, size, targetReg, baseReg, offset);
+        }
+    }
+    else
+    {
+        regNumber tmpReg = internalRegisters.GetSingle(lea);
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, tmpReg, offset);
+        GetEmitter()->emitIns_R_R_R(INS_add, size, targetReg, baseReg, tmpReg);
+    }
+
+    genProduceReg(lea);
 }
 
 void CodeGen::genCodeForStoreLclFld(GenTreeLclFld* tree)

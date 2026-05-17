@@ -35,6 +35,25 @@ int LinearScan::BuildNode(GenTree* tree)
             BuildDef(tree);
             return 0;
 
+        case GT_LEA:
+        {
+            GenTreeAddrMode* lea = tree->AsAddrMode();
+            assert(lea->HasBase());
+            assert(!lea->HasIndex());
+            assert(lea->gtScale <= 1);
+
+            BuildUse(lea->Base());
+
+            if (!emitter::isValidSimm16(lea->Offset()))
+            {
+                buildInternalIntRegisterDefForNode(tree);
+                buildInternalRegisterUses();
+            }
+
+            BuildDef(tree);
+            return 1;
+        }
+
         case GT_STORE_LCL_VAR:
         case GT_STORE_LCL_FLD:
             return BuildStoreLoc(tree->AsLclVarCommon());

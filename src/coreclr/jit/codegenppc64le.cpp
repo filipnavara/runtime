@@ -59,6 +59,15 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
 {
     switch (treeNode->OperGet())
     {
+        case GT_START_NONGC:
+            GetEmitter()->emitDisableGC();
+            break;
+
+        case GT_START_PREEMPTGC:
+            gcInfo.gcMarkRegSetNpt(RBM_INT_CALLEE_SAVED);
+            genDefineTempLabel(genCreateTempLabel());
+            break;
+
         case GT_CNS_INT:
         {
             regNumber targetReg = treeNode->GetRegNum();
@@ -235,6 +244,26 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             instGen_MemoryBarrier(barrierKind);
             break;
         }
+
+        case GT_RELOAD:
+        case GT_COPY:
+        case GT_NOP:
+            break;
+
+        case GT_KEEPALIVE:
+            if (treeNode->AsOp()->gtOp1->isContained())
+            {
+                genUpdateLife(treeNode->AsOp()->gtOp1);
+            }
+            else
+            {
+                genConsumeReg(treeNode->AsOp()->gtOp1);
+            }
+            break;
+
+        case GT_NO_OP:
+            GetEmitter()->emitIns(INS_nop);
+            break;
 
         default:
             NYI_POWERPC64("genCodeForTreeNode");

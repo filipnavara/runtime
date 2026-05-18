@@ -202,6 +202,55 @@ enum PInvokeTransitionFrameFlags : uint64_t
     PTFF_THREAD_HIJACK  = 0x0000000080000000,   // indicates that this is a frame for a hijacked call
 };
 
+#elif defined(TARGET_POWERPC64)
+enum PInvokeTransitionFrameFlags : uint64_t
+{
+    // NOTE: The order in which registers get pushed in the PInvokeTransitionFrame's m_PreservedRegs list has
+    //       to match the order of these flags (that's also the order in which they are read in StackFrameIterator.cpp)
+
+    // Standard preserved registers. R31 is the frame pointer and is saved in m_FramePointer.
+    PTFF_SAVE_R14       = 0x0000000000000001,
+    PTFF_SAVE_R15       = 0x0000000000000002,
+    PTFF_SAVE_R16       = 0x0000000000000004,
+    PTFF_SAVE_R17       = 0x0000000000000008,
+    PTFF_SAVE_R18       = 0x0000000000000010,
+    PTFF_SAVE_R19       = 0x0000000000000020,
+    PTFF_SAVE_R20       = 0x0000000000000040,
+    PTFF_SAVE_R21       = 0x0000000000000080,
+    PTFF_SAVE_R22       = 0x0000000000000100,
+    PTFF_SAVE_R23       = 0x0000000000000200,
+    PTFF_SAVE_R24       = 0x0000000000000400,
+    PTFF_SAVE_R25       = 0x0000000000000800,
+    PTFF_SAVE_R26       = 0x0000000000001000,
+    PTFF_SAVE_R27       = 0x0000000000002000,
+    PTFF_SAVE_R28       = 0x0000000000004000,
+    PTFF_SAVE_R29       = 0x0000000000008000,
+    PTFF_SAVE_R30       = 0x0000000000010000,
+
+    PTFF_SAVE_SP        = 0x0000000000020000,
+
+    // Scratch and special registers.
+    PTFF_SAVE_R0        = 0x0000000000040000,
+    PTFF_SAVE_R2        = 0x0000000000080000,
+    PTFF_SAVE_R3        = 0x0000000000100000,
+    PTFF_SAVE_R4        = 0x0000000000200000,
+    PTFF_SAVE_R5        = 0x0000000000400000,
+    PTFF_SAVE_R6        = 0x0000000000800000,
+    PTFF_SAVE_R7        = 0x0000000001000000,
+    PTFF_SAVE_R8        = 0x0000000002000000,
+    PTFF_SAVE_R9        = 0x0000000004000000,
+    PTFF_SAVE_R10       = 0x0000000008000000,
+    PTFF_SAVE_R11       = 0x0000000010000000,
+    PTFF_SAVE_R12       = 0x0000000020000000,
+    PTFF_SAVE_R13       = 0x0000000040000000,
+
+    PTFF_SAVE_FP        = 0x0000000080000000,
+
+    PTFF_SAVE_LR        = 0x0000000100000000,
+
+    PTFF_THREAD_HIJACK  = 0x0000000200000000,   // indicates that this is a frame for a hijacked call
+};
+
 #else // TARGET_ARM
 enum PInvokeTransitionFrameFlags
 {
@@ -263,7 +312,7 @@ struct PInvokeTransitionFrame
 #else // FEATURE_PORTABLE_HELPERS
 struct PInvokeTransitionFrame
 {
-#if defined(TARGET_ARM64) || defined(TARGET_ARM) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARM64) || defined(TARGET_ARM) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     // The FP and LR registers are pushed in different order when setting up frames
     TgtPTR_Void     m_FramePointer;
     TgtPTR_Void     m_RIP;
@@ -275,7 +324,7 @@ struct PInvokeTransitionFrame
                                 // can be an invalid pointer in universal transition cases (which never need to call GetThread)
 #ifdef TARGET_ARM64
     uint64_t          m_Flags;  // PInvokeTransitionFrameFlags
-#elif TARGET_LOONGARCH64 || TARGET_RISCV64
+#elif TARGET_LOONGARCH64 || TARGET_RISCV64 || TARGET_POWERPC64
     uint64_t          m_Flags;  // PInvokeTransitionFrameFlags
 #else
     uint32_t          m_Flags;  // PInvokeTransitionFrameFlags
@@ -290,6 +339,8 @@ struct PInvokeTransitionFrame
 #elif defined(TARGET_ARM64)
 #define OFFSETOF__Thread__m_pTransitionFrame 0x48
 #elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#define OFFSETOF__Thread__m_pTransitionFrame 0x48
+#elif defined(TARGET_POWERPC64)
 #define OFFSETOF__Thread__m_pTransitionFrame 0x48
 #elif defined(TARGET_X86)
 #define OFFSETOF__Thread__m_pTransitionFrame 0x30

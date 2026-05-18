@@ -2,7 +2,6 @@
 
 import argparse
 import asyncio
-import aiohttp
 import gzip
 import os
 import re
@@ -11,7 +10,18 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-import zstandard
+import urllib.error
+import urllib.request
+
+try:
+    import aiohttp
+except ImportError:
+    aiohttp = None
+
+try:
+    import zstandard
+except ImportError:
+    zstandard = None
 
 from collections import deque
 from functools import cmp_to_key
@@ -43,6 +53,15 @@ async def download_deb_files_parallel(mirror, packages, tmp_dir):
     """Download .deb files in parallel."""
     os.makedirs(tmp_dir, exist_ok=True)
 
+    if aiohttp is None:
+        for pkg, info in packages.items():
+            filename = info.get("Filename")
+            if filename:
+                url = f"{mirror}/{filename}"
+                dest_path = os.path.join(tmp_dir, os.path.basename(filename))
+                download_file_sync(url, dest_path)
+        return
+
     tasks = []
     timeout = aiohttp.ClientTimeout(total=60)
     async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -57,6 +76,18 @@ async def download_deb_files_parallel(mirror, packages, tmp_dir):
 
 async def download_package_index_parallel(mirror, arch, suites):
     """Download package index files for specified suites and components entirely in memory."""
+    if aiohttp is None:
+        merged_content = ""
+        for suite in suites:
+            for component in ["main", "universe"]:
+                url = f"{mirror}/dists/{suite}/{component}/binary-{arch}/Packages.gz"
+                content = fetch_and_decompress_sync(url)
+                if content:
+                    if merged_content:
+                        merged_content += "\n\n"
+                    merged_content += content
+        return merged_content
+
     tasks = []
     timeout = aiohttp.ClientTimeout(total=60)
 
@@ -89,6 +120,38 @@ async def fetch_and_decompress(session, url):
             else:
                 print(f"Skipped index: {url} (doesn't exist)")
                 return None
+    except Exception as e:
+        print(f"Error fetching {url}: {e}")
+
+def download_file_sync(url, dest_path, max_retries=3, retry_delay=2, timeout=60):
+    """Synchronous .deb download fallback for Python environments without aiohttp."""
+    for attempt in range(max_retries):
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as response:
+                with open(dest_path, "wb") as f:
+                    shutil.copyfileobj(response, f)
+                print(f"Downloaded {url} at {dest_path}")
+                return
+        except (urllib.error.URLError, TimeoutError) as e:
+            print(f"Error downloading {url}: {type(e).__name__} - {e}. Retrying...")
+            if attempt + 1 < max_retries:
+                import time
+                time.sleep(retry_delay)
+
+    print(f"Failed to download {url} after {max_retries} attempts.")
+
+def fetch_and_decompress_sync(url):
+    """Synchronous Packages.gz download fallback for Python environments without aiohttp."""
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response:
+            compressed_data = response.read()
+        print(f"Downloaded index: {url}")
+        return gzip.decompress(compressed_data).decode('utf-8')
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print(f"Skipped index: {url} (doesn't exist)")
+            return None
+        print(f"Error fetching {url}: {e}")
     except Exception as e:
         print(f"Error fetching {url}: {e}")
 
@@ -258,9 +321,16 @@ def extract_deb_file(deb_file, tmp_dir, extract_dir, ar_tool):
         elif file_extension == ".zst":
             # zstd is not supported by standard library yet
             decompressed_tar_path = tar_file_path.replace(".zst", "")
-            with open(tar_file_path, "rb") as zst_file, open(decompressed_tar_path, "wb") as decompressed_file:
-                dctx = zstandard.ZstdDecompressor()
-                dctx.copy_stream(zst_file, decompressed_file)
+            if zstandard is not None:
+                with open(tar_file_path, "rb") as zst_file, open(decompressed_tar_path, "wb") as decompressed_file:
+                    dctx = zstandard.ZstdDecompressor()
+                    dctx.copy_stream(zst_file, decompressed_file)
+            else:
+                zstd_tool = shutil.which("zstd")
+                if zstd_tool is None:
+                    raise ImportError("Install the Python zstandard package or the zstd command line tool to extract .zst deb archives.")
+                with open(decompressed_tar_path, "wb") as decompressed_file:
+                    subprocess.run([zstd_tool, "-d", "-c", tar_file_path], check=True, stdout=decompressed_file)
 
             tar_file_path = decompressed_tar_path
             mode = "r"

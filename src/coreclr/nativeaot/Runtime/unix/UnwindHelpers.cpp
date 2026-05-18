@@ -48,6 +48,8 @@ using libunwind::CompactUnwinder_arm64;
 using libunwind::Registers_loongarch;
 #elif defined(TARGET_RISCV64)
 using libunwind::Registers_riscv;
+#elif defined(TARGET_POWERPC64)
+using libunwind::Registers_ppc64;
 #elif defined(TARGET_X86)
 using libunwind::Registers_x86;
 #else
@@ -1258,6 +1260,267 @@ void Registers_REGDISPLAY::setFloatRegister(int num, double value)
 
 #endif // TARGET_RISCV64
 
+#if defined(TARGET_POWERPC64)
+
+// Shim that implements methods required by libunwind over REGDISPLAY
+struct Registers_REGDISPLAY : REGDISPLAY
+{
+    inline static int  getArch() { return libunwind::REGISTERS_PPC64; }
+    static constexpr int lastDwarfRegNum() { return _LIBUNWIND_HIGHEST_DWARF_REGISTER_PPC64; }
+
+    bool        validRegister(int num) const;
+    bool        validFloatRegister(int num) const;
+    bool        validVectorRegister(int num) const { return false; }
+
+    uint64_t    getRegister(int num) const;
+    void        setRegister(int num, uint64_t value);
+    void        setRegister(int num, uint64_t value, uint64_t location);
+
+    double      getFloatRegister(int num) const;
+    void        setFloatRegister(int num, double value);
+
+    libunwind::v128    getVectorRegister(int num) const { abort(); }
+    void        setVectorRegister(int num, libunwind::v128 value) { abort(); }
+
+    uint64_t    getSP() const         { return SP; }
+    void        setSP(uint64_t value, uint64_t location) { SP = value; }
+    uint64_t    getIP() const         { return IP; }
+    void        setIP(uint64_t value, uint64_t location) { IP = value; }
+    uint64_t    getFP() const         { return readRegister(pFP); }
+    void        setFP(uint64_t value, uint64_t location) { pFP = (PTR_uintptr_t)location; }
+
+private:
+    static uint64_t readRegister(PTR_uintptr_t location)
+    {
+        return location != NULL ? *location : 0;
+    }
+};
+
+inline bool Registers_REGDISPLAY::validRegister(int num) const
+{
+    if (num == UNW_REG_SP || num == UNW_REG_IP || num == UNW_PPC64_LR)
+        return true;
+
+    if (num >= UNW_PPC64_R0 && num <= UNW_PPC64_R31)
+        return true;
+
+    return false;
+}
+
+inline bool Registers_REGDISPLAY::validFloatRegister(int num) const
+{
+    return num >= UNW_PPC64_F14 && num <= UNW_PPC64_F31;
+}
+
+inline uint64_t Registers_REGDISPLAY::getRegister(int regNum) const
+{
+    switch (regNum)
+    {
+    case UNW_REG_IP:
+        return IP;
+    case UNW_REG_SP:
+    case UNW_PPC64_R1:
+        return SP;
+    case UNW_PPC64_R0:
+        return readRegister(pR0);
+    case UNW_PPC64_R2:
+        return readRegister(pR2);
+    case UNW_PPC64_R3:
+        return readRegister(pR3);
+    case UNW_PPC64_R4:
+        return readRegister(pR4);
+    case UNW_PPC64_R5:
+        return readRegister(pR5);
+    case UNW_PPC64_R6:
+        return readRegister(pR6);
+    case UNW_PPC64_R7:
+        return readRegister(pR7);
+    case UNW_PPC64_R8:
+        return readRegister(pR8);
+    case UNW_PPC64_R9:
+        return readRegister(pR9);
+    case UNW_PPC64_R10:
+        return readRegister(pR10);
+    case UNW_PPC64_R11:
+        return readRegister(pR11);
+    case UNW_PPC64_R12:
+        return readRegister(pR12);
+    case UNW_PPC64_R13:
+        return readRegister(pR13);
+    case UNW_PPC64_R14:
+        return readRegister(pR14);
+    case UNW_PPC64_R15:
+        return readRegister(pR15);
+    case UNW_PPC64_R16:
+        return readRegister(pR16);
+    case UNW_PPC64_R17:
+        return readRegister(pR17);
+    case UNW_PPC64_R18:
+        return readRegister(pR18);
+    case UNW_PPC64_R19:
+        return readRegister(pR19);
+    case UNW_PPC64_R20:
+        return readRegister(pR20);
+    case UNW_PPC64_R21:
+        return readRegister(pR21);
+    case UNW_PPC64_R22:
+        return readRegister(pR22);
+    case UNW_PPC64_R23:
+        return readRegister(pR23);
+    case UNW_PPC64_R24:
+        return readRegister(pR24);
+    case UNW_PPC64_R25:
+        return readRegister(pR25);
+    case UNW_PPC64_R26:
+        return readRegister(pR26);
+    case UNW_PPC64_R27:
+        return readRegister(pR27);
+    case UNW_PPC64_R28:
+        return readRegister(pR28);
+    case UNW_PPC64_R29:
+        return readRegister(pR29);
+    case UNW_PPC64_R30:
+        return readRegister(pR30);
+    case UNW_PPC64_R31:
+        return readRegister(pFP);
+    case UNW_PPC64_LR:
+        return readRegister(pLR);
+    default:
+        PORTABILITY_ASSERT("unsupported PowerPC64 register");
+    }
+}
+
+void Registers_REGDISPLAY::setRegister(int num, uint64_t value)
+{
+    setRegister(num, value, 0);
+}
+
+void Registers_REGDISPLAY::setRegister(int num, uint64_t value, uint64_t location)
+{
+    switch (num)
+    {
+    case UNW_REG_IP:
+        IP = value;
+        break;
+    case UNW_REG_SP:
+    case UNW_PPC64_R1:
+        SP = value;
+        break;
+    case UNW_PPC64_R0:
+        pR0 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R2:
+        pR2 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R3:
+        pR3 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R4:
+        pR4 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R5:
+        pR5 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R6:
+        pR6 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R7:
+        pR7 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R8:
+        pR8 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R9:
+        pR9 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R10:
+        pR10 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R11:
+        pR11 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R12:
+        pR12 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R13:
+        pR13 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R14:
+        pR14 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R15:
+        pR15 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R16:
+        pR16 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R17:
+        pR17 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R18:
+        pR18 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R19:
+        pR19 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R20:
+        pR20 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R21:
+        pR21 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R22:
+        pR22 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R23:
+        pR23 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R24:
+        pR24 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R25:
+        pR25 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R26:
+        pR26 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R27:
+        pR27 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R28:
+        pR28 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R29:
+        pR29 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R30:
+        pR30 = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_R31:
+        pFP = (PTR_uintptr_t)location;
+        break;
+    case UNW_PPC64_LR:
+        pLR = (PTR_uintptr_t)location;
+        break;
+    default:
+        PORTABILITY_ASSERT("unsupported PowerPC64 register");
+    }
+}
+
+double Registers_REGDISPLAY::getFloatRegister(int num) const
+{
+    assert(validFloatRegister(num));
+    return unwindhelpers_bitcast<double>(F[num - UNW_PPC64_F14]);
+}
+
+void Registers_REGDISPLAY::setFloatRegister(int num, double value)
+{
+    assert(validFloatRegister(num));
+    F[num - UNW_PPC64_F14] = unwindhelpers_bitcast<uint64_t>(value);
+}
+
+#endif // TARGET_POWERPC64
+
 bool UnwindHelpers::StepFrame(REGDISPLAY *regs, unw_word_t start_ip, uint32_t format, unw_word_t unwind_info)
 {
 #if _LIBUNWIND_SUPPORT_DWARF_UNWIND
@@ -1335,6 +1598,8 @@ bool UnwindHelpers::GetUnwindProcInfo(PCODE pc, UnwindInfoSections &uwInfoSectio
     libunwind::UnwindCursor<LocalAddressSpace, Registers_loongarch> uc(_addressSpace);
 #elif defined(HOST_RISCV64)
     libunwind::UnwindCursor<LocalAddressSpace, Registers_riscv> uc(_addressSpace);
+#elif defined(TARGET_POWERPC64) || defined(HOST_POWERPC64)
+    libunwind::UnwindCursor<LocalAddressSpace, Registers_ppc64> uc(_addressSpace);
 #else
     #error "Unwinding is not implemented for this architecture yet."
 #endif

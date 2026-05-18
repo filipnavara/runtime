@@ -26,6 +26,8 @@
 #define THUNK_SIZE  16
 #elif TARGET_RISCV64
 #define THUNK_SIZE  20
+#elif TARGET_POWERPC64
+#define THUNK_SIZE  0x20000 // This will cause RhpGetNumThunksPerBlock to return 0 until PPC64LE thunks are implemented.
 #else
 #define THUNK_SIZE  (2 * OS_PAGE_SIZE) // This will cause RhpGetNumThunksPerBlock to return 0
 #endif

@@ -98,7 +98,45 @@
 
 #else
 
-#if HAVE___GREGSET_T
+#if defined(HOST_POWERPC64)
+
+#define MCREG_R0(mc)        ((mc).gp_regs[0])
+#define MCREG_R1(mc)        ((mc).gp_regs[1])
+#define MCREG_R2(mc)        ((mc).gp_regs[2])
+#define MCREG_R3(mc)        ((mc).gp_regs[3])
+#define MCREG_R4(mc)        ((mc).gp_regs[4])
+#define MCREG_R5(mc)        ((mc).gp_regs[5])
+#define MCREG_R6(mc)        ((mc).gp_regs[6])
+#define MCREG_R7(mc)        ((mc).gp_regs[7])
+#define MCREG_R8(mc)        ((mc).gp_regs[8])
+#define MCREG_R9(mc)        ((mc).gp_regs[9])
+#define MCREG_R10(mc)       ((mc).gp_regs[10])
+#define MCREG_R11(mc)       ((mc).gp_regs[11])
+#define MCREG_R12(mc)       ((mc).gp_regs[12])
+#define MCREG_R13(mc)       ((mc).gp_regs[13])
+#define MCREG_R14(mc)       ((mc).gp_regs[14])
+#define MCREG_R15(mc)       ((mc).gp_regs[15])
+#define MCREG_R16(mc)       ((mc).gp_regs[16])
+#define MCREG_R17(mc)       ((mc).gp_regs[17])
+#define MCREG_R18(mc)       ((mc).gp_regs[18])
+#define MCREG_R19(mc)       ((mc).gp_regs[19])
+#define MCREG_R20(mc)       ((mc).gp_regs[20])
+#define MCREG_R21(mc)       ((mc).gp_regs[21])
+#define MCREG_R22(mc)       ((mc).gp_regs[22])
+#define MCREG_R23(mc)       ((mc).gp_regs[23])
+#define MCREG_R24(mc)       ((mc).gp_regs[24])
+#define MCREG_R25(mc)       ((mc).gp_regs[25])
+#define MCREG_R26(mc)       ((mc).gp_regs[26])
+#define MCREG_R27(mc)       ((mc).gp_regs[27])
+#define MCREG_R28(mc)       ((mc).gp_regs[28])
+#define MCREG_R29(mc)       ((mc).gp_regs[29])
+#define MCREG_R30(mc)       ((mc).gp_regs[30])
+#define MCREG_R31(mc)       ((mc).gp_regs[31])
+#define MCREG_Sp(mc)        MCREG_R1(mc)
+#define MCREG_Pc(mc)        ((mc).gp_regs[32])
+#define MCREG_Lr(mc)        ((mc).gp_regs[36])
+
+#elif HAVE___GREGSET_T
 
 #if defined(HOST_LOONGARCH64)
 
@@ -649,6 +687,37 @@
     MCREG_A0(nativeContext->uc_mcontext) = arg0Reg;       \
     MCREG_A1(nativeContext->uc_mcontext) = arg1Reg;
 
+#elif defined(HOST_POWERPC64)
+
+#define ASSIGN_CONTROL_REGS  \
+    ASSIGN_REG(Pc, IP)       \
+    ASSIGN_REG(Sp, SP)       \
+    ASSIGN_REG(R31, FP)      \
+    ASSIGN_REG(Lr, LR)
+
+#define ASSIGN_INTEGER_REGS  \
+    ASSIGN_REG(R14, R14)     \
+    ASSIGN_REG(R15, R15)     \
+    ASSIGN_REG(R16, R16)     \
+    ASSIGN_REG(R17, R17)     \
+    ASSIGN_REG(R18, R18)     \
+    ASSIGN_REG(R19, R19)     \
+    ASSIGN_REG(R20, R20)     \
+    ASSIGN_REG(R21, R21)     \
+    ASSIGN_REG(R22, R22)     \
+    ASSIGN_REG(R23, R23)     \
+    ASSIGN_REG(R24, R24)     \
+    ASSIGN_REG(R25, R25)     \
+    ASSIGN_REG(R26, R26)     \
+    ASSIGN_REG(R27, R27)     \
+    ASSIGN_REG(R28, R28)     \
+    ASSIGN_REG(R29, R29)     \
+    ASSIGN_REG(R30, R30)
+
+#define ASSIGN_TWO_ARGUMENT_REGS \
+    MCREG_R3(nativeContext->uc_mcontext) = arg0Reg;       \
+    MCREG_R4(nativeContext->uc_mcontext) = arg1Reg;
+
 #elif defined(HOST_WASM)
     // TODO: determine how unwinding will work on WebAssembly
 #define ASSIGN_CONTROL_REGS
@@ -883,6 +952,43 @@ uint64_t GetPC(void* context)
     uint64_t& NATIVE_CONTEXT::T4() { return (uint64_t&)MCREG_T4(ctx.uc_mcontext); }
     uint64_t& NATIVE_CONTEXT::T5() { return (uint64_t&)MCREG_T5(ctx.uc_mcontext); }
     uint64_t& NATIVE_CONTEXT::T6() { return (uint64_t&)MCREG_T6(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::Pc() { return (uint64_t&)MCREG_Pc(ctx.uc_mcontext); }
+
+#elif TARGET_POWERPC64
+
+    uint64_t& NATIVE_CONTEXT::R0() { return (uint64_t&)MCREG_R0(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R1() { return (uint64_t&)MCREG_R1(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R2() { return (uint64_t&)MCREG_R2(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R3() { return (uint64_t&)MCREG_R3(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R4() { return (uint64_t&)MCREG_R4(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R5() { return (uint64_t&)MCREG_R5(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R6() { return (uint64_t&)MCREG_R6(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R7() { return (uint64_t&)MCREG_R7(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R8() { return (uint64_t&)MCREG_R8(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R9() { return (uint64_t&)MCREG_R9(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R10() { return (uint64_t&)MCREG_R10(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R11() { return (uint64_t&)MCREG_R11(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R12() { return (uint64_t&)MCREG_R12(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R13() { return (uint64_t&)MCREG_R13(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R14() { return (uint64_t&)MCREG_R14(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R15() { return (uint64_t&)MCREG_R15(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R16() { return (uint64_t&)MCREG_R16(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R17() { return (uint64_t&)MCREG_R17(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R18() { return (uint64_t&)MCREG_R18(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R19() { return (uint64_t&)MCREG_R19(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R20() { return (uint64_t&)MCREG_R20(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R21() { return (uint64_t&)MCREG_R21(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R22() { return (uint64_t&)MCREG_R22(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R23() { return (uint64_t&)MCREG_R23(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R24() { return (uint64_t&)MCREG_R24(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R25() { return (uint64_t&)MCREG_R25(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R26() { return (uint64_t&)MCREG_R26(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R27() { return (uint64_t&)MCREG_R27(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R28() { return (uint64_t&)MCREG_R28(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R29() { return (uint64_t&)MCREG_R29(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R30() { return (uint64_t&)MCREG_R30(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::R31() { return (uint64_t&)MCREG_R31(ctx.uc_mcontext); }
+    uint64_t& NATIVE_CONTEXT::Lr() { return (uint64_t&)MCREG_Lr(ctx.uc_mcontext); }
     uint64_t& NATIVE_CONTEXT::Pc() { return (uint64_t&)MCREG_Pc(ctx.uc_mcontext); }
 
 #else

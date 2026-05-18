@@ -356,13 +356,13 @@ void emitter::emitIns_R_R_R(
 void emitter::emitIns_R_C(
     instruction ins, emitAttr attr, regNumber targetReg, regNumber addrReg, CORINFO_FIELD_HANDLE fldHnd)
 {
-    assert(!EA_IS_RELOC(attr));
     assert(isFloatReg(targetReg) || isGeneralRegister(targetReg));
 
     const bool isAddressLoad = ins == INS_addi;
+    assert(!EA_IS_RELOC(attr) || (isAddressLoad && m_compiler->opts.compReloc));
     if (isAddressLoad)
     {
-        assert(attr == EA_PTRSIZE);
+        assert(EA_SIZE(attr) == EA_PTRSIZE);
         assert(isGeneralRegister(targetReg));
         assert(addrReg == REG_NA);
     }
@@ -374,6 +374,7 @@ void emitter::emitIns_R_C(
     }
 
     instrDesc* id = emitNewInstr(attr);
+    id->idSetRelocFlags(attr);
 
     id->idIns(ins);
     id->idInsOpt(INS_OPTS_RC);

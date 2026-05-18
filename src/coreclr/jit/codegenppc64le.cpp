@@ -169,7 +169,11 @@ static unsigned ppcGetDeferredFrameSizeForSaveArea(unsigned frameSize, unsigned 
 
 static unsigned ppcGetLocalFrameSize(Compiler* compiler, unsigned frameSize)
 {
-    return roundUp(frameSize + compiler->lvaOutgoingArgSpaceSize + REGSIZE_BYTES, STACK_ALIGN);
+    // PPC64 ELFv2 reserves a caller-owned linkage and parameter-save area below
+    // the first stack argument. Keep locals and compiler spill temps above this
+    // area so helper calls made while preparing another call cannot overwrite
+    // values that are live across the helper.
+    return roundUp(frameSize + compiler->lvaOutgoingArgSpaceSize + FIRST_ARG_STACK_OFFS + REGSIZE_BYTES, STACK_ALIGN);
 }
 
 static unsigned ppcGetLocalFrameSize(Compiler* compiler)

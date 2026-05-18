@@ -16,6 +16,7 @@
 static constexpr int PPC_LINK_REGISTER_SAVE_SIZE = REGSIZE_BYTES;
 static constexpr int PPC_FRAME_POINTER_SAVE_SIZE = REGSIZE_BYTES;
 static constexpr int PPC_MAX_UNWIND_SAVE_OFFSET  = 2047;
+static constexpr int PPC_TOC_SAVE_OFFSET         = 24;
 
 static instruction ppcCompareInsForCondition(GenCondition cond, emitAttr cmpSize)
 {
@@ -3336,15 +3337,37 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
         }
     }
 
+    bool restoreTocAfterIndirectUnmanagedCall = false;
     if (params.callType != EC_FUNC_TOKEN)
     {
         assert(genIsValidIntReg(params.ireg));
+
+        if (call->IsUnmanaged())
+        {
+            // ELFv2 global entry points derive the callee TOC from r12, so unmanaged indirect
+            // calls must branch through r12 and restore the managed TOC after the call returns.
+            GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R2, REG_SPBASE, PPC_TOC_SAVE_OFFSET);
+
+            if (params.ireg != REG_INDIRECT_CALL_TARGET_REG)
+            {
+                inst_Mov(TYP_I_IMPL, REG_INDIRECT_CALL_TARGET_REG, params.ireg, /* canSkip */ false);
+                params.ireg = REG_INDIRECT_CALL_TARGET_REG;
+            }
+
+            restoreTocAfterIndirectUnmanagedCall = true;
+        }
+
         regSet.verifyRegUsed(params.ireg);
 
         params.callType = EC_INDIR_R;
     }
 
     genEmitCallWithCurrentGC(params);
+
+    if (restoreTocAfterIndirectUnmanagedCall)
+    {
+        GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_R2, REG_SPBASE, PPC_TOC_SAVE_OFFSET);
+    }
 }
 
 void CodeGen::genPushCalleeSavedRegisters(regNumber initReg, bool* pInitRegZeroed)

@@ -39,6 +39,15 @@ namespace ILCompiler.DependencyAnalysis.Ppc64le
             Builder.EmitUInt(0x38000000u | ((uint)regDst << 21) | ((uint)regSrc << 16) | ((uint)offset & 0xffff));
         }
 
+        public void EmitADDIS(Register regDst, Register regSrc, int offset)
+        {
+            Debug.Assert((uint)regDst <= 0x1f);
+            Debug.Assert((uint)regSrc <= 0x1f);
+            Debug.Assert((offset >= short.MinValue) && (offset <= short.MaxValue));
+
+            Builder.EmitUInt(0x3c000000u | ((uint)regDst << 21) | ((uint)regSrc << 16) | ((uint)offset & 0xffff));
+        }
+
         public void EmitMOV(Register regDst, Register regSrc)
         {
             Debug.Assert(regSrc != Register.R0);
@@ -104,7 +113,7 @@ namespace ILCompiler.DependencyAnalysis.Ppc64le
         public void EmitJMPIfZero(Register regSrc, ISymbolNode symbol)
         {
             EmitCMPDI(regSrc, 0);
-            EmitBNE(4 + GetJmpInstructionSize(symbol, Builder.CountBytes + 4));
+            EmitBNE(4 + GetJmpInstructionSize(symbol));
             EmitJMP(symbol);
         }
 
@@ -129,27 +138,11 @@ namespace ILCompiler.DependencyAnalysis.Ppc64le
         {
             Debug.Assert(regDst != Register.R0);
 
-            Builder.RequireInitialPointerAlignment();
+            Builder.EmitReloc(symbol, RelocType.IMAGE_REL_BASED_PPC64_TOC16_HA);
+            EmitADDIS(regDst, Register.R2, 0);
 
-            if (((Builder.CountBytes + 24) & 7) != 0)
-            {
-                EmitNOP();
-            }
-
-            // Load a nearby absolute pointer literal through LR, while preserving
-            // the caller's LR for the tail-called target.
-            EmitMFLR(Register.R0);
-
-            // bcl 20, 31, .+4
-            Builder.EmitUInt(0x429f0005);
-            EmitMFLR(regDst);
-            EmitMTLR(Register.R0);
-
-            EmitLD(regDst, regDst, 16);
-
-            // b .+12
-            Builder.EmitUInt(0x4800000c);
-            Builder.EmitReloc(symbol, RelocType.IMAGE_REL_BASED_DIR64);
+            Builder.EmitReloc(symbol, RelocType.IMAGE_REL_BASED_PPC64_TOC16_LO);
+            EmitADDI(regDst, regDst, 0);
         }
 
         private void EmitMFLR(Register regDst)
@@ -172,19 +165,19 @@ namespace ILCompiler.DependencyAnalysis.Ppc64le
             Builder.EmitUInt(0x40820000u | ((uint)offset & 0xfffc));
         }
 
-        private static int GetJmpInstructionSize(ISymbolNode symbol, int startOffset)
+        private static int GetJmpInstructionSize(ISymbolNode symbol)
         {
             if (!symbol.RepresentsIndirectionCell)
             {
                 return 4;
             }
 
-            return GetLoadSymbolInstructionSize(startOffset) + 4 + 8;
+            return GetLoadSymbolInstructionSize() + 4 + 8;
         }
 
-        private static int GetLoadSymbolInstructionSize(int startOffset)
+        private static int GetLoadSymbolInstructionSize()
         {
-            return 32 + ((((startOffset + 24) & 7) != 0) ? 4 : 0);
+            return 8;
         }
     }
 }

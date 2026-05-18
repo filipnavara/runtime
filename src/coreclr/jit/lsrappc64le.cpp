@@ -95,20 +95,30 @@ int LinearScan::BuildNode(GenTree* tree)
         case GT_LEA:
         {
             GenTreeAddrMode* lea = tree->AsAddrMode();
-            assert(lea->HasBase());
-            assert(!lea->HasIndex());
-            assert(lea->gtScale <= 1);
+            assert(lea->HasBase() || lea->HasIndex());
 
-            BuildUse(lea->Base());
+            int srcCount = 0;
 
-            if (!emitter::isValidSimm16(lea->Offset()))
+            if (lea->HasBase())
+            {
+                BuildUse(lea->Base());
+                srcCount++;
+            }
+
+            if (lea->HasIndex())
+            {
+                BuildUse(lea->Index());
+                srcCount++;
+            }
+
+            if (!emitter::isValidSimm16(lea->Offset()) || (lea->HasBase() && lea->HasIndex() && (lea->gtScale > 1)))
             {
                 buildInternalIntRegisterDefForNode(tree);
                 buildInternalRegisterUses();
             }
 
             BuildDef(tree);
-            return 1;
+            return srcCount;
         }
 
         case GT_INDEX_ADDR:
@@ -306,6 +316,68 @@ int LinearScan::BuildNode(GenTree* tree)
 
         case GT_STORE_BLK:
             return BuildBlockStore(tree->AsBlk());
+
+        case GT_LCLHEAP:
+        {
+            assert(tree->IsValue());
+
+            int  srcCount      = 0;
+            bool needExtraTemp = (m_compiler->lvaOutgoingArgSpaceSize > 0);
+
+            GenTree* size = tree->gtGetOp1();
+            if (size->IsCnsIntOrI())
+            {
+                assert(size->isContained());
+
+                size_t sizeVal = size->AsIntCon()->gtIconVal;
+                if (sizeVal != 0)
+                {
+                    sizeVal = AlignUp(sizeVal, STACK_ALIGN);
+
+                    if (sizeVal <= (REGSIZE_BYTES * 2 * 4))
+                    {
+                        // No internal registers needed.
+                    }
+                    else if (!m_compiler->info.compInitMem)
+                    {
+                        if (sizeVal < m_compiler->eeGetPageSize())
+                        {
+                            needExtraTemp |= !emitter::isValidSimm16(-static_cast<ssize_t>(sizeVal));
+                        }
+                        else
+                        {
+                            buildInternalIntRegisterDefForNode(tree);
+                            buildInternalIntRegisterDefForNode(tree);
+                            needExtraTemp = true;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                srcCount = 1;
+                if (!m_compiler->info.compInitMem)
+                {
+                    buildInternalIntRegisterDefForNode(tree);
+                    buildInternalIntRegisterDefForNode(tree);
+                    needExtraTemp = true;
+                }
+            }
+
+            if (needExtraTemp)
+            {
+                buildInternalIntRegisterDefForNode(tree);
+            }
+
+            if (!size->isContained())
+            {
+                BuildUse(size);
+            }
+
+            buildInternalRegisterUses();
+            BuildDef(tree);
+            return srcCount;
+        }
 
         case GT_PUTARG_STK:
             return BuildPutArgStk(tree->AsPutArgStk());

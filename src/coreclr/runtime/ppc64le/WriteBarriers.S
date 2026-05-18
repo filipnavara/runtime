@@ -20,9 +20,11 @@
 //   r11: destination address
 DEFINE_FUNC RhpByRefAssignRef
 DEFINE_FUNC RhpByRefAssignRefAVLocation1
-    ld 10, 0(10)
+    ld 12, 0(10)
+    std 12, 0(11)
     addi 10, 10, 8
-    b RhpCheckedAssignRef
+    addi 11, 11, 8
+    blr
 END_FUNC RhpByRefAssignRefAVLocation1
 END_FUNC RhpByRefAssignRef
 
@@ -59,20 +61,34 @@ END_FUNC RhpAssignRefPowerPC64
 //   r3: destination address
 //   r4: object reference
 DEFINE_FUNC RhpAssignRef
-    std 4, 0(3)
-    blr
+    mr 11, 3
+    mr 10, 4
+    b RhpAssignRefPpc64le
 END_FUNC RhpAssignRef
 
 DEFINE_FUNC RhpCheckedLockCmpXchg
 DEFINE_FUNC RhpCheckedLockCmpXchgAVLocation
-    trap
+1:
+    ldarx 6, 0, 3
+    cmpd 6, 5
+    bne 2f
+    stdcx. 4, 0, 3
+    bne 1b
+    sync
+2:
+    mr 3, 6
     blr
 END_FUNC RhpCheckedLockCmpXchgAVLocation
 END_FUNC RhpCheckedLockCmpXchg
 
 DEFINE_FUNC RhpCheckedXchg
 DEFINE_FUNC RhpCheckedXchgAVLocation
-    trap
+1:
+    ldarx 6, 0, 3
+    stdcx. 4, 0, 3
+    bne 1b
+    sync
+    mr 3, 6
     blr
 END_FUNC RhpCheckedXchgAVLocation
 END_FUNC RhpCheckedXchg

@@ -57,6 +57,12 @@ static instruction ppcBranchInsForCondition(GenCondition cond)
     }
 }
 
+static void ppcEmitCompareAndBranch(emitter* emit, instruction cmpIns, regNumber reg1, regNumber reg2, instruction brIns, BasicBlock* target)
+{
+    emit->emitIns_R_R(cmpIns, EA_PTRSIZE, reg1, reg2);
+    emit->emitIns_J(brIns, target);
+}
+
 static instruction ppcReverseBranchIns(instruction ins)
 {
     switch (ins)
@@ -113,6 +119,10 @@ static int ppcGetLclFrameOffset(Compiler* compiler, unsigned lclNum, unsigned lc
 {
     bool fpBased = false;
     int  offset  = compiler->lvaFrameAddress(lclNum, &fpBased) + lclOffs;
+    if (lclNum == compiler->lvaOutgoingArgSpaceVar)
+    {
+        offset += FIRST_ARG_STACK_OFFS;
+    }
     *baseReg     = fpBased ? REG_FPBASE : REG_SPBASE;
     return offset;
 }
@@ -129,6 +139,18 @@ static bool ppcOffsetRangeFitsSimm16(int offset, unsigned size)
     return emitter::isValidSimm16(offset) && emitter::isValidSimm16(lastOffset);
 }
 
+static void ppcEmitSignExtendSmallLoadIfNeeded(emitter* emit, var_types targetType, regNumber targetReg)
+{
+    if (targetType == TYP_BYTE)
+    {
+        emit->emitIns_R_R(INS_extsb, EA_PTRSIZE, targetReg, targetReg);
+    }
+    else if (targetType == TYP_SHORT)
+    {
+        emit->emitIns_R_R(INS_extsh, EA_PTRSIZE, targetReg, targetReg);
+    }
+}
+
 static unsigned ppcGetDeferredFrameSizeForSaveArea(unsigned frameSize, unsigned saveAreaSize, unsigned maxDeferredSize)
 {
     assert(saveAreaSize >= REGSIZE_BYTES);
@@ -142,6 +164,16 @@ static unsigned ppcGetDeferredFrameSizeForSaveArea(unsigned frameSize, unsigned 
 
     // Keep the fixed save area encodable by applying most of a large local frame after saving the registers.
     return maxDeferredSize & ~(STACK_ALIGN - 1);
+}
+
+static unsigned ppcGetLocalFrameSize(Compiler* compiler, unsigned frameSize)
+{
+    return roundUp(frameSize + compiler->lvaOutgoingArgSpaceSize + REGSIZE_BYTES, STACK_ALIGN);
+}
+
+static unsigned ppcGetLocalFrameSize(Compiler* compiler)
+{
+    return ppcGetLocalFrameSize(compiler, compiler->compLclFrameSize);
 }
 
 void CodeGen::genFnEpilog(BasicBlock* block)
@@ -442,6 +474,10 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
 
         case GT_STORE_BLK:
             genCodeForStoreBlk(treeNode->AsBlk());
+            break;
+
+        case GT_LCLHEAP:
+            genLclHeap(treeNode);
             break;
 
         case GT_PUTARG_STK:
@@ -1062,6 +1098,7 @@ void CodeGen::genCodeForLclVar(GenTreeLclVar* tree)
 
         genInstrWithConstant(ins_Load(targetType), emitTypeSize(targetType), tree->GetRegNum(), baseReg, offset,
                              tmpReg);
+        ppcEmitSignExtendSmallLoadIfNeeded(GetEmitter(), targetType, tree->GetRegNum());
         genProduceReg(tree);
     }
 }
@@ -1080,6 +1117,7 @@ void CodeGen::genCodeForLclFld(GenTreeLclFld* tree)
     regNumber tmpReg  = emitter::isValidSimm16(offset) ? REG_NA : internalRegisters.GetSingle(tree);
 
     genInstrWithConstant(ins_Load(targetType), emitTypeSize(targetType), targetReg, baseReg, offset, tmpReg);
+    ppcEmitSignExtendSmallLoadIfNeeded(GetEmitter(), targetType, targetReg);
     genProduceReg(tree);
 }
 
@@ -1113,29 +1151,80 @@ void CodeGen::genCodeForLclAddr(GenTreeLclFld* lclAddrNode)
 void CodeGen::genLeaInstruction(GenTreeAddrMode* lea)
 {
     assert(lea->OperIs(GT_LEA));
-    assert(lea->HasBase());
-    assert(!lea->HasIndex());
-    assert(lea->gtScale <= 1);
+    assert(lea->HasBase() || lea->HasIndex());
 
     genConsumeOperands(lea);
 
-    emitAttr  size      = emitTypeSize(lea);
-    int       offset    = lea->Offset();
-    regNumber baseReg   = lea->Base()->GetRegNum();
-    regNumber targetReg = lea->GetRegNum();
+    emitAttr  size       = emitTypeSize(lea);
+    int       offset     = lea->Offset();
+    regNumber baseReg    = lea->HasBase() ? lea->Base()->GetRegNum() : REG_NA;
+    regNumber indexReg   = lea->HasIndex() ? lea->Index()->GetRegNum() : REG_NA;
+    regNumber targetReg  = lea->GetRegNum();
+    unsigned  scale      = lea->HasIndex() ? lea->GetScale() : 0;
+    regNumber addendReg  = indexReg;
 
-    if (emitter::isValidSimm16(offset))
+    if (lea->HasIndex() && (scale > 1))
     {
-        if ((offset != 0) || (targetReg != baseReg))
+        assert(isPow2(scale));
+        unsigned shift = genLog2(scale);
+
+        if (lea->HasBase())
         {
-            GetEmitter()->emitIns_R_R_I(INS_addi, size, targetReg, baseReg, offset);
+            addendReg = internalRegisters.GetSingle(lea);
         }
+        else
+        {
+            addendReg = targetReg;
+        }
+
+        GetEmitter()->emitIns_R_R_I(INS_sldi, size, addendReg, indexReg, shift);
     }
-    else
+
+    if (lea->HasBase() && lea->HasIndex())
     {
+        GetEmitter()->emitIns_R_R_R(INS_add, size, targetReg, baseReg, addendReg);
+    }
+    else if (lea->HasBase())
+    {
+        if (emitter::isValidSimm16(offset))
+        {
+            if ((offset != 0) || (targetReg != baseReg))
+            {
+                GetEmitter()->emitIns_R_R_I(INS_addi, size, targetReg, baseReg, offset);
+            }
+
+            genProduceReg(lea);
+            return;
+        }
+
         regNumber tmpReg = internalRegisters.GetSingle(lea);
         instGen_Set_Reg_To_Imm(EA_PTRSIZE, tmpReg, offset);
         GetEmitter()->emitIns_R_R_R(INS_add, size, targetReg, baseReg, tmpReg);
+
+        genProduceReg(lea);
+        return;
+    }
+    else
+    {
+        assert(lea->HasIndex());
+        if ((scale <= 1) && (targetReg != indexReg))
+        {
+            GetEmitter()->emitIns_R_R_I(INS_addi, size, targetReg, indexReg, 0);
+        }
+    }
+
+    if (offset != 0)
+    {
+        if (emitter::isValidSimm16(offset))
+        {
+            GetEmitter()->emitIns_R_R_I(INS_addi, size, targetReg, targetReg, offset);
+        }
+        else
+        {
+            regNumber tmpReg = internalRegisters.GetSingle(lea);
+            instGen_Set_Reg_To_Imm(EA_PTRSIZE, tmpReg, offset);
+            GetEmitter()->emitIns_R_R_R(INS_add, size, targetReg, targetReg, tmpReg);
+        }
     }
 
     genProduceReg(lea);
@@ -1365,6 +1454,7 @@ void CodeGen::genCodeForIndir(GenTreeIndir* tree)
 
     GetEmitter()->emitIns_R_AR(ins_Load(targetType), emitActualTypeSize(targetType), targetReg, baseReg,
                                static_cast<int>(offset));
+    ppcEmitSignExtendSmallLoadIfNeeded(GetEmitter(), targetType, targetReg);
 
     if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
     {
@@ -2304,6 +2394,7 @@ bool CodeGen::genInstrWithConstant(
     {
         case INS_addi:
         case INS_ld:
+        case INS_lwa:
         case INS_lwz:
         case INS_lhz:
         case INS_lbz:
@@ -2595,7 +2686,7 @@ int CodeGenInterface::genSPtoFPdelta() const
 {
     assert(isFramePointerUsed());
 
-    int delta = m_compiler->compLclFrameSize;
+    int delta = ppcGetLocalFrameSize(m_compiler);
     if ((m_compiler->lvaMonAcquired != BAD_VAR_NUM) && !m_compiler->opts.IsOSR())
     {
         delta -= TARGET_POINTER_SIZE;
@@ -2615,8 +2706,8 @@ int CodeGenInterface::genTotalFrameSize() const
         fixedFrameSize += PPC_FRAME_POINTER_SAVE_SIZE;
     }
 
-    unsigned totalFrameSize = fixedFrameSize + (m_compiler->compCalleeRegsPushed * REGSIZE_BYTES) +
-                              m_compiler->compLclFrameSize;
+    unsigned totalFrameSize =
+        fixedFrameSize + (m_compiler->compCalleeRegsPushed * REGSIZE_BYTES) + ppcGetLocalFrameSize(m_compiler);
     totalFrameSize          = roundUp(totalFrameSize, STACK_ALIGN);
 
     assert(totalFrameSize <= INT_MAX);
@@ -2681,9 +2772,16 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize, 
     regMaskTP callTargetMask = genRegMask(callTargetReg);
     noway_assert((callTargetMask & killSet) == callTargetMask);
 
-    if (helperFunction.accessType == IAT_VALUE)
+    if ((helperFunction.accessType == IAT_VALUE) && m_compiler->opts.compReloc)
+    {
+        params.callType = EC_FUNC_TOKEN;
+        params.addr     = helperFunction.addr;
+    }
+    else if (helperFunction.accessType == IAT_VALUE)
     {
         instGen_Set_Reg_To_Imm(EA_PTRSIZE, callTargetReg, reinterpret_cast<ssize_t>(helperFunction.addr));
+        params.callType = EC_INDIR_R;
+        params.ireg     = callTargetReg;
     }
     else
     {
@@ -2691,12 +2789,15 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize, 
 
         instGen_Set_Reg_To_Imm(EA_PTRSIZE, callTargetReg, reinterpret_cast<ssize_t>(helperFunction.addr));
         GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, callTargetReg, callTargetReg, 0);
+        params.callType = EC_INDIR_R;
+        params.ireg     = callTargetReg;
     }
 
-    regSet.verifyRegUsed(callTargetReg);
+    if (params.callType == EC_INDIR_R)
+    {
+        regSet.verifyRegUsed(callTargetReg);
+    }
 
-    params.callType = EC_INDIR_R;
-    params.ireg     = callTargetReg;
     params.methHnd  = m_compiler->eeFindHelper(helper);
     params.argSize  = argSize;
     params.retSize  = retSize;
@@ -2704,6 +2805,190 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize, 
     genEmitCallWithCurrentGC(params);
 
     regSet.verifyRegistersUsed(killSet);
+}
+
+void CodeGen::genLclHeap(GenTree* tree)
+{
+    assert(tree->OperIs(GT_LCLHEAP));
+    assert(m_compiler->compLocallocUsed);
+    assert(isFramePointerUsed());
+    assert(genStackLevel == 0);
+
+    emitter* emit = GetEmitter();
+    GenTree* size = tree->AsOp()->gtOp1;
+    assert((genActualType(size->TypeGet()) == TYP_INT) || (genActualType(size->TypeGet()) == TYP_I_IMPL));
+
+    regNumber            targetReg                = tree->GetRegNum();
+    regNumber            regCnt                   = REG_NA;
+    regNumber            tempReg                  = REG_NA;
+    regNumber            spSourceReg              = REG_SPBASE;
+    var_types            type                     = genActualType(size->TypeGet());
+    const target_size_t  pageSize                 = m_compiler->eeGetPageSize();
+    BasicBlock*          endLabel                 = nullptr;
+    unsigned             stackAdjustment          = 0;
+    const target_ssize_t ILLEGAL_LAST_TOUCH_DELTA = (target_ssize_t)-1;
+    target_ssize_t       lastTouchDelta           = ILLEGAL_LAST_TOUCH_DELTA;
+
+    size_t amount = 0;
+    if (size->IsCnsIntOrI())
+    {
+        assert(size->isContained());
+
+        amount = size->AsIntCon()->gtIconVal;
+        if (amount == 0)
+        {
+            instGen_Set_Reg_To_Zero(EA_PTRSIZE, targetReg);
+            goto BAILOUT;
+        }
+
+        amount = AlignUp(amount, STACK_ALIGN);
+    }
+    else
+    {
+        genConsumeRegAndCopy(size, targetReg);
+
+        endLabel = genCreateTempLabel();
+        instGen_Set_Reg_To_Zero(EA_PTRSIZE, REG_R0);
+        ppcEmitCompareAndBranch(emit, INS_cmpd, targetReg, REG_R0, INS_beq, endLabel);
+
+        if (m_compiler->info.compInitMem)
+        {
+            regCnt = targetReg;
+        }
+        else
+        {
+            regCnt = internalRegisters.Extract(tree);
+            if (regCnt != targetReg)
+            {
+                emit->emitIns_Mov(emitActualTypeSize(type), regCnt, targetReg, /* canSkip */ true);
+            }
+        }
+
+        genInstrWithConstant(INS_addi, emitActualTypeSize(type), regCnt, regCnt, STACK_ALIGN - 1, REG_R0);
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, -static_cast<ssize_t>(STACK_ALIGN));
+        emit->emitIns_R_R_R(INS_and, emitActualTypeSize(type), regCnt, regCnt, REG_R0);
+    }
+
+    if (m_compiler->lvaOutgoingArgSpaceSize > 0)
+    {
+        unsigned outgoingArgSpaceAligned = roundUp(m_compiler->lvaOutgoingArgSpaceSize, STACK_ALIGN);
+        tempReg                          = internalRegisters.Extract(tree);
+        genInstrWithConstant(INS_addi, EA_PTRSIZE, REG_SPBASE, REG_SPBASE, outgoingArgSpaceAligned, tempReg);
+        stackAdjustment += outgoingArgSpaceAligned;
+    }
+
+    if (size->IsCnsIntOrI())
+    {
+        assert(amount > 0);
+
+        size_t slotPairCount = amount / (REGSIZE_BYTES * 2);
+        if (m_compiler->info.compInitMem && (slotPairCount <= 4))
+        {
+            genStackPointerAdjustment(-static_cast<ssize_t>(amount), tempReg, nullptr, /* reportUnwindData */ false);
+            instGen_Set_Reg_To_Zero(EA_PTRSIZE, REG_R0);
+
+            ssize_t offset = static_cast<ssize_t>(amount);
+            while (slotPairCount != 0)
+            {
+                offset -= REGSIZE_BYTES;
+                emit->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R0, REG_SPBASE, offset);
+                offset -= REGSIZE_BYTES;
+                emit->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R0, REG_SPBASE, offset);
+                slotPairCount--;
+            }
+
+            lastTouchDelta = 0;
+            goto ALLOC_DONE;
+        }
+
+        if (!m_compiler->info.compInitMem && (amount < pageSize))
+        {
+            emit->emitIns_R_R_I(INS_lwz, EA_4BYTE, REG_R0, REG_SPBASE, 0);
+            lastTouchDelta = amount;
+            genStackPointerAdjustment(-static_cast<ssize_t>(amount), tempReg, nullptr, /* reportUnwindData */ false);
+            goto ALLOC_DONE;
+        }
+
+        assert(regCnt == REG_NA);
+        regCnt = m_compiler->info.compInitMem ? targetReg : internalRegisters.Extract(tree);
+        instGen_Set_Reg_To_Imm((amount <= UINT32_MAX) ? EA_4BYTE : EA_8BYTE, regCnt, static_cast<ssize_t>(amount));
+    }
+
+    if (m_compiler->info.compInitMem)
+    {
+        BasicBlock* loop = genCreateTempLabel();
+        genDefineTempLabel(loop);
+
+        emit->emitIns_R_R_I(INS_addi, EA_PTRSIZE, REG_SPBASE, REG_SPBASE, -static_cast<ssize_t>(REGSIZE_BYTES * 2));
+        instGen_Set_Reg_To_Zero(EA_PTRSIZE, REG_R0);
+        emit->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R0, REG_SPBASE, REGSIZE_BYTES);
+        emit->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R0, REG_SPBASE, 0);
+
+        assert(genIsValidIntReg(regCnt));
+        emit->emitIns_R_R_I(INS_addi, emitActualTypeSize(type), regCnt, regCnt,
+                            -static_cast<ssize_t>(REGSIZE_BYTES * 2));
+        ppcEmitCompareAndBranch(emit, INS_cmpd, regCnt, REG_R0, INS_bne, loop);
+
+        lastTouchDelta = 0;
+    }
+    else
+    {
+        if (tempReg == REG_NA)
+        {
+            tempReg = internalRegisters.Extract(tree);
+        }
+
+        assert(regCnt != tempReg);
+
+        // regCnt now holds the final SP value.
+        emit->emitIns_R_R_R(INS_subf, EA_PTRSIZE, regCnt, regCnt, REG_SPBASE);
+
+        regNumber pageReg = internalRegisters.GetSingle(tree);
+        noway_assert(pageReg != tempReg);
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, pageReg, static_cast<ssize_t>(pageSize));
+        regSet.verifyRegUsed(pageReg);
+
+        emit->emitIns_Mov(EA_PTRSIZE, tempReg, REG_SPBASE, /* canSkip */ false);
+
+        BasicBlock* loop = genCreateTempLabel();
+        genDefineTempLabel(loop);
+        emit->emitIns_R_R_I(INS_lwz, EA_4BYTE, REG_R0, tempReg, 0);
+        emit->emitIns_R_R_R(INS_subf, EA_PTRSIZE, tempReg, pageReg, tempReg);
+        ppcEmitCompareAndBranch(emit, INS_cmpld, tempReg, regCnt, INS_bge, loop);
+
+        emit->emitIns_Mov(EA_PTRSIZE, REG_SPBASE, regCnt, /* canSkip */ false);
+        spSourceReg = regCnt;
+    }
+
+ALLOC_DONE:
+    if (stackAdjustment != 0)
+    {
+        assert((stackAdjustment % STACK_ALIGN) == 0);
+        assert((lastTouchDelta == ILLEGAL_LAST_TOUCH_DELTA) || (lastTouchDelta >= 0));
+
+        if ((lastTouchDelta == ILLEGAL_LAST_TOUCH_DELTA) ||
+            (stackAdjustment + static_cast<unsigned>(lastTouchDelta) + STACK_PROBE_BOUNDARY_THRESHOLD_BYTES > pageSize))
+        {
+            emit->emitIns_R_R_I(INS_lwz, EA_4BYTE, REG_R0, REG_SPBASE, 0);
+        }
+
+        genStackPointerAdjustment(-static_cast<ssize_t>(stackAdjustment), tempReg, nullptr,
+                                  /* reportUnwindData */ false);
+        genInstrWithConstant(INS_addi, EA_PTRSIZE, targetReg, REG_SPBASE, static_cast<ssize_t>(stackAdjustment),
+                             tempReg);
+    }
+    else
+    {
+        emit->emitIns_Mov(EA_PTRSIZE, targetReg, spSourceReg, /* canSkip */ true);
+    }
+
+BAILOUT:
+    if (endLabel != nullptr)
+    {
+        genDefineTempLabel(endLabel);
+    }
+
+    genProduceReg(tree);
 }
 
 void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
@@ -3008,6 +3293,11 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
             genConsumeReg(target);
             params.ireg = target->GetRegNum();
         }
+        else if (m_compiler->opts.compReloc && target->AsIntCon()->ImmedValNeedsReloc(m_compiler))
+        {
+            params.callType = EC_FUNC_TOKEN;
+            params.addr     = reinterpret_cast<void*>(target->AsIntCon()->IconValue());
+        }
         else
         {
             params.ireg = internalRegisters.GetSingle(call);
@@ -3033,15 +3323,27 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
             assert(call->IsHelperCall() || (call->gtCallType == CT_USER_FUNC));
             assert(call->gtDirectCallAddress != nullptr);
 
-            params.ireg = REG_DEFAULT_HELPER_CALL_TARGET;
-            instGen_Set_Reg_To_Imm(EA_PTRSIZE, params.ireg, reinterpret_cast<ssize_t>(call->gtDirectCallAddress));
+            if (m_compiler->opts.compReloc)
+            {
+                params.callType = EC_FUNC_TOKEN;
+                params.addr     = call->gtDirectCallAddress;
+            }
+            else
+            {
+                params.ireg = REG_DEFAULT_HELPER_CALL_TARGET;
+                instGen_Set_Reg_To_Imm(EA_PTRSIZE, params.ireg, reinterpret_cast<ssize_t>(call->gtDirectCallAddress));
+            }
         }
     }
 
-    assert(genIsValidIntReg(params.ireg));
-    regSet.verifyRegUsed(params.ireg);
+    if (params.callType != EC_FUNC_TOKEN)
+    {
+        assert(genIsValidIntReg(params.ireg));
+        regSet.verifyRegUsed(params.ireg);
 
-    params.callType = EC_INDIR_R;
+        params.callType = EC_INDIR_R;
+    }
+
     genEmitCallWithCurrentGC(params);
 }
 
@@ -3074,11 +3376,6 @@ void CodeGen::genPopCalleeSavedRegisters(bool jmpEpilog)
 {
     assert(m_compiler->compGeneratingEpilog);
 
-    if (m_compiler->compLocallocUsed)
-    {
-        NYI_POWERPC64("localloc frames");
-    }
-
     regMaskTP regsToRestoreMask = regSet.rsGetModifiedCalleeSavedRegsMask();
 
     if ((regsToRestoreMask & RBM_FLT_CALLEE_SAVED) != RBM_NONE)
@@ -3086,13 +3383,27 @@ void CodeGen::genPopCalleeSavedRegisters(bool jmpEpilog)
         NYI_POWERPC64("floating-point callee-saved registers");
     }
 
-    int framePointerOffset = m_compiler->compLclFrameSize;
+    int framePointerOffset = ppcGetLocalFrameSize(m_compiler);
     int linkRegisterOffset = framePointerOffset;
     int calleeSaveOffset   = linkRegisterOffset + PPC_LINK_REGISTER_SAVE_SIZE;
     int saveAreaSize       = PPC_LINK_REGISTER_SAVE_SIZE + (m_compiler->compCalleeRegsPushed * REGSIZE_BYTES);
 
     if (isFramePointerUsed())
     {
+        if (m_compiler->compLocallocUsed)
+        {
+            int spToFPDelta = genSPtoFPdelta();
+            if (emitter::isValidSimm16(-spToFPDelta))
+            {
+                GetEmitter()->emitIns_R_R_I(INS_addi, EA_PTRSIZE, REG_SPBASE, REG_FPBASE, -spToFPDelta);
+            }
+            else
+            {
+                instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_TMP_0, spToFPDelta);
+                GetEmitter()->emitIns_R_R_R(INS_subf, EA_PTRSIZE, REG_SPBASE, REG_TMP_0, REG_FPBASE);
+            }
+        }
+
         linkRegisterOffset = framePointerOffset + PPC_FRAME_POINTER_SAVE_SIZE;
         calleeSaveOffset   = linkRegisterOffset + PPC_LINK_REGISTER_SAVE_SIZE;
         saveAreaSize += PPC_FRAME_POINTER_SAVE_SIZE;
@@ -3156,6 +3467,8 @@ void CodeGen::genOSRHandleTier0CalleeSavedRegistersAndFrame()
 
 void CodeGen::genAllocLclFrame(unsigned frameSize, regNumber initReg, bool* pInitRegZeroed, regMaskTP maskArgRegsLiveIn)
 {
+    frameSize = ppcGetLocalFrameSize(m_compiler, frameSize);
+
     unsigned calleeSaveSize       = m_compiler->compCalleeRegsPushed * REGSIZE_BYTES;
     unsigned framePointerSaveSize = isFramePointerUsed() ? PPC_FRAME_POINTER_SAVE_SIZE : 0;
     unsigned totalFrameSize       = frameSize + framePointerSaveSize + PPC_LINK_REGISTER_SAVE_SIZE + calleeSaveSize;
@@ -3307,7 +3620,8 @@ void CodeGen::genSetGSSecurityCookie(regNumber initReg, bool* pInitRegZeroed)
     }
     else
     {
-        instGen_Set_Reg_To_Imm(EA_PTRSIZE, initReg,
+        emitAttr addrAttr = m_compiler->opts.compReloc ? EA_HANDLE_CNS_RELOC : EA_PTRSIZE;
+        instGen_Set_Reg_To_Imm(addrAttr, initReg,
                                reinterpret_cast<ssize_t>(m_compiler->gsGlobalSecurityCookieAddr));
         GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, initReg, initReg, 0);
     }
@@ -3569,7 +3883,8 @@ void CodeGen::genEmitGSCookieCheck(bool tailCall)
     }
     else
     {
-        instGen_Set_Reg_To_Imm(EA_PTRSIZE, regGSConst,
+        emitAttr addrAttr = m_compiler->opts.compReloc ? EA_HANDLE_CNS_RELOC : EA_PTRSIZE;
+        instGen_Set_Reg_To_Imm(addrAttr, regGSConst,
                                reinterpret_cast<ssize_t>(m_compiler->gsGlobalSecurityCookieAddr));
         GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, regGSConst, regGSConst, 0);
     }
@@ -3906,6 +4221,22 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
                                      ssize_t   imm,
                                      insFlags flags DEBUGARG(size_t targetHandle) DEBUGARG(GenTreeFlags gtFlags))
 {
+    if (EA_IS_CNS_RELOC(size))
+    {
+        assert(m_compiler->opts.compReloc);
+        assert(reg != REG_R2);
+
+        emitAttr relocAttr = EA_HANDLE_CNS_RELOC;
+        if (EA_IS_BYREF(size))
+        {
+            relocAttr = EA_SET_FLG(relocAttr, EA_BYREF_FLG);
+        }
+
+        GetEmitter()->emitIns_R_R_I(INS_addis, relocAttr, reg, REG_R2, imm);
+        GetEmitter()->emitIns_R_R_I(INS_addi, relocAttr, reg, reg, imm);
+        return;
+    }
+
     auto signExtend16 = [](uint64_t value) -> ssize_t {
         ssize_t part = static_cast<ssize_t>(value & 0xFFFF);
         return (part >= 0x8000) ? (part - 0x10000) : part;

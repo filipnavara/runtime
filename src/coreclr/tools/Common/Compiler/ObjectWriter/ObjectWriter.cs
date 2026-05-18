@@ -335,6 +335,7 @@ namespace ILCompiler.ObjectWriter
             else
             {
                 GetOrCreateSection(ObjectNodeSection.ManagedCodeUnixContentSection);
+                GetOrCreateSection(ObjectNodeSection.UnboxingStubUnixContentSection);
             }
 
             // Create sections for exception handling

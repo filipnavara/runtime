@@ -27,7 +27,7 @@
 #elif TARGET_RISCV64
 #define THUNK_SIZE  20
 #elif TARGET_POWERPC64
-#define THUNK_SIZE  20
+#define THUNK_SIZE  24
 #else
 #define THUNK_SIZE  (2 * OS_PAGE_SIZE) // This will cause RhpGetNumThunksPerBlock to return 0
 #endif
@@ -77,6 +77,11 @@ static uint32_t Ppc64EncodeSpr(uint32_t spr)
 static uint32_t Ppc64EncodeMtSpr(uint32_t code, uint32_t rs, uint32_t spr)
 {
     return code | (rs << 21) | Ppc64EncodeSpr(spr);
+}
+
+static uint32_t Ppc64EncodeMfSpr(uint32_t code, uint32_t rt, uint32_t spr)
+{
+    return code | (rt << 21) | Ppc64EncodeSpr(spr);
 }
 
 static intptr_t Ppc64HighAdjusted16(intptr_t value)
@@ -326,17 +331,23 @@ EXTERN_C HRESULT QCALLTYPE RhAllocateThunksMapping(void** ppThunksSection)
 
 #elif defined(TARGET_POWERPC64)
 
-            // addis    r11, r12, ha(<delta from thunk stub to data block>)
+            // mfctr    r11
+            // addis    r11, r11, ha(<delta from thunk stub to data block>)
             // addi     r11, r11, lo(<delta from thunk stub to data block>)
             // ld       r12, <common stub cell offset>(r11)
             // mtctr    r12
             // bctr
             //
-            // The ELFv2 function pointer call convention sets r12 to the target entry address,
-            // which is this thunk stub on entry.
+            // Indirect branches and calls reach the thunk through ctr. Use ctr instead
+            // of r12: cached interface dispatch keeps the interface dispatch cell in r12.
 
-            intptr_t dataDelta = pCurrentDataAddress - pCurrentThunkAddress;
-            *((uint32_t*)pCurrentThunkAddress) = Ppc64EncodeDForm(0x3c000000, 11, 12, Ppc64HighAdjusted16(dataDelta));
+            uint8_t* pThunkStartAddress = pCurrentThunkAddress;
+
+            *((uint32_t*)pCurrentThunkAddress) = Ppc64EncodeMfSpr(0x7c0002a6, 11, 9);
+            pCurrentThunkAddress += 4;
+
+            intptr_t dataDelta = pCurrentDataAddress - pThunkStartAddress;
+            *((uint32_t*)pCurrentThunkAddress) = Ppc64EncodeDForm(0x3c000000, 11, 11, Ppc64HighAdjusted16(dataDelta));
             pCurrentThunkAddress += 4;
 
             *((uint32_t*)pCurrentThunkAddress) = Ppc64EncodeDForm(0x38000000, 11, 11, Ppc64Low16(dataDelta));

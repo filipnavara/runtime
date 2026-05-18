@@ -9883,6 +9883,9 @@ public:
     void unwindPadding(); // Generate a sequence of unwind NOP codes representing instructions between the last
                           // instruction and the current location.
     void unwindSaveReg(regNumber reg, int offset);
+#if defined(TARGET_POWERPC64)
+    void unwindSaveLinkRegister(int offset);
+#endif
     void unwindSaveRegPair(regNumber reg1, regNumber reg2, int offset);
     void unwindReturn(regNumber reg);
 #endif // defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)

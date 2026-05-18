@@ -17,6 +17,8 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 #if defined(TARGET_POWERPC64)
 
+static constexpr short DWARF_POWERPC64_LINK_REGISTER = 65;
+
 #if defined(FEATURE_CFI_SUPPORT)
 short Compiler::mapRegNumToDwarfReg(regNumber reg)
 {
@@ -194,6 +196,27 @@ void Compiler::unwindSaveReg(regNumber reg, int offset)
 
         pu->AddCode(0xDC | (BYTE)(x >> 4), (BYTE)(x << 4) | (BYTE)(z >> 8), (BYTE)z);
     }
+}
+
+void Compiler::unwindSaveLinkRegister(int offset)
+{
+    assert(0 <= offset && offset <= 2047);
+    assert((offset % REGSIZE_BYTES) == 0);
+
+#if defined(FEATURE_CFI_SUPPORT)
+    if (generateCFIUnwindCodes())
+    {
+        if (compGeneratingProlog)
+        {
+            FuncInfoDsc*   func     = funCurrentFunc();
+            UNATIVE_OFFSET cbProlog = unwindGetCurrentOffset(func);
+
+            createCfiCode(func, cbProlog, CFI_REL_OFFSET, DWARF_POWERPC64_LINK_REGISTER, offset);
+        }
+
+        return;
+    }
+#endif // FEATURE_CFI_SUPPORT
 }
 
 void Compiler::unwindSaveRegPair(regNumber reg1, regNumber reg2, int offset)

@@ -3507,6 +3507,7 @@ void CodeGen::genAllocLclFrame(unsigned frameSize, regNumber initReg, bool* pIni
 
         GetEmitter()->emitIns_R_R(INS_mflr, EA_PTRSIZE, REG_R0, REG_R0);
         GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R0, REG_SPBASE, static_cast<int>(linkRegisterOffset));
+        m_compiler->unwindSaveLinkRegister(static_cast<int>(linkRegisterOffset));
 
         genSaveCalleeSavedRegistersHelp(regSet.rsMaskCalleeSaved, static_cast<int>(calleeSaveOffset));
 
@@ -3757,6 +3758,7 @@ void CodeGen::genFuncletProlog(BasicBlock* block)
 
     GetEmitter()->emitIns_R_R(INS_mflr, EA_PTRSIZE, REG_R0, REG_R0);
     GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R0, REG_SPBASE, linkRegisterOffset);
+    m_compiler->unwindSaveLinkRegister(linkRegisterOffset);
 
     genSaveCalleeSavedRegistersHelp(maskSaveRegs, calleeSavedOffset);
 

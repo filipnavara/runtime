@@ -4335,12 +4335,22 @@ namespace Internal.JitInterface
             relocDelta += addlDelta;
 
             RelocType relocType = GetRelocType(fRelocType);
-            // relocDelta is stored as the value
-            Relocation.WriteValue(relocType, location, relocDelta);
+            int relocationAddend = 0;
+            if (relocType is RelocType.IMAGE_REL_BASED_PPC64_TOC16_LO or RelocType.IMAGE_REL_BASED_PPC64_TOC16_HA)
+            {
+                // The high-adjusted half cannot faithfully encode its original addend in the instruction.
+                relocationAddend = relocDelta;
+                Relocation.WriteValue(relocType, location, 0);
+            }
+            else
+            {
+                // relocDelta is stored as the value
+                Relocation.WriteValue(relocType, location, relocDelta);
+            }
 
             if (sourceBlock.Count == 0)
                 sourceBlock.EnsureCapacity(length / 32 + 1);
-            sourceBlock.Add(new Relocation(relocType, relocOffset, relocTarget));
+            sourceBlock.Add(new Relocation(relocType, relocOffset, relocTarget, relocationAddend));
         }
 
         private CorInfoReloc getRelocTypeHint(void* target)

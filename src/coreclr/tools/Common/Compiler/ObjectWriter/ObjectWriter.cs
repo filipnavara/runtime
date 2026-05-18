@@ -582,7 +582,7 @@ namespace ILCompiler.ObjectWriter
                         blockToRelocate.Data.AsSpan(reloc.Offset),
                         reloc.RelocType,
                         relocSymbolName,
-                        relocTarget.Offset);
+                        relocTarget.Offset + reloc.Addend);
 
                     if (_options.HasFlag(ObjectWritingOptions.ControlFlowGuard))
                     {

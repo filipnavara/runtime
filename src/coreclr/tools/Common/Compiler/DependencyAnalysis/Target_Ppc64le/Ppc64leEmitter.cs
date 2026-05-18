@@ -48,6 +48,15 @@ namespace ILCompiler.DependencyAnalysis.Ppc64le
             Builder.EmitUInt(0x3c000000u | ((uint)regDst << 21) | ((uint)regSrc << 16) | ((uint)offset & 0xffff));
         }
 
+        public void EmitSUBF(Register regDst, Register regSubtrahend, Register regMinuend)
+        {
+            Debug.Assert((uint)regDst <= 0x1f);
+            Debug.Assert((uint)regSubtrahend <= 0x1f);
+            Debug.Assert((uint)regMinuend <= 0x1f);
+
+            Builder.EmitUInt(0x7c000050u | ((uint)regDst << 21) | ((uint)regSubtrahend << 16) | ((uint)regMinuend << 11));
+        }
+
         public void EmitMOV(Register regDst, Register regSrc)
         {
             Debug.Assert(regSrc != Register.R0);
@@ -145,6 +154,25 @@ namespace ILCompiler.DependencyAnalysis.Ppc64le
             EmitADDI(regDst, regDst, 0);
         }
 
+        public void EmitEstablishTocFromEntryPoint(ISymbolNode entryPoint)
+        {
+            const int pcAnchorOffset = 8;
+
+            EmitMFLR(Register.R0);
+            EmitBLNextInstruction();
+            EmitMFLR(Register.R2);
+            EmitMTLR(Register.R0);
+
+            Builder.EmitReloc(entryPoint, RelocType.IMAGE_REL_BASED_PPC64_TOC16_HA);
+            EmitADDIS(Register.R11, Register.R0, 0);
+
+            Builder.EmitReloc(entryPoint, RelocType.IMAGE_REL_BASED_PPC64_TOC16_LO);
+            EmitADDI(Register.R11, Register.R11, 0);
+
+            EmitSUBF(Register.R2, Register.R11, Register.R2);
+            EmitADDI(Register.R2, Register.R2, -pcAnchorOffset);
+        }
+
         private void EmitMFLR(Register regDst)
         {
             Debug.Assert((uint)regDst <= 0x1f);
@@ -155,6 +183,12 @@ namespace ILCompiler.DependencyAnalysis.Ppc64le
         {
             Debug.Assert((uint)regSrc <= 0x1f);
             Builder.EmitUInt(0x7c0803a6u | ((uint)regSrc << 21));
+        }
+
+        private void EmitBLNextInstruction()
+        {
+            // bl .+4
+            Builder.EmitUInt(0x48000005);
         }
 
         private void EmitBNE(int offset)

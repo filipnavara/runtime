@@ -696,6 +696,8 @@
     ASSIGN_REG(Lr, LR)
 
 #define ASSIGN_INTEGER_REGS  \
+    ASSIGN_REG(R3, R3)       \
+    ASSIGN_REG(R4, R4)       \
     ASSIGN_REG(R14, R14)     \
     ASSIGN_REG(R15, R15)     \
     ASSIGN_REG(R16, R16)     \
@@ -994,4 +996,3 @@ uint64_t GetPC(void* context)
 #else
     PORTABILITY_ASSERT("NATIVE_CONTEXT");
 #endif // TARGET_ARM
-

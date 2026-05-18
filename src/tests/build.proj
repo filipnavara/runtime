@@ -248,6 +248,8 @@
       <GroupBuildCmd>$(GroupBuildCmd) /bl:$(ArtifactsDir)/log/$(Configuration)/InnerManagedTestBuild.$(__TestGroupToBuild).binlog</GroupBuildCmd>
       <GroupBuildCmd Condition="'$(CrossBuild)' == 'true'">$(GroupBuildCmd) "/p:CrossBuild=true"</GroupBuildCmd>
       <GroupBuildCmd Condition="'$(CppCompilerAndLinker)' != ''">$(GroupBuildCmd) "/p:CppCompilerAndLinker=$(CppCompilerAndLinker)"</GroupBuildCmd>
+      <GroupBuildCmd Condition="'$(LinkerFlavor)' != ''">$(GroupBuildCmd) "/p:LinkerFlavor=$(LinkerFlavor)"</GroupBuildCmd>
+      <GroupBuildCmd Condition="'$(SysRoot)' != ''">$(GroupBuildCmd) "/p:SysRoot=$(SysRoot)"</GroupBuildCmd>
       <GroupBuildCmd Condition="'$(TestBuildMode)' == 'nativeaot'">$(GroupBuildCmd) "/p:DefaultBuildAllTarget=BuildNativeAot"</GroupBuildCmd>
       <GroupBuildCmd Condition="'$(IlcMultiModule)' == 'true'">$(GroupBuildCmd) "/p:IlcMultiModule=true"</GroupBuildCmd>
       <GroupBuildCmd Condition="'$(IlcUseServerGc)' == 'false'">$(GroupBuildCmd) "/p:IlcUseServerGc=false"</GroupBuildCmd>

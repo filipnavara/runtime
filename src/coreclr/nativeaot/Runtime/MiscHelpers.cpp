@@ -400,6 +400,30 @@ FCIMPL1(uint8_t *, RhGetCodeTarget, uint8_t * pCodeOrg)
         return (uint8_t *)((int64_t)pCode + distToTarget);
     }
 
+#elif TARGET_POWERPC64
+    uint32_t * pCode = (uint32_t *)pCodeOrg;
+    if (pCode[0] == 0x38630008) // addi r3, r3, 8
+    {
+        // unboxing sequence
+        unboxingStub = true;
+        pCode++;
+    }
+
+    // Is this an unboxing stub followed by a relative branch?
+    // b target
+    if (unboxingStub && (pCode[0] & 0xfc000003) == 0x48000000)
+    {
+        // Branch displacement is a signed 26-bit value encoded in bits 6..29
+        // with the low two zero bits included. It is relative to the branch
+        // instruction address.
+        int32_t distToTarget = (int32_t)(pCode[0] & 0x03fffffc);
+        if ((distToTarget & 0x02000000) != 0)
+        {
+            distToTarget |= (int32_t)0xfc000000;
+        }
+        return (uint8_t *)pCode + distToTarget;
+    }
+
 #else
     UNREFERENCED_PARAMETER(unboxingStub);
     PORTABILITY_ASSERT("RhGetCodeTarget");

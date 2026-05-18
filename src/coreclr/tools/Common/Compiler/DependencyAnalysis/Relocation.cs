@@ -115,6 +115,7 @@ namespace ILCompiler.DependencyAnalysis
         public readonly RelocType RelocType;
         public readonly int Offset;
         public readonly ISymbolNode Target;
+        public readonly int Addend;
 
         //*****************************************************************************
         //  Extract the 16-bit immediate from ARM Thumb2 Instruction (format T2_N)
@@ -645,12 +646,13 @@ namespace ILCompiler.DependencyAnalysis
             Debug.Assert(GetPpc64Toc16(pCode) == unchecked((short)value));
         }
 
-        public Relocation(RelocType relocType, int offset, ISymbolNode target)
+        public Relocation(RelocType relocType, int offset, ISymbolNode target, int addend = 0)
         {
             Debug.Assert(target != null);
             RelocType = relocType;
             Offset = offset;
             Target = target;
+            Addend = addend;
         }
 
         public static unsafe void WriteValue(RelocType relocType, void* location, long value)

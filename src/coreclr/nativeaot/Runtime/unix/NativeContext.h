@@ -272,6 +272,59 @@ struct NATIVE_CONTEXT
         lambda((size_t*)&Fp());
     }
 
+#elif defined(TARGET_POWERPC64)
+
+    uint64_t& R0();
+    uint64_t& R1();
+    uint64_t& R2();
+    uint64_t& R3();
+    uint64_t& R4();
+    uint64_t& R5();
+    uint64_t& R6();
+    uint64_t& R7();
+    uint64_t& R8();
+    uint64_t& R9();
+    uint64_t& R10();
+    uint64_t& R11();
+    uint64_t& R12();
+    uint64_t& R13();
+    uint64_t& R14();
+    uint64_t& R15();
+    uint64_t& R16();
+    uint64_t& R17();
+    uint64_t& R18();
+    uint64_t& R19();
+    uint64_t& R20();
+    uint64_t& R21();
+    uint64_t& R22();
+    uint64_t& R23();
+    uint64_t& R24();
+    uint64_t& R25();
+    uint64_t& R26();
+    uint64_t& R27();
+    uint64_t& R28();
+    uint64_t& R29();
+    uint64_t& R30();
+    uint64_t& R31();
+    uint64_t& Lr();
+    uint64_t& Pc();
+
+    uintptr_t GetIp() { return (uintptr_t)Pc(); }
+    uintptr_t GetSp() { return (uintptr_t)R1(); }
+
+    template <typename F>
+    void ForEachPossibleObjectRef(F lambda)
+    {
+        ASSERT(&R0() + 1 == &R1());
+        ASSERT(&R0() + 31 == &R31());
+
+        for (uint64_t* pReg = &R0(); pReg <= &R31(); pReg++)
+            lambda((size_t*)pReg);
+
+        // LR can be used as a scratch register.
+        lambda((size_t*)&Lr());
+    }
+
 #else
     PORTABILITY_ASSERT("NATIVE_CONTEXT");
 #endif // TARGET_ARM

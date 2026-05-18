@@ -36,7 +36,7 @@ FCIMPLEND
     //
     #define GCHeapMemoryBarrier()
 #else
-    #define GCHeapMemoryBarrier() MemoryBarrier()
+    #define GCHeapMemoryBarrier() PalMemoryBarrier()
 #endif
 
 // Move memory, in a way that is compatible with a move onto the heap, but

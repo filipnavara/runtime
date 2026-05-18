@@ -121,10 +121,151 @@ GenTree* Lowering::LowerBinaryArithmetic(GenTreeOp* binOp)
 
 void Lowering::LowerBlockStore(GenTreeBlk* blkNode)
 {
+    GenTree* dstAddr = blkNode->Addr();
+    GenTree* src     = blkNode->Data();
+    unsigned size    = blkNode->Size();
+
+    if (blkNode->OperIsInitBlkOp())
+    {
+        if (src->OperIs(GT_INIT_VAL))
+        {
+            src->SetContained();
+            src = src->AsUnOp()->gtGetOp1();
+        }
+
+        if ((size <= m_compiler->getUnrollThreshold(Compiler::UnrollKind::Memset)) && src->OperIs(GT_CNS_INT))
+        {
+            blkNode->gtBlkOpKind = GenTreeBlk::BlkOpKindUnroll;
+
+            ssize_t fill = src->AsIntCon()->IconValue() & 0xFF;
+            if (fill == 0)
+            {
+                src->SetContained();
+            }
+            else if (size >= REGSIZE_BYTES)
+            {
+                fill *= 0x0101010101010101LL;
+                src->gtType = TYP_LONG;
+            }
+            else
+            {
+                fill *= 0x01010101;
+            }
+            src->AsIntCon()->SetIconValue(fill);
+
+            ContainBlockStoreAddress(blkNode, size, dstAddr, nullptr);
+        }
+        else if (blkNode->IsZeroingGcPointersOnHeap())
+        {
+            blkNode->gtBlkOpKind = GenTreeBlk::BlkOpKindLoop;
+            src->SetContained();
+        }
+        else
+        {
+            LowerBlockStoreAsHelperCall(blkNode);
+        }
+        return;
+    }
+
+    assert(src->OperIs(GT_IND, GT_LCL_VAR, GT_LCL_FLD));
+    src->SetContained();
+
+    if (src->OperIs(GT_LCL_VAR))
+    {
+        const unsigned srcLclNum = src->AsLclVar()->GetLclNum();
+        m_compiler->lvaSetVarDoNotEnregister(srcLclNum DEBUGARG(DoNotEnregisterReason::BlockOp));
+    }
+
+    ClassLayout* layout               = blkNode->GetLayout();
+    bool         doCpObj              = layout->HasGCPtr();
+    unsigned     copyBlockUnrollLimit = m_compiler->getUnrollThreshold(Compiler::UnrollKind::Memcpy);
+
+    if (doCpObj && (size <= copyBlockUnrollLimit) && blkNode->IsAddressNotOnHeap(m_compiler))
+    {
+        doCpObj                  = false;
+        blkNode->gtBlkOpGcUnsafe = true;
+    }
+
+    if (doCpObj)
+    {
+        if (TryLowerBlockStoreAsGcBulkCopyCall(blkNode))
+        {
+            return;
+        }
+
+        assert(dstAddr->TypeIs(TYP_BYREF, TYP_I_IMPL));
+        blkNode->gtBlkOpKind = GenTreeBlk::BlkOpKindCpObjUnroll;
+    }
+    else if (blkNode->OperIs(GT_STORE_BLK) && (size <= copyBlockUnrollLimit))
+    {
+        blkNode->gtBlkOpKind = GenTreeBlk::BlkOpKindUnroll;
+
+        if (src->OperIs(GT_IND))
+        {
+            ContainBlockStoreAddress(blkNode, size, src->AsIndir()->Addr(), src->AsIndir());
+        }
+
+        ContainBlockStoreAddress(blkNode, size, dstAddr, nullptr);
+    }
+    else
+    {
+        assert(blkNode->OperIs(GT_STORE_BLK));
+        LowerBlockStoreAsHelperCall(blkNode);
+    }
+}
+
+void Lowering::ContainBlockStoreAddress(GenTreeBlk* blkNode, unsigned size, GenTree* addr, GenTree* addrParent)
+{
+    assert(blkNode->OperIs(GT_STORE_BLK) && (blkNode->gtBlkOpKind == GenTreeBlk::BlkOpKindUnroll));
+    assert(size < INT32_MAX);
+
+    if (addr->OperIs(GT_LCL_ADDR) && IsContainableLclAddr(addr->AsLclFld(), size))
+    {
+        addr->SetContained();
+        return;
+    }
+
+    if (!addr->OperIs(GT_ADD) || addr->gtOverflow() || !addr->AsOp()->gtGetOp2()->OperIs(GT_CNS_INT))
+    {
+        return;
+    }
+
+    GenTreeIntCon* offsetNode = addr->AsOp()->gtGetOp2()->AsIntCon();
+    ssize_t        offset     = offsetNode->IconValue();
+
+    if (!emitter::isValidSimm16(offset) || !emitter::isValidSimm16(offset + static_cast<int>(size)))
+    {
+        return;
+    }
+
+    if (!IsSafeToContainMem(blkNode, addrParent, addr))
+    {
+        return;
+    }
+
+    BlockRange().Remove(offsetNode);
+
+    addr->ChangeOper(GT_LEA);
+    addr->AsAddrMode()->SetIndex(nullptr);
+    addr->AsAddrMode()->SetScale(0);
+    addr->AsAddrMode()->SetOffset(static_cast<int>(offset));
+    addr->SetContained();
 }
 
 void Lowering::LowerPutArgStk(GenTreePutArgStk* putArgNode)
 {
+    GenTree* src = putArgNode->Data();
+
+    if (src->TypeIs(TYP_STRUCT))
+    {
+        MakeSrcContained(putArgNode, src);
+
+        if (src->OperIs(GT_LCL_VAR))
+        {
+            m_compiler->lvaSetVarDoNotEnregister(src->AsLclVar()->GetLclNum()
+                                                     DEBUGARG(DoNotEnregisterReason::IsStructArg));
+        }
+    }
 }
 
 void Lowering::LowerCast(GenTree* node)

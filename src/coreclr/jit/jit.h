@@ -437,8 +437,10 @@ typedef ptrdiff_t ssize_t;
 // Arm64 Windows supports FEATURE_ARG_SPLIT, note this is different from
 // the official Arm64 ABI.
 // Case: splitting 16 byte struct between x7 and stack
-// LoongArch64's ABI supports FEATURE_ARG_SPLIT which splitting 16 byte struct between a7 and stack.
-#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+// LoongArch64/PPC64LE/RISC-V64 ABIs support FEATURE_ARG_SPLIT which splits a 16 byte struct between
+// the last argument register and the stack.
+#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64) ||         \
+    defined(TARGET_RISCV64)
 #define FEATURE_ARG_SPLIT 1
 #else
 #define FEATURE_ARG_SPLIT 0

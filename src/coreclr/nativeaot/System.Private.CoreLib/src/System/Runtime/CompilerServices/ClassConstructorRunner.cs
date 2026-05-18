@@ -266,7 +266,7 @@ namespace System.Runtime.CompilerServices
 #endif
 
                 // WASMTODO: Remove this when the Initialize method gets called by the runtime startup
-#if TARGET_WASM
+#if TARGET_WASM || TARGET_POWERPC64
                 if (s_cctorGlobalLock == null)
                 {
                     Interlocked.CompareExchange(ref s_cctorGlobalLock, new Lock(useTrivialWaits: true), null);
@@ -275,7 +275,7 @@ namespace System.Runtime.CompilerServices
                 {
                     Interlocked.CompareExchange(ref s_cctorArrays, new Cctor[10][], null);
                 }
-#endif // TARGET_WASM
+#endif // TARGET_WASM || TARGET_POWERPC64
 
                 using (s_cctorGlobalLock.EnterScope())
                 {

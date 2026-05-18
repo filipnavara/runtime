@@ -12,6 +12,8 @@
 #include "emit.h"
 #include "codegen.h"
 
+static constexpr int PPC_STACK_BASE_VAR = INT_MAX;
+
 const instruction emitJumpKindInstructions[] = {
     INS_nop,
 
@@ -436,7 +438,7 @@ void emitter::emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int va
     ssize_t imm = offs;
     bool    FPbased = false;
 
-    if (varx != BAD_VAR_NUM)
+    if (varx != PPC_STACK_BASE_VAR)
     {
         int base = m_compiler->lvaFrameAddress(varx, &FPbased);
         imm      = base + offs;
@@ -459,7 +461,7 @@ void emitter::emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int va
     id->idReg2(FPbased ? REG_FPBASE : REG_SPBASE);
     id->idCodeSize(sizeof(code_t));
 
-    if (varx != BAD_VAR_NUM)
+    if (varx != PPC_STACK_BASE_VAR)
     {
         id->idAddr()->iiaLclVar.initLclVarAddr(varx, offs);
         id->idSetIsLclVar();
@@ -482,7 +484,7 @@ void emitter::emitIns_S_R(instruction ins, emitAttr attr, regNumber ireg, int va
     ssize_t imm = offs;
     bool    FPbased = false;
 
-    if (varx != BAD_VAR_NUM)
+    if (varx != PPC_STACK_BASE_VAR)
     {
         int base = m_compiler->lvaFrameAddress(varx, &FPbased);
         imm      = base + offs;
@@ -500,7 +502,7 @@ void emitter::emitIns_S_R(instruction ins, emitAttr attr, regNumber ireg, int va
     id->idReg2(FPbased ? REG_FPBASE : REG_SPBASE);
     id->idCodeSize(sizeof(code_t));
 
-    if (varx != BAD_VAR_NUM)
+    if (varx != PPC_STACK_BASE_VAR)
     {
         id->idAddr()->iiaLclVar.initLclVarAddr(varx, offs);
         id->idSetIsLclVar();
@@ -557,7 +559,7 @@ void emitter::emitIns_R_ARR(instruction ins, emitAttr attr, regNumber ireg, regN
 
     (void)reg;
     (void)rg2;
-    emitIns_R_S(ins, attr, ireg, BAD_VAR_NUM, disp);
+    emitIns_R_S(ins, attr, ireg, PPC_STACK_BASE_VAR, disp);
 }
 
 void emitter::emitIns_Mov(

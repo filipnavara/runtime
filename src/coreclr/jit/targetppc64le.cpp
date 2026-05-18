@@ -60,6 +60,8 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
 {
     const CORINFO_FPSTRUCT_LOWERING* lowering = nullptr;
 
+    const bool isManagedCall = m_info.CallConv == CorInfoCallConvExtension::Managed;
+
     unsigned intFields  = 0;
     unsigned floatFields = 0;
     unsigned passedSize;
@@ -69,7 +71,7 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
     {
         passedSize = structLayout->GetSize();
         unsigned maxPassMultiregBytes =
-            (m_info.CallConv == CorInfoCallConvExtension::Managed) ? MAX_PASS_MULTIREG_BYTES : (4 * TARGET_POINTER_SIZE);
+            isManagedCall ? MAX_PASS_MULTIREG_BYTES : (MAX_ARG_REG_COUNT * TARGET_POINTER_SIZE);
         if (passedSize > maxPassMultiregBytes)
         {
             passedByRef = true;
@@ -100,19 +102,28 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
         floatFields = varTypeIsFloating(type) ? 1 : 0;
     }
 
+    if (!isManagedCall && varTypeIsStruct(type) && !passedByRef && (floatFields > 0) && (intFields > 0))
+    {
+        // Mixed floating-point/integer aggregates are not homogeneous floating
+        // aggregates in the PPC64 ELFv2 ABI, so pass them in integer chunks.
+        lowering    = nullptr;
+        floatFields = 0;
+        intFields   = 0;
+    }
+
     assert((floatFields > 0) || (intFields == 0));
 
     auto passOnStack = [this](unsigned offset, unsigned size) -> ABIPassingSegment {
         assert(size > 0);
-        assert(size <= 4 * TARGET_POINTER_SIZE);
+        assert(size <= MAX_ARG_REG_COUNT * TARGET_POINTER_SIZE);
         assert((m_stackArgSize % TARGET_POINTER_SIZE) == 0);
         ABIPassingSegment seg = ABIPassingSegment::OnStack(m_stackArgSize, offset, size);
         m_stackArgSize += roundUp(size, TARGET_POINTER_SIZE);
         return seg;
     };
 
-    if ((m_info.CallConv != CorInfoCallConvExtension::Managed) && varTypeIsStruct(type) && !passedByRef &&
-        (floatFields == 0) && (intFields == 0) && (m_intRegs.Count() > 0))
+    if (!isManagedCall && varTypeIsStruct(type) && !passedByRef && (floatFields == 0) && (intFields == 0) &&
+        (m_intRegs.Count() > 0))
     {
         const unsigned numSegments = roundUp(passedSize, TARGET_POINTER_SIZE) / TARGET_POINTER_SIZE;
         assert(numSegments <= MAX_ARG_REG_COUNT);

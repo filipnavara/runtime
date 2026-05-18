@@ -302,6 +302,11 @@ namespace ILCompiler.DependencyAnalysis
 
             _methodEntrypoints = new MethodEntrypointHashtable(this);
 
+            _ppc64leUnmanagedCallersOnlyExportThunks = new NodeCache<MethodDesc, Ppc64leUnmanagedCallersOnlyExportThunkNode>(method =>
+            {
+                return new Ppc64leUnmanagedCallersOnlyExportThunkNode(method, MethodEntrypoint(method, unboxingStub: false));
+            });
+
             _tentativeMethodEntrypoints = new NodeCache<MethodDesc, IMethodNode>((MethodDesc method) =>
             {
                 IMethodNode entrypoint = MethodEntrypoint(method, unboxingStub: false);
@@ -1099,6 +1104,7 @@ namespace ILCompiler.DependencyAnalysis
         }
 
         private MethodEntrypointHashtable _methodEntrypoints;
+        private NodeCache<MethodDesc, Ppc64leUnmanagedCallersOnlyExportThunkNode> _ppc64leUnmanagedCallersOnlyExportThunks;
         private NodeCache<MethodDesc, IMethodNode> _unboxingStubs;
         private NodeCache<IMethodNode, MethodAssociatedDataNode> _methodAssociatedData;
 
@@ -1110,6 +1116,14 @@ namespace ILCompiler.DependencyAnalysis
             }
 
             return _methodEntrypoints.GetOrCreateValue(method);
+        }
+
+        public ISymbolNode Ppc64leUnmanagedCallersOnlyExportThunk(MethodDesc method)
+        {
+            Debug.Assert(Target.Architecture == TargetArchitecture.Ppc64le);
+            Debug.Assert(method.IsUnmanagedCallersOnly);
+
+            return _ppc64leUnmanagedCallersOnlyExportThunks.GetOrAdd(method);
         }
 
         protected NodeCache<MethodDesc, IMethodNode> _tentativeMethodEntrypoints;

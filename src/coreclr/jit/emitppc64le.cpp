@@ -146,7 +146,60 @@ bool emitter::emitInsIsLoadOrStore(instruction ins)
 
 bool emitter::emitInsMayWriteToGCReg(instruction ins)
 {
-    return !emitInsIsStore(ins) && (ins != INS_nop) && (ins != INS_trap);
+    switch (ins)
+    {
+        case INS_mflr:
+
+        case INS_add:
+        case INS_subf:
+        case INS_mulhw:
+        case INS_mulhwu:
+        case INS_mullw:
+        case INS_mulhd:
+        case INS_mulhdu:
+        case INS_mulld:
+        case INS_divw:
+        case INS_divd:
+        case INS_divwu:
+        case INS_divdu:
+        case INS_slw:
+        case INS_sld:
+        case INS_sraw:
+        case INS_srad:
+        case INS_srw:
+        case INS_srd:
+        case INS_sldi:
+        case INS_and:
+        case INS_andc:
+        case INS_or:
+        case INS_orc:
+        case INS_xor:
+        case INS_xori:
+        case INS_eqv:
+        case INS_neg:
+        case INS_not:
+        case INS_extsb:
+        case INS_extsh:
+        case INS_extsw:
+        case INS_mffprd:
+        case INS_clrldi:
+        case INS_addi:
+        case INS_addis:
+        case INS_mr:
+        case INS_mov:
+        case INS_ori:
+        case INS_oris:
+
+        case INS_ld:
+        case INS_lwa:
+        case INS_lwz:
+        case INS_lhz:
+        case INS_lbz:
+            return true;
+
+        default:
+            return false;
+    }
 }
 
 /*static*/ emitter::code_t emitter::emitInsCode(instruction ins)
@@ -595,21 +648,23 @@ emitter::instrDesc* emitter::emitNewInstrLoadImm(emitAttr attr, cnsval_ssize_t c
 
 size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 {
-    BYTE*  dst      = *dp;
-    size_t codeSize = id->idCodeSize();
+    BYTE*  dst           = *dp;
+    BYTE*  dstAfterOne   = dst + sizeof(code_t);
+    size_t codeSize      = id->idCodeSize();
+    size_t instrDescSize = emitSizeOfInsDsc(id);
+    code_t code          = emitInsCode(id->idIns());
 
     if (id->idInsOpt() == INS_OPTS_C)
     {
         codeSize = emitOutputCall(dst, id);
         *dp      = dst + codeSize;
-        return emitSizeOfInsDsc(id);
+        return instrDescSize;
     }
 
     if (id->idInsOpt() == INS_OPTS_RC)
     {
         codeSize = (id->idIns() == INS_addi) ? emitOutputConstAddr(dst, id) : emitOutputConstLoad(dst, id);
-        *dp      = dst + codeSize;
-        return emitSizeOfInsDsc(id);
+        goto UPDATE_GC_INFO;
     }
 
     if (id->idInsOpt() == INS_OPTS_RL)
@@ -622,11 +677,8 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         }
 
         codeSize = emitOutputLabelLoad(dst, id);
-        *dp      = dst + codeSize;
-        return emitSizeOfInsDsc(id);
+        goto UPDATE_GC_INFO;
     }
-
-    code_t code = emitInsCode(id->idIns());
 
     switch (id->idIns())
     {
@@ -847,8 +899,63 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         emitRecordRelocation(dst, reinterpret_cast<void*>(emitGetInsSC(id)), relocType);
     }
 
-    *dp = dst + codeSize;
-    return emitSizeOfInsDsc(id);
+UPDATE_GC_INFO:
+    dst += codeSize;
+
+    // Determine if any registers now hold GC refs, or whether a register that was overwritten held a GC ref.
+    // We assume here that "id->idGCref()" is not GCT_NONE only if the instruction described by "id" writes a
+    // GC ref to register "id->idReg1()".
+    if (emitInsMayWriteToGCReg(id->idIns()))
+    {
+        if (id->idGCref() != GCT_NONE)
+        {
+            // The destination register only holds a valid GC reference once the entire multi-instruction
+            // sequence has completed.
+            emitGCregLiveUpd(id->idGCref(), id->idReg1(), dst);
+        }
+        else
+        {
+            // The first instruction of any sequence overwrites the destination register, so any prior live GC
+            // reference dies immediately after that first store.
+            emitGCregDeadUpd(id->idReg1(), dstAfterOne);
+        }
+    }
+
+    // Now determine if the instruction has written to a local variable stack location and either written a GC ref or
+    // overwritten one.
+    if (emitInsWritesToLclVarStackLoc(id))
+    {
+        int      varNum = id->idAddr()->iiaLclVar.lvaVarNum();
+        unsigned ofs    = AlignDown(id->idAddr()->iiaLclVar.lvaOffset(), TARGET_POINTER_SIZE);
+        bool     FPbased;
+        int      adr = m_compiler->lvaFrameAddress(varNum, &FPbased);
+
+        if (id->idGCref() != GCT_NONE)
+        {
+            emitGCvarLiveUpd(adr + ofs, varNum, id->idGCref(), dst DEBUG_ARG(varNum));
+        }
+        else
+        {
+            var_types vt;
+            if (varNum >= 0)
+            {
+                vt = var_types(m_compiler->lvaTable[varNum].lvType);
+            }
+            else
+            {
+                TempDsc* tmpDsc = codeGen->regSet.tmpFindNum(varNum);
+                vt              = tmpDsc->tdTempType();
+            }
+
+            if ((vt == TYP_REF) || (vt == TYP_BYREF))
+            {
+                emitGCvarDeadUpd(adr + ofs, dstAfterOne DEBUG_ARG(varNum));
+            }
+        }
+    }
+
+    *dp = dst;
+    return instrDescSize;
 }
 
 unsigned emitter::emitOutputLabelLoad(BYTE* dst, instrDesc* id)
@@ -1301,8 +1408,12 @@ unsigned emitter::emitOutputCall(BYTE* dst, instrDesc* id)
         }
     }
 
-    const unsigned callSize  = id->idCodeSize();
-    BYTE*          callInstr = dst + callSize;
+    const unsigned callSize = id->idCodeSize();
+
+    // Direct PPC64 calls are emitted as "bl target; nop". The link register points at the nop, not at the
+    // instruction after the whole descriptor, so GC register state for the call return must be recorded there.
+    // Indirect calls use "mtctr; bctrl" and return after the descriptor.
+    BYTE* callInstr = dst + (id->idIsDspReloc() ? sizeof(code_t) : callSize);
 
     if (gcrefRegs != emitThisGCrefRegs)
     {

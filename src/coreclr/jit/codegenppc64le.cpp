@@ -1293,39 +1293,39 @@ void CodeGen::genCodeForIndexAddr(GenTreeIndexAddr* node)
         indexForAddrReg = tempReg;
     }
 
-    regNumber targetReg = node->GetRegNum();
-    emitAttr  attr      = EA_PTRSIZE;
+    regNumber targetReg  = node->GetRegNum();
+    emitAttr  targetAttr = emitActualTypeSize(node);
 
     if (isPow2(node->gtElemSize))
     {
         unsigned scale = genLog2(node->gtElemSize);
         if (scale == 0)
         {
-            GetEmitter()->emitIns_R_R_R(INS_add, attr, targetReg, baseReg, indexForAddrReg);
+            GetEmitter()->emitIns_R_R_R(INS_add, targetAttr, targetReg, baseReg, indexForAddrReg);
         }
         else
         {
-            GetEmitter()->emitIns_R_R_I(INS_sldi, attr, tempReg, indexForAddrReg, scale);
-            GetEmitter()->emitIns_R_R_R(INS_add, attr, targetReg, baseReg, tempReg);
+            GetEmitter()->emitIns_R_R_I(INS_sldi, EA_PTRSIZE, tempReg, indexForAddrReg, scale);
+            GetEmitter()->emitIns_R_R_R(INS_add, targetAttr, targetReg, baseReg, tempReg);
         }
     }
     else
     {
         instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, static_cast<ssize_t>(node->gtElemSize));
-        GetEmitter()->emitIns_R_R_R(INS_mulld, attr, tempReg, indexForAddrReg, REG_R0);
-        GetEmitter()->emitIns_R_R_R(INS_add, attr, targetReg, baseReg, tempReg);
+        GetEmitter()->emitIns_R_R_R(INS_mulld, EA_PTRSIZE, tempReg, indexForAddrReg, REG_R0);
+        GetEmitter()->emitIns_R_R_R(INS_add, targetAttr, targetReg, baseReg, tempReg);
     }
 
     if (node->gtElemOffset != 0)
     {
         if (emitter::isValidSimm16(node->gtElemOffset))
         {
-            GetEmitter()->emitIns_R_R_I(INS_addi, attr, targetReg, targetReg, node->gtElemOffset);
+            GetEmitter()->emitIns_R_R_I(INS_addi, targetAttr, targetReg, targetReg, node->gtElemOffset);
         }
         else
         {
             instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, node->gtElemOffset);
-            GetEmitter()->emitIns_R_R_R(INS_add, attr, targetReg, targetReg, REG_R0);
+            GetEmitter()->emitIns_R_R_R(INS_add, targetAttr, targetReg, targetReg, REG_R0);
         }
     }
 

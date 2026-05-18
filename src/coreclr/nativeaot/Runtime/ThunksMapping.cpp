@@ -27,7 +27,7 @@
 #elif TARGET_RISCV64
 #define THUNK_SIZE  20
 #elif TARGET_POWERPC64
-#define THUNK_SIZE  0x20000 // This will cause RhpGetNumThunksPerBlock to return 0 until PPC64LE thunks are implemented.
+#define THUNK_SIZE  20
 #else
 #define THUNK_SIZE  (2 * OS_PAGE_SIZE) // This will cause RhpGetNumThunksPerBlock to return 0
 #endif
@@ -58,6 +58,36 @@ void EncodeThumb2Mov32(uint16_t * pCode, uint32_t value, uint8_t rDestination)
 {
     EncodeThumb2Mov16(pCode, (uint16_t)(value & 0x0000ffff), rDestination, false);
     EncodeThumb2Mov16(pCode + 2, (uint16_t)(value >> 16), rDestination, true);
+}
+#endif
+
+#ifdef TARGET_POWERPC64
+static uint32_t Ppc64EncodeDForm(uint32_t code, uint32_t rt, uint32_t ra, intptr_t imm)
+{
+    ASSERT((-0x8000 <= imm) && (imm <= 0x7fff));
+    return code | (rt << 21) | (ra << 16) | (static_cast<uint32_t>(imm) & 0xffff);
+}
+
+static uint32_t Ppc64EncodeSpr(uint32_t spr)
+{
+    ASSERT(spr < 1024);
+    return ((spr & 0x1f) << 16) | ((spr >> 5) << 11);
+}
+
+static uint32_t Ppc64EncodeMtSpr(uint32_t code, uint32_t rs, uint32_t spr)
+{
+    return code | (rs << 21) | Ppc64EncodeSpr(spr);
+}
+
+static intptr_t Ppc64HighAdjusted16(intptr_t value)
+{
+    return (value + 0x8000) >> 16;
+}
+
+static intptr_t Ppc64Low16(intptr_t value)
+{
+    intptr_t low = value & 0xffff;
+    return (low >= 0x8000) ? (low - 0x10000) : low;
 }
 #endif
 
@@ -292,6 +322,34 @@ EXTERN_C HRESULT QCALLTYPE RhAllocateThunksMapping(void** ppThunksSection)
             pCurrentThunkAddress += 4;
 
             *((uint32_t*)pCurrentThunkAddress) = 0x00008282;  // jalr zero, t0, 0
+            pCurrentThunkAddress += 4;
+
+#elif defined(TARGET_POWERPC64)
+
+            // addis    r11, r12, ha(<delta from thunk stub to data block>)
+            // addi     r11, r11, lo(<delta from thunk stub to data block>)
+            // ld       r12, <common stub cell offset>(r11)
+            // mtctr    r12
+            // bctr
+            //
+            // The ELFv2 function pointer call convention sets r12 to the target entry address,
+            // which is this thunk stub on entry.
+
+            intptr_t dataDelta = pCurrentDataAddress - pCurrentThunkAddress;
+            *((uint32_t*)pCurrentThunkAddress) = Ppc64EncodeDForm(0x3c000000, 11, 12, Ppc64HighAdjusted16(dataDelta));
+            pCurrentThunkAddress += 4;
+
+            *((uint32_t*)pCurrentThunkAddress) = Ppc64EncodeDForm(0x38000000, 11, 11, Ppc64Low16(dataDelta));
+            pCurrentThunkAddress += 4;
+
+            intptr_t commonStubCellOffset = OS_PAGE_SIZE - POINTER_SIZE - (i * POINTER_SIZE * 2);
+            *((uint32_t*)pCurrentThunkAddress) = Ppc64EncodeDForm(0xe8000000, 12, 11, commonStubCellOffset);
+            pCurrentThunkAddress += 4;
+
+            *((uint32_t*)pCurrentThunkAddress) = Ppc64EncodeMtSpr(0x7c0903a6, 12, 9);
+            pCurrentThunkAddress += 4;
+
+            *((uint32_t*)pCurrentThunkAddress) = 0x4e800420;
             pCurrentThunkAddress += 4;
 
 #else

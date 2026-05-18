@@ -4113,15 +4113,15 @@ void CodeGen::genFloatToIntCast(GenTree* treeNode)
 
     genConsumeOperands(treeNode->AsOp());
 
-    regNumber tempReg = internalRegisters.GetSingle(treeNode);
+    regNumber tempReg = internalRegisters.Extract(treeNode, RBM_ALLFLOAT);
     assert(genIsValidFloatReg(tempReg));
 
     instruction convertIns = INS_fctiwz;
-    if (isUnsigned && (dstSize == EA_8BYTE))
+    if (isUnsigned)
     {
         convertIns = INS_fctiduz;
     }
-    else if (isUnsigned || (dstSize == EA_8BYTE))
+    else if (dstSize == EA_8BYTE)
     {
         convertIns = INS_fctidz;
     }
@@ -4133,7 +4133,21 @@ void CodeGen::genFloatToIntCast(GenTree* treeNode)
     {
         if (isUnsigned)
         {
+            assert(dstType == TYP_UINT);
+
+            regNumber lowReg = internalRegisters.Extract(treeNode, RBM_ALLINT);
+            assert(genIsValidIntReg(lowReg));
+
+            GetEmitter()->emitIns_R_R_I(INS_clrldi, EA_8BYTE, lowReg, targetReg, 32);
+            GetEmitter()->emitIns_R_R(INS_cmpld, EA_8BYTE, targetReg, lowReg);
+
+            BasicBlock* doneLabel = genCreateTempLabel();
+            GetEmitter()->emitIns_J(INS_beq, doneLabel);
+
+            instGen_Set_Reg_To_Imm(EA_8BYTE, targetReg, -1);
             GetEmitter()->emitIns_R_R_I(INS_clrldi, EA_8BYTE, targetReg, targetReg, 32);
+
+            genDefineTempLabel(doneLabel);
         }
         else
         {

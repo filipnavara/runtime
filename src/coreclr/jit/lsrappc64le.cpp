@@ -188,6 +188,11 @@ int LinearScan::BuildNode(GenTree* tree)
             if (varTypeIsIntegral(tree) && varTypeIsFloating(cast->CastOp()))
             {
                 buildInternalFloatRegisterDefForNode(tree);
+                if (tree->AsCast()->CastToType() == TYP_UINT)
+                {
+                    buildInternalIntRegisterDefForNode(tree);
+                    setInternalRegsDelayFree = true;
+                }
                 hasInternal = true;
             }
 

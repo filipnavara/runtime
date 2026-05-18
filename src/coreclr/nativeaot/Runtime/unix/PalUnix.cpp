@@ -586,12 +586,12 @@ thread_local TlsDestructionMonitor tls_destructionMonitor;
 // This thread local variable is used for delegate marshalling
 PLATFORM_THREAD_LOCAL intptr_t tls_thunkData;
 
-#ifdef FEATURE_EMULATED_TLS
+#if defined(FEATURE_EMULATED_TLS) || defined(TARGET_POWERPC64)
 EXTERN_C intptr_t* RhpGetThunkData()
 {
     return &tls_thunkData;
 }
-#endif //FEATURE_EMULATED_TLS
+#endif // defined(FEATURE_EMULATED_TLS) || defined(TARGET_POWERPC64)
 
 FCIMPL0(intptr_t, RhGetCurrentThunkContext)
 {

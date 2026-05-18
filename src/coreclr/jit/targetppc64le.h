@@ -199,7 +199,7 @@
 #define RBM_SPBASE               RBM_SP
 #define STR_SPBASE               "r1"
 
-#define FIRST_ARG_STACK_OFFS    (6 * REGSIZE_BYTES)
+#define FIRST_ARG_STACK_OFFS    (12 * REGSIZE_BYTES)
 
 #define MAX_REG_ARG              8
 #define MAX_FLOAT_REG_ARG        13

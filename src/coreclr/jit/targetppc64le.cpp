@@ -68,7 +68,9 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
     if (varTypeIsStruct(type))
     {
         passedSize = structLayout->GetSize();
-        if (passedSize > MAX_PASS_MULTIREG_BYTES)
+        unsigned maxPassMultiregBytes =
+            (m_info.CallConv == CorInfoCallConvExtension::Managed) ? MAX_PASS_MULTIREG_BYTES : (4 * TARGET_POINTER_SIZE);
+        if (passedSize > maxPassMultiregBytes)
         {
             passedByRef = true;
             passedSize  = TARGET_POINTER_SIZE;
@@ -99,6 +101,33 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
     }
 
     assert((floatFields > 0) || (intFields == 0));
+
+    auto passOnStack = [this](unsigned offset, unsigned size) -> ABIPassingSegment {
+        assert(size > 0);
+        assert(size <= 4 * TARGET_POINTER_SIZE);
+        assert((m_stackArgSize % TARGET_POINTER_SIZE) == 0);
+        ABIPassingSegment seg = ABIPassingSegment::OnStack(m_stackArgSize, offset, size);
+        m_stackArgSize += roundUp(size, TARGET_POINTER_SIZE);
+        return seg;
+    };
+
+    if ((m_info.CallConv != CorInfoCallConvExtension::Managed) && varTypeIsStruct(type) && !passedByRef &&
+        (floatFields == 0) && (intFields == 0) && (m_intRegs.Count() > 0))
+    {
+        const unsigned numSegments = roundUp(passedSize, TARGET_POINTER_SIZE) / TARGET_POINTER_SIZE;
+        assert(numSegments <= MAX_ARG_REG_COUNT);
+
+        ABIPassingInformation info(comp, numSegments);
+        for (unsigned i = 0; i < numSegments; i++)
+        {
+            unsigned offset = i * TARGET_POINTER_SIZE;
+            unsigned size   = min(passedSize - offset, static_cast<unsigned>(TARGET_POINTER_SIZE));
+            info.Segment(i) = (m_intRegs.Count() > 0) ? ABIPassingSegment::InRegister(m_intRegs.Dequeue(), offset, size)
+                                                      : passOnStack(offset, size);
+        }
+
+        return info;
+    }
 
     if ((floatFields > 0) && (m_floatRegs.Count() >= floatFields) && (m_intRegs.Count() >= intFields))
     {
@@ -136,15 +165,6 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
             return ABIPassingInformation::FromSegments(comp, seg0, seg1);
         }
     }
-
-    auto passOnStack = [this](unsigned offset, unsigned size) -> ABIPassingSegment {
-        assert(size > 0);
-        assert(size <= 2 * TARGET_POINTER_SIZE);
-        assert((m_stackArgSize % TARGET_POINTER_SIZE) == 0);
-        ABIPassingSegment seg = ABIPassingSegment::OnStack(m_stackArgSize, offset, size);
-        m_stackArgSize += (size > TARGET_POINTER_SIZE) ? (2 * TARGET_POINTER_SIZE) : TARGET_POINTER_SIZE;
-        return seg;
-    };
 
     if (m_intRegs.Count() > 0)
     {

@@ -4528,6 +4528,14 @@ void Compiler::lvaFixVirtualFrameOffsets()
         {
             int localDelta = delta;
 
+#if defined(TARGET_POWERPC64)
+            if (varDsc->lvIsParam && !varDsc->lvIsRegArg)
+            {
+                assert(codeGen->isFramePointerUsed());
+                localDelta += FIRST_ARG_STACK_OFFS - codeGen->genCallerSPtoFPdelta();
+            }
+#endif
+
             if (frameLocalsDelta != 0 && varDsc->GetStackOffset() < frameBoundary)
             {
                 localDelta += frameLocalsDelta;

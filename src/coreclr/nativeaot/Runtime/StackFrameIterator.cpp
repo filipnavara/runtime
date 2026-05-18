@@ -1464,11 +1464,14 @@ void StackFrameIterator::UnwindFuncletInvokeThunk()
 #elif defined(TARGET_POWERPC64)
     SP = (PTR_uintptr_t)(m_RegDisplay.SP);
 
+    // PPC64LE funclet invoke thunks keep the platform frame header at the
+    // bottom of the frame and place the saved nonvolatile GPR block above
+    // their local slots. Skip directly to the saved FP/LR pair.
+    SP += EQUALS_RETURN_ADDRESS(m_ControlPC, RhpCallCatchFunclet2) ? (0x68 / sizeof(uintptr_t))
+                                                                  : (0x58 / sizeof(uintptr_t));
+
     if (!isFilterInvoke)
     {
-        // RhpCallCatchFunclet puts a couple of extra things on the stack that aren't put there by the other two
-        // thunks, but we don't need to know what they are here, so we just skip them.
-        SP += EQUALS_RETURN_ADDRESS(m_ControlPC, RhpCallCatchFunclet2) ? 6 : 4;
         // Save the preserved regs portion of the REGDISPLAY across the unwind through the C# EH dispatch code.
         m_funcletPtrs.pR14 = m_RegDisplay.pR14;
         m_funcletPtrs.pR15 = m_RegDisplay.pR15;
@@ -1903,6 +1906,8 @@ void StackFrameIterator::UnwindThrowSiteThunk()
     const uintptr_t STACKSIZEOF_ExInfo = ((sizeof(ExInfo) + (STACK_ALIGN_SIZE-1)) & ~(STACK_ALIGN_SIZE-1));
 #if defined(TARGET_AMD64) && !defined(UNIX_AMD64_ABI)
     const uintptr_t SIZEOF_OutgoingScratch = 0x20;
+#elif defined(TARGET_POWERPC64)
+    const uintptr_t SIZEOF_OutgoingScratch = 0x40;
 #else
     const uintptr_t SIZEOF_OutgoingScratch = 0;
 #endif
@@ -2003,12 +2008,32 @@ void StackFrameIterator::UnwindThrowSiteThunk()
     m_RegDisplay.pR29 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, R29);
     m_RegDisplay.pR30 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, R30);
     m_RegDisplay.pFP = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, FP);
+    m_RegDisplay.pLR = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, LR);
 #else
     ASSERT_UNCONDITIONALLY("NYI for this arch");
 #endif
 
+#if defined(TARGET_POWERPC64)
+    uintptr_t contextIP = pContext->IP;
+    uintptr_t contextSP = pContext->GetSp();
+
+    if (contextIP == 0)
+    {
+        contextIP = pContext->LR;
+    }
+
+    if (contextSP == 0)
+    {
+        const uintptr_t STACKSIZEOF_Context = ((sizeof(PAL_LIMITED_CONTEXT) + (STACK_ALIGN_SIZE-1)) & ~(STACK_ALIGN_SIZE-1));
+        contextSP = (uintptr_t)dac_cast<TADDR>(pContext) + STACKSIZEOF_Context;
+    }
+
+    m_RegDisplay.SetIP(PCODEToPINSTR(contextIP));
+    m_RegDisplay.SetSP(contextSP);
+#else
     m_RegDisplay.SetIP(PCODEToPINSTR(pContext->IP));
     m_RegDisplay.SetSP(pContext->GetSp());
+#endif
     SetControlPC(dac_cast<PTR_VOID>(m_RegDisplay.GetIP()));
 
     // We expect the throw site to be in managed code, and since this function's notion of how to unwind
@@ -2102,6 +2127,10 @@ UnwindOutOfCurrentManagedFrame:
         ASSERT(!m_pThread->IsHijacked());
 
         SetControlPC(dac_cast<PTR_VOID>(PCODEToPINSTR(m_RegDisplay.GetIP())));
+        if (m_ControlPC == NULL)
+        {
+            return;
+        }
 
         PTR_VOID collapsingTargetFrame = NULL;
 

@@ -340,7 +340,7 @@ static uintptr_t UnwindSimpleHelperToCaller(
     uintptr_t sp = pContext->GetSp();
     uintptr_t adjustedFaultingIP = *(uintptr_t *)sp;
     pContext->SetSp(sp+sizeof(uintptr_t)); // pop the stack
-#elif defined(HOST_ARM) || defined(HOST_ARM64)
+#elif defined(HOST_ARM) || defined(HOST_ARM64) || defined(HOST_POWERPC64)
     uintptr_t adjustedFaultingIP = pContext->GetLr();
 #elif defined(HOST_LOONGARCH64) || defined(HOST_RISCV64)
     uintptr_t adjustedFaultingIP = pContext->GetRa();

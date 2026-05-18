@@ -414,7 +414,7 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
 
                 regNumber sourceReg = genConsumeReg(op1);
                 regNumber targetReg = treeNode->GetRegNum();
-                GetEmitter()->emitIns_R_R(targetIsFloat ? INS_mffgpr : INS_mftgpr, EA_8BYTE, targetReg, sourceReg);
+                GetEmitter()->emitIns_R_R(targetIsFloat ? INS_mtfprd : INS_mffprd, EA_8BYTE, targetReg, sourceReg);
                 genProduceReg(treeNode);
                 break;
             }
@@ -4127,7 +4127,7 @@ void CodeGen::genFloatToIntCast(GenTree* treeNode)
     }
 
     GetEmitter()->emitIns_R_R(convertIns, emitActualTypeSize(srcType), tempReg, op1->GetRegNum());
-    GetEmitter()->emitIns_R_R(INS_mftgpr, dstSize, targetReg, tempReg);
+    GetEmitter()->emitIns_R_R(INS_mffprd, dstSize, targetReg, tempReg);
 
     if (dstSize == EA_4BYTE)
     {
@@ -4180,7 +4180,7 @@ void CodeGen::genIntToFloatCast(GenTree* treeNode)
         sourceReg = REG_R0;
     }
 
-    GetEmitter()->emitIns_R_R(INS_mffgpr, EA_8BYTE, targetReg, sourceReg);
+    GetEmitter()->emitIns_R_R(INS_mtfprd, EA_8BYTE, targetReg, sourceReg);
     instruction convertIns = INS_fcfid;
     if (dstType == TYP_FLOAT)
     {

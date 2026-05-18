@@ -234,6 +234,7 @@ int LinearScan::BuildNode(GenTree* tree)
                 {
                     buildInternalIntRegisterDefForNode(tree);
                 }
+                setInternalRegsDelayFree = true;
                 buildInternalRegisterUses();
             }
             BuildDef(tree);
@@ -582,7 +583,7 @@ int LinearScan::BuildPutArgStk(GenTreePutArgStk* argNode)
     {
         bool fpBased = false;
         int  offset = m_compiler->lvaFrameAddress(m_compiler->lvaOutgoingArgSpaceVar, &fpBased) +
-                     static_cast<int>(argNode->getArgOffset());
+                     static_cast<int>(argNode->getArgOffset()) + FIRST_ARG_STACK_OFFS;
         if (!emitter::isValidSimm16(offset))
         {
             buildInternalIntRegisterDefForNode(argNode);

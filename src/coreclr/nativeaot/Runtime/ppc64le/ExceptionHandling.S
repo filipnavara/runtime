@@ -33,6 +33,15 @@
 #define CATCH_OFFSET_LR         (CATCH_OFFSET_FP + 0x08)
 #define CATCH_OFFSET_R14        (CATCH_OFFSET_LR + 0x08)
 
+#define FUNCLET_FRAME_SIZE      0x190
+#define FUNCLET_OFFSET_HANDLER  0x40
+#define FUNCLET_OFFSET_REGDISPLAY (FUNCLET_OFFSET_HANDLER + 0x08)
+#define FUNCLET_OFFSET_THREAD   (FUNCLET_OFFSET_REGDISPLAY + 0x08)
+#define FUNCLET_OFFSET_FP       (FUNCLET_OFFSET_THREAD + 0x08)
+#define FUNCLET_OFFSET_LR       (FUNCLET_OFFSET_FP + 0x08)
+#define FUNCLET_OFFSET_R14      (FUNCLET_OFFSET_LR + 0x08)
+#define FUNCLET_OFFSET_F14      (FUNCLET_OFFSET_R14 + 0x88)
+
 .globl RhpTrapThreads
 
 .macro DEFINE_FUNC name
@@ -174,6 +183,172 @@ END_FUNC \name
     ld 31, 0(12)
 .endm
 
+.macro SAVE_PRESERVED_REGISTERS regDisplayReg
+    ld 12, OFFSETOF__REGDISPLAY__pR14(\regDisplayReg)
+    std 14, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR15(\regDisplayReg)
+    std 15, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR16(\regDisplayReg)
+    std 16, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR17(\regDisplayReg)
+    std 17, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR18(\regDisplayReg)
+    std 18, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR19(\regDisplayReg)
+    std 19, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR20(\regDisplayReg)
+    std 20, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR21(\regDisplayReg)
+    std 21, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR22(\regDisplayReg)
+    std 22, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR23(\regDisplayReg)
+    std 23, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR24(\regDisplayReg)
+    std 24, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR25(\regDisplayReg)
+    std 25, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR26(\regDisplayReg)
+    std 26, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR27(\regDisplayReg)
+    std 27, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR28(\regDisplayReg)
+    std 28, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR29(\regDisplayReg)
+    std 29, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR30(\regDisplayReg)
+    std 30, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pFP(\regDisplayReg)
+    std 31, 0(12)
+.endm
+
+.macro TRASH_PRESERVED_REGISTERS_STORAGE regDisplayReg
+    li 10, 0
+    ld 12, OFFSETOF__REGDISPLAY__pR14(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR15(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR16(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR17(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR18(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR19(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR20(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR21(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR22(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR23(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR24(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR25(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR26(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR27(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR28(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR29(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pR30(\regDisplayReg)
+    std 10, 0(12)
+    ld 12, OFFSETOF__REGDISPLAY__pFP(\regDisplayReg)
+    std 10, 0(12)
+.endm
+
+.macro SAVE_FUNCLET_FPRS
+    stfd 14, FUNCLET_OFFSET_F14 + 0x00(1)
+    stfd 15, FUNCLET_OFFSET_F14 + 0x08(1)
+    stfd 16, FUNCLET_OFFSET_F14 + 0x10(1)
+    stfd 17, FUNCLET_OFFSET_F14 + 0x18(1)
+    stfd 18, FUNCLET_OFFSET_F14 + 0x20(1)
+    stfd 19, FUNCLET_OFFSET_F14 + 0x28(1)
+    stfd 20, FUNCLET_OFFSET_F14 + 0x30(1)
+    stfd 21, FUNCLET_OFFSET_F14 + 0x38(1)
+    stfd 22, FUNCLET_OFFSET_F14 + 0x40(1)
+    stfd 23, FUNCLET_OFFSET_F14 + 0x48(1)
+    stfd 24, FUNCLET_OFFSET_F14 + 0x50(1)
+    stfd 25, FUNCLET_OFFSET_F14 + 0x58(1)
+    stfd 26, FUNCLET_OFFSET_F14 + 0x60(1)
+    stfd 27, FUNCLET_OFFSET_F14 + 0x68(1)
+    stfd 28, FUNCLET_OFFSET_F14 + 0x70(1)
+    stfd 29, FUNCLET_OFFSET_F14 + 0x78(1)
+    stfd 30, FUNCLET_OFFSET_F14 + 0x80(1)
+    stfd 31, FUNCLET_OFFSET_F14 + 0x88(1)
+.endm
+
+.macro RESTORE_FUNCLET_FPRS
+    lfd 14, FUNCLET_OFFSET_F14 + 0x00(1)
+    lfd 15, FUNCLET_OFFSET_F14 + 0x08(1)
+    lfd 16, FUNCLET_OFFSET_F14 + 0x10(1)
+    lfd 17, FUNCLET_OFFSET_F14 + 0x18(1)
+    lfd 18, FUNCLET_OFFSET_F14 + 0x20(1)
+    lfd 19, FUNCLET_OFFSET_F14 + 0x28(1)
+    lfd 20, FUNCLET_OFFSET_F14 + 0x30(1)
+    lfd 21, FUNCLET_OFFSET_F14 + 0x38(1)
+    lfd 22, FUNCLET_OFFSET_F14 + 0x40(1)
+    lfd 23, FUNCLET_OFFSET_F14 + 0x48(1)
+    lfd 24, FUNCLET_OFFSET_F14 + 0x50(1)
+    lfd 25, FUNCLET_OFFSET_F14 + 0x58(1)
+    lfd 26, FUNCLET_OFFSET_F14 + 0x60(1)
+    lfd 27, FUNCLET_OFFSET_F14 + 0x68(1)
+    lfd 28, FUNCLET_OFFSET_F14 + 0x70(1)
+    lfd 29, FUNCLET_OFFSET_F14 + 0x78(1)
+    lfd 30, FUNCLET_OFFSET_F14 + 0x80(1)
+    lfd 31, FUNCLET_OFFSET_F14 + 0x88(1)
+.endm
+
+.macro SAVE_FUNCLET_GPRS
+    std 31, FUNCLET_OFFSET_FP(1)
+    std 0,  FUNCLET_OFFSET_LR(1)
+    std 14, FUNCLET_OFFSET_R14 + 0x00(1)
+    std 15, FUNCLET_OFFSET_R14 + 0x08(1)
+    std 16, FUNCLET_OFFSET_R14 + 0x10(1)
+    std 17, FUNCLET_OFFSET_R14 + 0x18(1)
+    std 18, FUNCLET_OFFSET_R14 + 0x20(1)
+    std 19, FUNCLET_OFFSET_R14 + 0x28(1)
+    std 20, FUNCLET_OFFSET_R14 + 0x30(1)
+    std 21, FUNCLET_OFFSET_R14 + 0x38(1)
+    std 22, FUNCLET_OFFSET_R14 + 0x40(1)
+    std 23, FUNCLET_OFFSET_R14 + 0x48(1)
+    std 24, FUNCLET_OFFSET_R14 + 0x50(1)
+    std 25, FUNCLET_OFFSET_R14 + 0x58(1)
+    std 26, FUNCLET_OFFSET_R14 + 0x60(1)
+    std 27, FUNCLET_OFFSET_R14 + 0x68(1)
+    std 28, FUNCLET_OFFSET_R14 + 0x70(1)
+    std 29, FUNCLET_OFFSET_R14 + 0x78(1)
+    std 30, FUNCLET_OFFSET_R14 + 0x80(1)
+.endm
+
+.macro RESTORE_FUNCLET_GPRS
+    ld 14, FUNCLET_OFFSET_R14 + 0x00(1)
+    ld 15, FUNCLET_OFFSET_R14 + 0x08(1)
+    ld 16, FUNCLET_OFFSET_R14 + 0x10(1)
+    ld 17, FUNCLET_OFFSET_R14 + 0x18(1)
+    ld 18, FUNCLET_OFFSET_R14 + 0x20(1)
+    ld 19, FUNCLET_OFFSET_R14 + 0x28(1)
+    ld 20, FUNCLET_OFFSET_R14 + 0x30(1)
+    ld 21, FUNCLET_OFFSET_R14 + 0x38(1)
+    ld 22, FUNCLET_OFFSET_R14 + 0x40(1)
+    ld 23, FUNCLET_OFFSET_R14 + 0x48(1)
+    ld 24, FUNCLET_OFFSET_R14 + 0x50(1)
+    ld 25, FUNCLET_OFFSET_R14 + 0x58(1)
+    ld 26, FUNCLET_OFFSET_R14 + 0x60(1)
+    ld 27, FUNCLET_OFFSET_R14 + 0x68(1)
+    ld 28, FUNCLET_OFFSET_R14 + 0x70(1)
+    ld 29, FUNCLET_OFFSET_R14 + 0x78(1)
+    ld 30, FUNCLET_OFFSET_R14 + 0x80(1)
+    ld 31, FUNCLET_OFFSET_FP(1)
+    ld 0, FUNCLET_OFFSET_LR(1)
+    mtlr 0
+.endm
+
 .macro SAVE_CATCH_FRAME_GPRS
     std 31, CATCH_OFFSET_FP(1)
     std 0,  CATCH_OFFSET_LR(1)
@@ -227,9 +402,13 @@ DEFINE_FUNC RhpThrowHwEx
 
     ld 3, OFFSETOF__PAL_LIMITED_CONTEXT__R3(15)
     mr 4, 14
+    addi 12, 1, THROW_FRAME_SIZE
+    std 12, OFFSETOF__PAL_LIMITED_CONTEXT__SP(15)
+    ld 0, OFFSETOF__PAL_LIMITED_CONTEXT__LR(15)
+    std 0, OFFSETOF__PAL_LIMITED_CONTEXT__IP(15)
     bl RhThrowHwEx
-    nop
 DEFINE_LABEL RhpThrowHwEx2
+    nop
     trap
 END_FUNC RhpThrowHwEx
 
@@ -287,15 +466,46 @@ DEFINE_FUNC RhpThrowImpl
 
     ld 3, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R3(1)
     mr 4, 14
+    addi 12, 1, THROW_FRAME_SIZE
+    std 12, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__SP(1)
+    ld 0, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__LR(1)
+    std 0, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__IP(1)
     bl RhThrowEx
+DEFINE_LABEL RhpThrowImpl2
     nop
 
-DEFINE_LABEL RhpThrowImpl2
     trap
 END_FUNC RhpThrowImpl
 
-DEFINE_TRAP_HELPER RhpRethrow
-DEFINE_TRAP_HELPER RhpRethrow2
+//
+// void RhpRethrow()
+//
+DEFINE_FUNC RhpRethrow
+    STORE_PAL_CONTEXT 1
+
+    addi 14, 1, rsp_offsetof_ExInfo
+    addi 15, 1, rsp_offsetof_Context
+    li 16, 0
+    INIT_EXINFO 14, 15, 16
+
+    bl RhpGetThread
+    nop
+    mr 16, 3
+
+    ld 3, OFFSETOF__Thread__m_pExInfoStackHead(16)
+    std 3, OFFSETOF__ExInfo__m_pPrevExInfo(14)
+    std 14, OFFSETOF__Thread__m_pExInfoStackHead(16)
+
+    mr 4, 14
+    addi 12, 1, THROW_FRAME_SIZE
+    std 12, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__SP(1)
+    ld 0, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__LR(1)
+    std 0, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__IP(1)
+    bl RhRethrow
+DEFINE_LABEL RhpRethrow2
+    nop
+    trap
+END_FUNC RhpRethrow
 
 //
 // void* RhpCallCatchFunclet(object exceptionObj, void* pHandlerIP, REGDISPLAY* pRegDisplay, ExInfo* pExInfo)
@@ -355,8 +565,76 @@ DEFINE_LABEL RhpCallCatchFunclet2
     bctr
 END_FUNC RhpCallCatchFunclet
 
-DEFINE_TRAP_HELPER RhpCallFinallyFunclet
-DEFINE_TRAP_HELPER RhpCallFinallyFunclet2
-DEFINE_TRAP_HELPER RhpCallFilterFunclet
-DEFINE_TRAP_HELPER RhpCallFilterFunclet2
+//
+// void RhpCallFinallyFunclet(void* pHandlerIP, REGDISPLAY* pRegDisplay)
+//
+DEFINE_FUNC RhpCallFinallyFunclet
+    mflr 0
+    stdu 1, -FUNCLET_FRAME_SIZE(1)
+    .cfi_def_cfa 1, FUNCLET_FRAME_SIZE
+    .cfi_offset 65, FUNCLET_OFFSET_LR - FUNCLET_FRAME_SIZE
+    .cfi_offset 31, FUNCLET_OFFSET_FP - FUNCLET_FRAME_SIZE
+    SAVE_FUNCLET_GPRS
+    SAVE_FUNCLET_FPRS
+    std 3, FUNCLET_OFFSET_HANDLER(1)
+    std 4, FUNCLET_OFFSET_REGDISPLAY(1)
+
+    bl RhpGetThread
+    nop
+    std 3, FUNCLET_OFFSET_THREAD(1)
+
+    lwz 10, OFFSETOF__Thread__m_ThreadStateFlags(3)
+    li 11, -17
+    and 10, 10, 11
+    stw 10, OFFSETOF__Thread__m_ThreadStateFlags(3)
+
+    ld 3, FUNCLET_OFFSET_HANDLER(1)
+    ld 4, FUNCLET_OFFSET_REGDISPLAY(1)
+
+    RESTORE_PRESERVED_REGISTERS 4
+    TRASH_PRESERVED_REGISTERS_STORAGE 4
+
+    mtctr 3
+    bctrl
+
+DEFINE_LABEL RhpCallFinallyFunclet2
+    ld 4, FUNCLET_OFFSET_REGDISPLAY(1)
+    SAVE_PRESERVED_REGISTERS 4
+
+    ld 5, FUNCLET_OFFSET_THREAD(1)
+    lwz 10, OFFSETOF__Thread__m_ThreadStateFlags(5)
+    ori 10, 10, TSF_DoNotTriggerGc
+    stw 10, OFFSETOF__Thread__m_ThreadStateFlags(5)
+
+    RESTORE_FUNCLET_FPRS
+    RESTORE_FUNCLET_GPRS
+    addi 1, 1, FUNCLET_FRAME_SIZE
+    blr
+END_FUNC RhpCallFinallyFunclet
+
+//
+// bool RhpCallFilterFunclet(object exceptionObj, void* pFilterIP, REGDISPLAY* pRegDisplay)
+//
+DEFINE_FUNC RhpCallFilterFunclet
+    mflr 0
+    stdu 1, -FUNCLET_FRAME_SIZE(1)
+    .cfi_def_cfa 1, FUNCLET_FRAME_SIZE
+    .cfi_offset 65, FUNCLET_OFFSET_LR - FUNCLET_FRAME_SIZE
+    .cfi_offset 31, FUNCLET_OFFSET_FP - FUNCLET_FRAME_SIZE
+    SAVE_FUNCLET_GPRS
+    SAVE_FUNCLET_FPRS
+
+    ld 12, OFFSETOF__REGDISPLAY__pFP(5)
+    ld 31, 0(12)
+
+    mtctr 4
+    bctrl
+
+DEFINE_LABEL RhpCallFilterFunclet2
+    RESTORE_FUNCLET_FPRS
+    RESTORE_FUNCLET_GPRS
+    addi 1, 1, FUNCLET_FRAME_SIZE
+    blr
+END_FUNC RhpCallFilterFunclet
+
 DEFINE_TRAP_HELPER RhpCallPropagateExceptionCallback

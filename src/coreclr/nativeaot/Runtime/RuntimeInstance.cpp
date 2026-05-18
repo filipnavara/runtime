@@ -221,7 +221,10 @@ extern "C" void RegisterCodeManager(ICodeManager * pCodeManager, PTR_VOID pvStar
 
 bool RuntimeInstance::RegisterUnboxingStubs(PTR_VOID pvStartRange, uint32_t cbRange)
 {
-    ASSERT(pvStartRange != NULL && cbRange > 0);
+    if (cbRange == 0)
+        return true;
+
+    ASSERT(pvStartRange != NULL);
 
     UnboxingStubsRegion * pEntry = new (nothrow) UnboxingStubsRegion();
     if (NULL == pEntry)

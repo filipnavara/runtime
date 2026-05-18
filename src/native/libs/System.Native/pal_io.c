@@ -95,6 +95,8 @@ extern int     getpeereid(int, uid_t *__restrict__, gid_t *__restrict__);
 #   define __NR_copy_file_range  391
 #  elif defined(__aarch64__)
 #   define __NR_copy_file_range  285
+#  elif defined(TARGET_POWERPC64) || defined(__powerpc64__)
+#   define __NR_copy_file_range  379
 #  else
 #   error Unknown architecture
 #  endif

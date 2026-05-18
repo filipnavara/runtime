@@ -2207,7 +2207,11 @@ instruction CodeGenInterface::ins_Load(var_types srcType, bool aligned /*=false*
         {
             ins = INS_lhz;
         }
-        else if (TYP_INT == srcType)
+        else if (srcType == TYP_INT)
+        {
+            ins = INS_lwa;
+        }
+        else if (srcType == TYP_UINT)
         {
             ins = INS_lwz;
         }

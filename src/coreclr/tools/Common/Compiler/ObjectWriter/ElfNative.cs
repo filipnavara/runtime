@@ -470,6 +470,8 @@ namespace ILCompiler.ObjectWriter
         public const uint R_PPC64_PLTREL32 = 28;
         public const uint R_PPC64_ADDR64 = 38;
         public const uint R_PPC64_REL64 = 44;
+        public const uint R_PPC64_TOC16_LO = 48;
+        public const uint R_PPC64_TOC16_HA = 50;
         public const uint R_PPC64_TOC = 51;
         public const uint R_PPC64_REL24_NOTOC = 116;
 

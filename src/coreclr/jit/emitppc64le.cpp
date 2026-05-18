@@ -379,7 +379,8 @@ void emitter::emitIns_R_C(
     id->idInsOpt(INS_OPTS_RC);
     id->idReg1(targetReg);
     id->idReg2(isAddressLoad ? REG_R0 : addrReg);
-    id->idCodeSize((isAddressLoad ? 5 : 6) * sizeof(code_t));
+    id->idCodeSize((isAddressLoad ? (m_compiler->opts.compReloc ? 2 : 5) : (m_compiler->opts.compReloc ? 3 : 6)) *
+                   sizeof(code_t));
     id->idSetIsBound();
     id->idAddr()->iiaFieldHnd = fldHnd;
 
@@ -397,7 +398,7 @@ void emitter::emitIns_R_L(instruction ins, emitAttr attr, BasicBlock* dst, regNu
     id->idIns(ins);
     id->idInsOpt(INS_OPTS_RL);
     id->idAddr()->iiaBBlabel = dst;
-    id->idCodeSize(5 * sizeof(code_t));
+    id->idCodeSize((m_compiler->opts.compReloc ? 2 : 5) * sizeof(code_t));
     id->idReg1(reg);
 
 #ifdef DEBUG
@@ -422,7 +423,7 @@ void emitter::emitIns_R_L(instruction ins, emitAttr attr, insGroup* dst, regNumb
     id->idInsOpt(INS_OPTS_RL);
     id->idAddr()->iiaIGlabel = dst;
     id->idSetIsBound();
-    id->idCodeSize(5 * sizeof(code_t));
+    id->idCodeSize((m_compiler->opts.compReloc ? 2 : 5) * sizeof(code_t));
     id->idReg1(reg);
 
     dispIns(id);
@@ -443,6 +444,11 @@ void emitter::emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int va
     if (!isValidSimm16(imm))
     {
         NYI_POWERPC64("large stack local offset");
+    }
+
+    if (ins == INS_lea)
+    {
+        ins = INS_addi;
     }
 
     instrDesc* id = emitNewInstrCns(attr, imm);
@@ -511,6 +517,16 @@ void emitter::emitIns_S_R_I(instruction ins, emitAttr attr, int varx, int offs, 
 
 void emitter::emitIns_R_AR(instruction ins, emitAttr attr, regNumber ireg, regNumber reg, int offs)
 {
+    if (ins == INS_lea)
+    {
+        if (!isValidSimm16(offs))
+        {
+            NYI_POWERPC64("large lea offset");
+        }
+
+        ins = INS_addi;
+    }
+
     emitIns_R_R_I(ins, attr, ireg, reg, offs);
 }
 
@@ -521,6 +537,23 @@ void emitter::emitIns_AR_R(instruction ins, emitAttr attr, regNumber ireg, regNu
 
 void emitter::emitIns_R_ARR(instruction ins, emitAttr attr, regNumber ireg, regNumber reg, regNumber rg2, int disp)
 {
+    if (ins == INS_lea)
+    {
+        emitIns_R_R_R(INS_add, attr, ireg, reg, rg2);
+
+        if (disp != 0)
+        {
+            if (!isValidSimm16(disp))
+            {
+                NYI_POWERPC64("large indexed lea offset");
+            }
+
+            emitIns_R_R_I(INS_addi, attr, ireg, ireg, disp);
+        }
+
+        return;
+    }
+
     (void)reg;
     (void)rg2;
     emitIns_R_S(ins, attr, ireg, BAD_VAR_NUM, disp);
@@ -561,7 +594,6 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 {
     BYTE*  dst      = *dp;
     size_t codeSize = id->idCodeSize();
-    code_t code     = emitInsCode(id->idIns());
 
     if (id->idInsOpt() == INS_OPTS_C)
     {
@@ -591,6 +623,8 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         return emitSizeOfInsDsc(id);
     }
 
+    code_t code = emitInsCode(id->idIns());
+
     switch (id->idIns())
     {
         case INS_nop:
@@ -616,7 +650,11 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 
         case INS_add:
         case INS_subf:
+        case INS_mulhw:
+        case INS_mulhwu:
         case INS_mullw:
+        case INS_mulhd:
+        case INS_mulhdu:
         case INS_mulld:
         case INS_divw:
         case INS_divd:
@@ -723,7 +761,7 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_stb:
         case INS_stfs:
         case INS_stfd:
-            code = ppcEncodeDForm(code, id->idReg1(), id->idReg2(), emitGetInsSC(id));
+            code = ppcEncodeDForm(code, id->idReg1(), id->idReg2(), id->idIsCnsReloc() ? 0 : emitGetInsSC(id));
             break;
 
         case INS_ori:
@@ -788,6 +826,24 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 
     emitOutput_Instr(dst, code);
 
+    if (id->idIsCnsReloc())
+    {
+        CorInfoReloc relocType;
+        switch (id->idIns())
+        {
+            case INS_addis:
+                relocType = CorInfoReloc::PPC64_TOC16_HA;
+                break;
+            case INS_addi:
+                relocType = CorInfoReloc::PPC64_TOC16_LO;
+                break;
+            default:
+                unreached();
+        }
+
+        emitRecordRelocation(dst, reinterpret_cast<void*>(emitGetInsSC(id)), relocType);
+    }
+
     *dp = dst + codeSize;
     return emitSizeOfInsDsc(id);
 }
@@ -797,12 +853,28 @@ unsigned emitter::emitOutputLabelLoad(BYTE* dst, instrDesc* id)
     assert(id->idInsOpt() == INS_OPTS_RL);
     assert(id->idIsBound());
     assert(isGeneralRegister(id->idReg1()));
-    assert(id->idCodeSize() == 5 * sizeof(code_t));
 
     const uintptr_t value = reinterpret_cast<uintptr_t>(emitCodeBlock + id->idAddr()->iiaIGlabel->igOffs);
     const regNumber reg  = id->idReg1();
 
     BYTE* cur = dst;
+
+    if (m_compiler->opts.compReloc)
+    {
+        assert(id->idCodeSize() == 2 * sizeof(code_t));
+
+        emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), reg, REG_R2, 0));
+        emitRecordRelocation(cur, reinterpret_cast<void*>(value), CorInfoReloc::PPC64_TOC16_HA);
+        cur += sizeof(code_t);
+
+        emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addi), reg, reg, 0));
+        emitRecordRelocation(cur, reinterpret_cast<void*>(value), CorInfoReloc::PPC64_TOC16_LO);
+        cur += sizeof(code_t);
+
+        return static_cast<unsigned>(cur - dst);
+    }
+
+    assert(id->idCodeSize() == 5 * sizeof(code_t));
 
     emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), reg, REG_R0, ppcSignExtend16(value >> 48)));
     cur += sizeof(code_t);
@@ -834,7 +906,6 @@ unsigned emitter::emitOutputConstAddr(BYTE* dst, instrDesc* id)
     assert(id->idIns() == INS_addi);
     assert(id->idAddr()->iiaIsJitDataOffset());
     assert(id->idGCref() == GCT_NONE);
-    assert(id->idCodeSize() == 5 * sizeof(code_t));
     assert(isGeneralRegister(id->idReg1()));
 
     const int offset = id->idAddr()->iiaGetJitDataOffset();
@@ -845,6 +916,23 @@ unsigned emitter::emitOutputConstAddr(BYTE* dst, instrDesc* id)
     const regNumber reg   = id->idReg1();
 
     BYTE* cur = dst;
+
+    if (m_compiler->opts.compReloc)
+    {
+        assert(id->idCodeSize() == 2 * sizeof(code_t));
+
+        emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), reg, REG_R2, 0));
+        emitRecordRelocation(cur, reinterpret_cast<void*>(value), CorInfoReloc::PPC64_TOC16_HA);
+        cur += sizeof(code_t);
+
+        emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addi), reg, reg, 0));
+        emitRecordRelocation(cur, reinterpret_cast<void*>(value), CorInfoReloc::PPC64_TOC16_LO);
+        cur += sizeof(code_t);
+
+        return static_cast<unsigned>(cur - dst);
+    }
+
+    assert(id->idCodeSize() == 5 * sizeof(code_t));
 
     emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), reg, REG_R0, ppcSignExtend16(value >> 48)));
     cur += sizeof(code_t);
@@ -874,7 +962,6 @@ unsigned emitter::emitOutputConstLoad(BYTE* dst, instrDesc* id)
 {
     assert(id->idAddr()->iiaIsJitDataOffset());
     assert(id->idGCref() == GCT_NONE);
-    assert(id->idCodeSize() == 6 * sizeof(code_t));
     assert(emitInsIsLoad(id->idIns()));
 
     const int offset = id->idAddr()->iiaGetJitDataOffset();
@@ -889,6 +976,26 @@ unsigned emitter::emitOutputConstLoad(BYTE* dst, instrDesc* id)
     assert(addrReg != REG_R0);
 
     BYTE* cur = dst;
+
+    if (m_compiler->opts.compReloc)
+    {
+        assert(id->idCodeSize() == 3 * sizeof(code_t));
+
+        emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), addrReg, REG_R2, 0));
+        emitRecordRelocation(cur, reinterpret_cast<void*>(addr), CorInfoReloc::PPC64_TOC16_HA);
+        cur += sizeof(code_t);
+
+        emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addi), addrReg, addrReg, 0));
+        emitRecordRelocation(cur, reinterpret_cast<void*>(addr), CorInfoReloc::PPC64_TOC16_LO);
+        cur += sizeof(code_t);
+
+        emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(id->idIns()), id->idReg1(), addrReg, 0));
+        cur += sizeof(code_t);
+
+        return static_cast<unsigned>(cur - dst);
+    }
+
+    assert(id->idCodeSize() == 6 * sizeof(code_t));
 
     emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), addrReg, REG_R0, ppcSignExtend16(value >> 48)));
     cur += sizeof(code_t);
@@ -1045,9 +1152,9 @@ ssize_t emitter::emitOutputInstrJumpDistance(const BYTE* src, const insGroup* ig
 
 void emitter::emitIns_Call(const EmitCallParams& params)
 {
-    assert(params.callType == EC_INDIR_R);
-    assert(isGeneralRegister(params.ireg));
-    assert(params.addr == nullptr);
+    assert((params.callType == EC_INDIR_R) || (params.callType == EC_FUNC_TOKEN));
+    assert((params.callType != EC_INDIR_R) || (isGeneralRegister(params.ireg) && (params.addr == nullptr)));
+    assert((params.callType != EC_FUNC_TOKEN) || ((params.addr != nullptr) && (params.ireg == REG_NA)));
 
     regMaskTP savedSet  = emitGetGCRegsSavedOrModified(params.methHnd);
     regMaskTP gcrefRegs = params.gcrefRegs & savedSet;
@@ -1093,10 +1200,20 @@ void emitter::emitIns_Call(const EmitCallParams& params)
     emitThisByrefRegs = byrefRegs;
 
     id->idSetIsNoGC(params.isJump || params.noSafePoint || emitNoGChelper(params.methHnd));
-    id->idIns(INS_bctrl);
+    id->idIns(params.callType == EC_FUNC_TOKEN ? INS_bl : INS_bctrl);
     id->idInsOpt(INS_OPTS_C);
-    id->idReg1(params.ireg);
-    id->idCodeSize(2 * sizeof(code_t));
+    if (params.callType == EC_FUNC_TOKEN)
+    {
+        assert(m_compiler->opts.compReloc);
+        id->idAddr()->iiaAddr = static_cast<BYTE*>(params.addr);
+        id->idCodeSize(2 * sizeof(code_t));
+        id->idSetIsDspReloc();
+    }
+    else
+    {
+        id->idReg1(params.ireg);
+        id->idCodeSize(2 * sizeof(code_t));
+    }
 
     if (m_debugInfoSize > 0)
     {
@@ -1140,8 +1257,18 @@ unsigned emitter::emitOutputCall(BYTE* dst, instrDesc* id)
     }
 #endif
 
-    emitOutput_Instr(dst, ppcEncodeMtspr(emitInsCode(INS_mtctr), id->idReg1(), 9));
-    emitOutput_Instr(dst + sizeof(code_t), emitInsCode(INS_bctrl));
+    if (id->idIsDspReloc())
+    {
+        assert(id->idIns() == INS_bl);
+        emitOutput_Instr(dst, emitInsCode(INS_bl));
+        emitRecordRelocation(dst, id->idAddr()->iiaAddr, CorInfoReloc::PPC64_REL24);
+        emitOutput_Instr(dst + sizeof(code_t), emitInsCode(INS_nop));
+    }
+    else
+    {
+        emitOutput_Instr(dst, ppcEncodeMtspr(emitInsCode(INS_mtctr), id->idReg1(), 9));
+        emitOutput_Instr(dst + sizeof(code_t), emitInsCode(INS_bctrl));
+    }
 
     if (id->idGCref() == GCT_GCREF)
     {
@@ -1171,7 +1298,8 @@ unsigned emitter::emitOutputCall(BYTE* dst, instrDesc* id)
         }
     }
 
-    BYTE* callInstr = dst + sizeof(code_t);
+    const unsigned callSize  = id->idCodeSize();
+    BYTE*          callInstr = dst + callSize;
 
     if (gcrefRegs != emitThisGCrefRegs)
     {
@@ -1199,7 +1327,7 @@ unsigned emitter::emitOutputCall(BYTE* dst, instrDesc* id)
     }
 #endif
 
-    return 2 * sizeof(code_t);
+    return callSize;
 }
 
 void emitter::emitSetShortJump(instrDescJmp* id)

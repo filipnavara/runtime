@@ -411,7 +411,15 @@ int DwarfInstructions<A, R>::stepWithDwarf(
       // then r2 was saved and needs to be restored.
       // ELFv2 ABI specifies that the TOC Pointer must be saved at SP + 24,
       // while in ELFv1 ABI it is saved at SP + 40.
+      constexpr pint_t kMaxPpc64UserCodeAddress = static_cast<pint_t>(1) << 47;
       if (R::getArch() == REGISTERS_PPC64 && returnAddress != 0) {
+        if ((returnAddress & 0x3) != 0 ||
+            returnAddress >= kMaxPpc64UserCodeAddress) {
+          newRegisters.setIP(0, 0);
+          registers = newRegisters;
+          return UNW_STEP_SUCCESS;
+        }
+
         pint_t sp = newRegisters.getRegister(UNW_REG_SP);
         pint_t r2 = 0;
         switch (addressSpace.get32(returnAddress)) {

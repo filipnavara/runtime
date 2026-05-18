@@ -708,12 +708,12 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
             code = code | (ppcFReg(id->idReg1()) << 21) | (ppcFReg(id->idReg2()) << 11);
             break;
 
-        case INS_mffgpr:
-            code = code | (ppcFReg(id->idReg1()) << 21) | (ppcReg(id->idReg2()) << 11);
+        case INS_mtfprd:
+            code = code | (ppcFReg(id->idReg1()) << 21) | (ppcReg(id->idReg2()) << 16);
             break;
 
-        case INS_mftgpr:
-            code = code | (ppcReg(id->idReg1()) << 21) | (ppcFReg(id->idReg2()) << 11);
+        case INS_mffprd:
+            code = code | (ppcFReg(id->idReg2()) << 21) | (ppcReg(id->idReg1()) << 16);
             break;
 
         case INS_fadd:

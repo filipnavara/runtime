@@ -1327,6 +1327,7 @@ public:
 
   bool        validRegister(int num) const;
   uint64_t    getRegister(int num) const;
+  void        setRegister(int num, uint64_t value);
   void        setRegister(int num, uint64_t value, uint64_t location);
   uint64_t    getRegisterLocation(int num) const;
   bool        validFloatRegister(int num) const;
@@ -1344,8 +1345,10 @@ public:
 
   uint64_t  getSP() const         { return _registers.__r1; }
   void      setSP(uint64_t value) { _registers.__r1 = value; }
+  void      setSP(uint64_t value, uint64_t location) { (void)location; setSP(value); }
   uint64_t  getIP() const         { return _registers.__srr0; }
   void      setIP(uint64_t value) { _registers.__srr0 = value; }
+  void      setIP(uint64_t value, uint64_t location) { (void)location; setIP(value); }
   uint64_t  getCR() const         { return _registers.__cr; }
   void      setCR(uint64_t value) { _registers.__cr = value; }
   uint64_t  getLR() const         { return _registers.__lr; }
@@ -1545,6 +1548,12 @@ inline uint64_t Registers_ppc64::getRegister(int regNum) const {
 }
 
 inline void Registers_ppc64::setRegister(int regNum, uint64_t value) {
+  setRegister(regNum, value, 0);
+}
+
+inline void Registers_ppc64::setRegister(int regNum, uint64_t value,
+                                         uint64_t location) {
+  (void)location;
   switch (regNum) {
   case UNW_REG_IP:
     _registers.__srr0 = value;
@@ -1691,6 +1700,12 @@ inline void Registers_ppc64::setRegister(int regNum, uint64_t value) {
     _registers.__vrsave = value;
     return;
   }
+  _LIBUNWIND_ABORT("unsupported ppc64 register");
+}
+
+inline uint64_t Registers_ppc64::getRegisterLocation(int regNum) const {
+  if (validRegister(regNum))
+    return 0;
   _LIBUNWIND_ABORT("unsupported ppc64 register");
 }
 

@@ -287,6 +287,58 @@ struct REGDISPLAY
     inline void SetSP(uintptr_t SP) { this->SP = SP; }
 };
 
+#elif defined(TARGET_POWERPC64)
+
+struct REGDISPLAY
+{
+    PTR_uintptr_t pR0;
+    PTR_uintptr_t pR1;
+    PTR_uintptr_t pR2;
+    PTR_uintptr_t pR3;
+    PTR_uintptr_t pR4;
+    PTR_uintptr_t pR5;
+    PTR_uintptr_t pR6;
+    PTR_uintptr_t pR7;
+    PTR_uintptr_t pR8;
+    PTR_uintptr_t pR9;
+    PTR_uintptr_t pR10;
+    PTR_uintptr_t pR11;
+    PTR_uintptr_t pR12;
+    PTR_uintptr_t pR13;
+    PTR_uintptr_t pR14;
+    PTR_uintptr_t pR15;
+    PTR_uintptr_t pR16;
+    PTR_uintptr_t pR17;
+    PTR_uintptr_t pR18;
+    PTR_uintptr_t pR19;
+    PTR_uintptr_t pR20;
+    PTR_uintptr_t pR21;
+    PTR_uintptr_t pR22;
+    PTR_uintptr_t pR23;
+    PTR_uintptr_t pR24;
+    PTR_uintptr_t pR25;
+    PTR_uintptr_t pR26;
+    PTR_uintptr_t pR27;
+    PTR_uintptr_t pR28;
+    PTR_uintptr_t pR29;
+    PTR_uintptr_t pR30;
+    PTR_uintptr_t pFP; // R31
+    PTR_uintptr_t pLR;
+
+    uintptr_t   SP;
+    PCODE       IP;
+
+    uint64_t    F[32 - 14]; // Preserved F14..F31 registers.
+
+    inline PCODE GetIP() { return IP; }
+    inline uintptr_t GetSP() { return SP; }
+    inline uintptr_t GetFP() { return *pFP; }
+    inline PTR_uintptr_t GetReturnAddressRegisterLocation() { return pLR; }
+
+    inline void SetIP(PCODE IP) { this->IP = IP; }
+    inline void SetSP(uintptr_t SP) { this->SP = SP; }
+};
+
 #elif defined(TARGET_WASM)
 
 struct REGDISPLAY

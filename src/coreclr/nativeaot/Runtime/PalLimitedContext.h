@@ -138,6 +138,43 @@ struct PAL_LIMITED_CONTEXT
     void SetIp(uintptr_t ip) { IP = ip; }
     void SetSp(uintptr_t sp) { SP = sp; }
 
+#elif defined(TARGET_POWERPC64)
+
+    uintptr_t  FP;
+    uintptr_t  LR;
+
+    uintptr_t  R3;
+    uintptr_t  R4;
+    uintptr_t  R14;
+    uintptr_t  R15;
+    uintptr_t  R16;
+    uintptr_t  R17;
+    uintptr_t  R18;
+    uintptr_t  R19;
+    uintptr_t  R20;
+    uintptr_t  R21;
+    uintptr_t  R22;
+    uintptr_t  R23;
+    uintptr_t  R24;
+    uintptr_t  R25;
+    uintptr_t  R26;
+    uintptr_t  R27;
+    uintptr_t  R28;
+    uintptr_t  R29;
+    uintptr_t  R30;
+
+    uintptr_t  SP;
+    uintptr_t  IP;
+
+    uint64_t  F[32 - 14]; // Only F14..F31 are preserved by the ELFv2 ABI.
+
+    uintptr_t GetIp() const { return IP; }
+    uintptr_t GetSp() const { return SP; }
+    uintptr_t GetFp() const { return FP; }
+    uintptr_t GetLr() const { return LR; }
+    void SetIp(uintptr_t ip) { IP = ip; }
+    void SetSp(uintptr_t sp) { SP = sp; }
+
 #elif defined(UNIX_AMD64_ABI)
     // Param regs: rdi, rsi, rdx, rcx, r8, r9, scratch: rax, rdx (both return val), preserved: rbp, rbx, r12-r15
     uintptr_t  IP;

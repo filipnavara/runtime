@@ -36,6 +36,13 @@
 #define membarrier(...) syscall(__NR_membarrier, __VA_ARGS__)
 #undef HAVE_SYS_MEMBARRIER_H
 #define HAVE_SYS_MEMBARRIER_H 1
+
+#ifndef MEMBARRIER_CMD_PRIVATE_EXPEDITED
+#define MEMBARRIER_CMD_PRIVATE_EXPEDITED (1 << 3)
+#endif
+#ifndef MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED
+#define MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED (1 << 4)
+#endif
 #elif HAVE_SYS_MEMBARRIER_H
 #include <sys/membarrier.h>
 #endif

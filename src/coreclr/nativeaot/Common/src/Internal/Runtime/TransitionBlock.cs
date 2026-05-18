@@ -35,7 +35,7 @@
 #define ENREGISTERED_RETURNTYPE_INTEGER_MAXSIZE
 #define ENREGISTERED_PARAMTYPE_MAXSIZE
 #elif TARGET_WASM
-#elif TARGET_LOONGARCH64 || TARGET_RISCV64
+#elif TARGET_LOONGARCH64 || TARGET_RISCV64 || TARGET_POWERPC64
 #define CALLDESCR_ARGREGS                          // CallDescrWorker has ArgumentRegister parameter
 #define CALLDESCR_FPARGREGS                        // CallDescrWorker has FloatArgumentRegisters parameter
 #define ENREGISTERED_RETURNTYPE_MAXSIZE
@@ -410,6 +410,63 @@ namespace Internal.Runtime
         public const int STACK_ELEM_SIZE = 8;
         public static int StackElemSize(int size) { return (((size) + STACK_ELEM_SIZE - 1) & ~(STACK_ELEM_SIZE - 1)); }
     }
+#elif TARGET_POWERPC64
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct ReturnBlock
+    {
+        private IntPtr returnValue;
+        private IntPtr returnValue2;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct ArgumentRegisters
+    {
+        private IntPtr r3;
+        private IntPtr r4;
+        private IntPtr r5;
+        private IntPtr r6;
+        private IntPtr r7;
+        private IntPtr r8;
+        private IntPtr r9;
+        private IntPtr r10;
+        public static unsafe int GetOffsetOfr10()
+        {
+            return sizeof(IntPtr) * 7;
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct FloatArgumentRegisters
+    {
+        private double f1;
+        private double f2;
+        private double f3;
+        private double f4;
+        private double f5;
+        private double f6;
+        private double f7;
+        private double f8;
+        private double f9;
+        private double f10;
+        private double f11;
+        private double f12;
+        private double f13;
+    }
+
+    internal struct ArchitectureConstants
+    {
+        // To avoid corner case bugs, limit maximum size of the arguments with sufficient margin
+        public const int MAX_ARG_SIZE = 0xFFFFFF;
+
+        public const int NUM_ARGUMENT_REGISTERS = 8;
+        public const int ARGUMENTREGISTERS_SIZE = NUM_ARGUMENT_REGISTERS * 8;
+        public const int ENREGISTERED_RETURNTYPE_MAXSIZE = 16;                  // bytes (two int registers: r3 and r4)
+        public const int ENREGISTERED_RETURNTYPE_INTEGER_MAXSIZE = 16;          // bytes (two int registers: r3 and r4)
+        public const int ENREGISTERED_RETURNTYPE_INTEGER_MAXSIZE_PRIMITIVE = 8;
+        public const int ENREGISTERED_PARAMTYPE_MAXSIZE = 16;                   // bytes (max value type size that can be passed by value)
+        public const int STACK_ELEM_SIZE = 8;
+        public static int StackElemSize(int size) { return (((size) + STACK_ELEM_SIZE - 1) & ~(STACK_ELEM_SIZE - 1)); }
+    }
 #endif
 
     //
@@ -517,6 +574,20 @@ namespace Internal.Runtime
 
         public IntPtr m_alignmentPad;
 #elif TARGET_RISCV64
+        public ReturnBlock m_returnBlock;
+        public static unsafe int GetOffsetOfReturnValuesBlock()
+        {
+            return 0;
+        }
+
+        public ArgumentRegisters m_argumentRegisters;
+        public static unsafe int GetOffsetOfArgumentRegisters()
+        {
+            return sizeof(ReturnBlock);
+        }
+
+        public IntPtr m_alignmentPad;
+#elif TARGET_POWERPC64
         public ReturnBlock m_returnBlock;
         public static unsafe int GetOffsetOfReturnValuesBlock()
         {

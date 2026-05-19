@@ -92,16 +92,13 @@
 .endm
 
 // JIT byref write barrier.
-//   r10: source address
+//   r9: source address
 //   r11: destination address
 DEFINE_FUNC RhpByRefAssignRef
 DEFINE_FUNC RhpByRefAssignRefAVLocation1
-    ld 0, 0(10)
-    std 0, 0(11)
-    INSERT_CHECKED_WRITE_BARRIER_CORE 11, 0
-    addi 10, 10, 8
-    addi 11, 11, 8
-    blr
+    ld 10, 0(9)
+    addi 9, 9, 8
+    b RhpCheckedAssignRef
 END_FUNC RhpByRefAssignRefAVLocation1
 END_FUNC RhpByRefAssignRef
 

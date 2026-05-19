@@ -114,9 +114,19 @@ END_FUNC RhpByRefAssignRefAVLocation2
 //   r10: object reference
 //   r11: destination address
 DEFINE_FUNC RhpCheckedAssignRef
+    LOAD_GLOBAL 12, g_lowest_address
+    cmpld 11, 12
+    blt 0f
+
+    LOAD_GLOBAL 12, g_highest_address
+    cmpld 11, 12
+    bge 0f
+
+    b RhpAssignRefPpc64le
+
+0:
 DEFINE_FUNC RhpCheckedAssignRefAVLocation
     std 10, 0(11)
-    INSERT_CHECKED_WRITE_BARRIER_CORE 11, 10
     addi 11, 11, 8
     blr
 END_FUNC RhpCheckedAssignRefAVLocation

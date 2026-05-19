@@ -104,7 +104,8 @@ template <typename GcInfoEncoding> bool TGcInfoDecoder<GcInfoEncoding>::Predecod
     }
 #endif
     remainingFlags &= ~(DECODE_RETURN_KIND | DECODE_VARARG);
-#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || \
+    defined(TARGET_POWERPC64)
     remainingFlags &= ~DECODE_HAS_TAILCALLS;
 #endif
     if (remainingFlags == 0)
@@ -320,7 +321,8 @@ TGcInfoDecoder<GcInfoEncoding>::TGcInfoDecoder(
         }
 #endif
         remainingFlags &= ~(DECODE_RETURN_KIND | DECODE_VARARG);
-#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || \
+    defined(TARGET_POWERPC64)
         remainingFlags &= ~DECODE_HAS_TAILCALLS;
 #endif
 
@@ -665,13 +667,14 @@ template <typename GcInfoEncoding> bool TGcInfoDecoder<GcInfoEncoding>::GetIsVar
     return m_headerFlags & GC_INFO_IS_VARARG;
 }
 
-#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || \
+    defined(TARGET_POWERPC64)
 template <typename GcInfoEncoding> bool TGcInfoDecoder<GcInfoEncoding>::HasTailCalls()
 {
     _ASSERTE( m_Flags & DECODE_HAS_TAILCALLS );
     return ((m_headerFlags & GC_INFO_HAS_TAILCALLS) != 0);
 }
-#endif // TARGET_ARM || TARGET_ARM64 || TARGET_LOONGARCH64 || TARGET_RISCV64
+#endif // TARGET_ARM || TARGET_ARM64 || TARGET_LOONGARCH64 || TARGET_RISCV64 || TARGET_POWERPC64
 
 template <typename GcInfoEncoding> bool TGcInfoDecoder<GcInfoEncoding>::WantsReportOnlyLeaf()
 {

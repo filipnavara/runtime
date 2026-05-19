@@ -1049,7 +1049,14 @@ UPDATE_GC_INFO:
 
         if (id->idGCref() != GCT_NONE)
         {
-            emitGCvarLiveUpd(adr + ofs, varNum, id->idGCref(), dst DEBUG_ARG(varNum));
+            int gcVarNum = varNum;
+            if ((unsigned)varNum != m_compiler->lvaOutgoingArgSpaceVar)
+            {
+                // The instruction itself stores a GC reference to this exact stack slot. Report the
+                // slot even when the owning local is not tracked by liveness.
+                gcVarNum = INT_MAX;
+            }
+            emitGCvarLiveUpd(adr + ofs, gcVarNum, id->idGCref(), dst DEBUG_ARG(varNum));
         }
         else
         {

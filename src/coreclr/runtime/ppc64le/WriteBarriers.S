@@ -152,17 +152,20 @@ DEFINE_FUNC RhpCheckedLockCmpXchgAVLocation
     ldarx 6, 0, 3
     cmpd 6, 5
     bne 2f
+    sync
     stdcx. 4, 0, 3
     bne 1b
     sync
     INSERT_CHECKED_WRITE_BARRIER_CORE 3, 4
 2:
+    sync
     mr 3, 6
     blr
 END_FUNC RhpCheckedLockCmpXchgAVLocation
 END_FUNC RhpCheckedLockCmpXchg
 
 DEFINE_FUNC RhpCheckedXchg
+    sync
 DEFINE_FUNC RhpCheckedXchgAVLocation
 1:
     ldarx 6, 0, 3

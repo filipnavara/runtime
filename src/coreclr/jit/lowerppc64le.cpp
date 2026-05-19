@@ -180,12 +180,6 @@ void Lowering::LowerBlockStore(GenTreeBlk* blkNode)
     bool         doCpObj              = layout->HasGCPtr();
     unsigned     copyBlockUnrollLimit = m_compiler->getUnrollThreshold(Compiler::UnrollKind::Memcpy);
 
-    if (doCpObj && (size <= copyBlockUnrollLimit) && blkNode->IsAddressNotOnHeap(m_compiler))
-    {
-        doCpObj                  = false;
-        blkNode->gtBlkOpGcUnsafe = true;
-    }
-
     if (doCpObj)
     {
         if (TryLowerBlockStoreAsGcBulkCopyCall(blkNode))

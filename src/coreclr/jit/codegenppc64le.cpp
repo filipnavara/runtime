@@ -140,6 +140,13 @@ static bool ppcOffsetRangeFitsSimm16(int offset, unsigned size)
     return emitter::isValidSimm16(offset) && emitter::isValidSimm16(lastOffset);
 }
 
+static bool ppcLclOffsetFitsSimm16(Compiler* compiler, unsigned lclNum, unsigned lclOffs)
+{
+    regNumber baseReg = REG_NA;
+    int       offset  = ppcGetLclFrameOffset(compiler, lclNum, lclOffs, &baseReg);
+    return emitter::isValidSimm16(offset);
+}
+
 static void ppcEmitSignExtendSmallLoadIfNeeded(emitter* emit, var_types targetType, regNumber targetReg)
 {
     if (targetType == TYP_BYTE)
@@ -1374,12 +1381,20 @@ void CodeGen::genCodeForStoreLclFld(GenTreeLclFld* tree)
 
     assert(dataReg != REG_NA);
 
-    regNumber baseReg = REG_NA;
-    int       offset  = ppcGetLclFrameOffset(m_compiler, tree, &baseReg);
-    regNumber tmpReg  = emitter::isValidSimm16(offset) ? REG_NA : internalRegisters.GetSingle(tree);
+    instruction storeIns = ins_StoreFromSrc(dataReg, targetType);
+    emitAttr    attr     = emitTypeSize(targetType);
+    if (ppcLclOffsetFitsSimm16(m_compiler, tree->GetLclNum(), tree->GetLclOffs()))
+    {
+        GetEmitter()->emitIns_S_R(storeIns, attr, dataReg, tree->GetLclNum(), tree->GetLclOffs());
+    }
+    else
+    {
+        regNumber baseReg = REG_NA;
+        int       offset  = ppcGetLclFrameOffset(m_compiler, tree, &baseReg);
+        regNumber tmpReg  = internalRegisters.GetSingle(tree);
 
-    genInstrWithConstant(ins_StoreFromSrc(dataReg, targetType), emitTypeSize(targetType), dataReg, baseReg, offset,
-                         tmpReg);
+        genInstrWithConstant(storeIns, attr, dataReg, baseReg, offset, tmpReg);
+    }
 
     genUpdateLife(tree);
     m_compiler->lvaGetDesc(tree->GetLclNum())->SetRegNum(REG_STK);
@@ -1434,12 +1449,20 @@ void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* lclNode)
     {
         inst_set_SV_var(lclNode);
 
-        regNumber baseReg     = REG_NA;
-        int       offset      = ppcGetLclFrameOffset(m_compiler, lclNode, &baseReg);
-        bool      largeOffset = !emitter::isValidSimm16(offset);
-        regNumber tmpReg = largeOffset ? internalRegisters.GetSingle(lclNode) : REG_NA;
-        genInstrWithConstant(ins_StoreFromSrc(dataReg, targetType), emitActualTypeSize(targetType), dataReg, baseReg,
-                             offset, tmpReg);
+        instruction storeIns = ins_StoreFromSrc(dataReg, targetType);
+        emitAttr    attr     = varTypeIsGC(data) ? emitTypeSize(data) : emitActualTypeSize(targetType);
+        if (ppcLclOffsetFitsSimm16(m_compiler, lclNode->GetLclNum(), lclNode->GetLclOffs()))
+        {
+            GetEmitter()->emitIns_S_R(storeIns, attr, dataReg, lclNode->GetLclNum(), lclNode->GetLclOffs());
+        }
+        else
+        {
+            regNumber baseReg = REG_NA;
+            int       offset  = ppcGetLclFrameOffset(m_compiler, lclNode, &baseReg);
+            regNumber tmpReg  = internalRegisters.GetSingle(lclNode);
+
+            genInstrWithConstant(storeIns, attr, dataReg, baseReg, offset, tmpReg);
+        }
 
         genUpdateLife(lclNode);
         varDsc->SetRegNum(REG_STK);
@@ -1548,6 +1571,11 @@ void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
     GCInfo::WriteBarrierForm writeBarrierForm = gcInfo.gcIsWriteBarrierCandidate(tree);
     if (writeBarrierForm != GCInfo::WBF_NoBarrier)
     {
+        if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
+        {
+            instGen_MemoryBarrier(BARRIER_FULL);
+        }
+
         genConsumeOperands(tree);
 
         noway_assert(data->GetRegNum() != REG_WRITE_BARRIER_DST);
@@ -1572,6 +1600,12 @@ void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
         }
 
         genGCWriteBarrier(tree, writeBarrierForm);
+
+        if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
+        {
+            instGen_MemoryBarrier(BARRIER_FULL);
+        }
+
         return;
     }
 
@@ -1794,6 +1828,8 @@ void CodeGen::genCodeForCpObj(GenTreeBlk* cpObjNode)
     GenTree*  dstAddr     = cpObjNode->Addr();
     GenTree*  source      = cpObjNode->Data();
     var_types srcAddrType = TYP_BYREF;
+    unsigned  dstLclNum   = BAD_VAR_NUM;
+    unsigned  dstLclOffs  = 0;
 
     assert(source->isContained());
     if (source->OperIs(GT_IND))
@@ -1808,6 +1844,11 @@ void CodeGen::genCodeForCpObj(GenTreeBlk* cpObjNode)
     }
 
     bool dstOnStack = cpObjNode->IsAddressNotOnHeap(m_compiler);
+    if (dstOnStack && dstAddr->OperIs(GT_LCL_ADDR))
+    {
+        dstLclNum  = dstAddr->AsLclVarCommon()->GetLclNum();
+        dstLclOffs = dstAddr->AsLclVarCommon()->GetLclOffs();
+    }
 
 #ifdef DEBUG
     assert(!dstAddr->isContained());
@@ -1849,6 +1890,24 @@ void CodeGen::genCodeForCpObj(GenTreeBlk* cpObjNode)
 
     if (dstOnStack)
     {
+        auto emitStackStore = [this, emit, dstLclNum, dstLclOffs](instruction storeIns,
+                                                                  emitAttr    attr,
+                                                                  regNumber   dataReg,
+                                                                  unsigned    lclStoreOffset,
+                                                                  unsigned    regStoreOffset) {
+            if ((dstLclNum != BAD_VAR_NUM) &&
+                ppcLclOffsetFitsSimm16(m_compiler, dstLclNum, dstLclOffs + lclStoreOffset))
+            {
+                emit->emitIns_S_R(storeIns, attr, dataReg, dstLclNum, dstLclOffs + lclStoreOffset);
+            }
+            else
+            {
+                // REG_WRITE_BARRIER_DST_BYREF is post-incremented as the copy proceeds,
+                // so fallback stores must use offsets relative to the current pair.
+                emit->emitIns_R_R_I(storeIns, attr, dataReg, REG_WRITE_BARRIER_DST_BYREF, regStoreOffset);
+            }
+        };
+
         unsigned i = 0;
         while (i < slots - 1)
         {
@@ -1864,8 +1923,8 @@ void CodeGen::genCodeForCpObj(GenTreeBlk* cpObjNode)
             emit->emitIns_R_R_I(INS_ld, attr1, tmpReg2, REG_WRITE_BARRIER_SRC_BYREF, TARGET_POINTER_SIZE);
             emit->emitIns_R_R_I(INS_addi, attrSrcAddr, REG_WRITE_BARRIER_SRC_BYREF, REG_WRITE_BARRIER_SRC_BYREF,
                                 2 * TARGET_POINTER_SIZE);
-            emit->emitIns_R_R_I(INS_std, attr0, tmpReg, REG_WRITE_BARRIER_DST_BYREF, 0);
-            emit->emitIns_R_R_I(INS_std, attr1, tmpReg2, REG_WRITE_BARRIER_DST_BYREF, TARGET_POINTER_SIZE);
+            emitStackStore(INS_std, attr0, tmpReg, i * TARGET_POINTER_SIZE, 0);
+            emitStackStore(INS_std, attr1, tmpReg2, (i + 1) * TARGET_POINTER_SIZE, TARGET_POINTER_SIZE);
             emit->emitIns_R_R_I(INS_addi, attrDstAddr, REG_WRITE_BARRIER_DST_BYREF, REG_WRITE_BARRIER_DST_BYREF,
                                 2 * TARGET_POINTER_SIZE);
             i += 2;
@@ -1883,7 +1942,7 @@ void CodeGen::genCodeForCpObj(GenTreeBlk* cpObjNode)
             emit->emitIns_R_R_I(INS_ld, attr0, tmpReg, REG_WRITE_BARRIER_SRC_BYREF, 0);
             emit->emitIns_R_R_I(INS_addi, attrSrcAddr, REG_WRITE_BARRIER_SRC_BYREF, REG_WRITE_BARRIER_SRC_BYREF,
                                 TARGET_POINTER_SIZE);
-            emit->emitIns_R_R_I(INS_std, attr0, tmpReg, REG_WRITE_BARRIER_DST_BYREF, 0);
+            emitStackStore(INS_std, attr0, tmpReg, i * TARGET_POINTER_SIZE, 0);
             emit->emitIns_R_R_I(INS_addi, attrDstAddr, REG_WRITE_BARRIER_DST_BYREF, REG_WRITE_BARRIER_DST_BYREF,
                                 TARGET_POINTER_SIZE);
         }
@@ -2186,11 +2245,14 @@ void CodeGen::genCodeForInitBlkLoop(GenTreeBlk* initBlkNode)
 
         const regNumber tempReg = internalRegisters.GetSingle(initBlkNode);
         instGen_Set_Reg_To_Imm(EA_PTRSIZE, tempReg, size - TARGET_POINTER_SIZE);
+
+        // tempReg becomes an interior pointer below. Keep the whole lifetime of
+        // that unreported absolute address in a no-GC region.
+        GetEmitter()->emitDisableGC();
         GetEmitter()->emitIns_R_R_R(INS_add, EA_PTRSIZE, tempReg, dstReg, tempReg);
 
         BasicBlock* loop = genCreateTempLabel();
         genDefineTempLabel(loop);
-        GetEmitter()->emitDisableGC();
 
         GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, fillReg, tempReg, 0);
         GetEmitter()->emitIns_R_R_I(INS_addi, EA_PTRSIZE, tempReg, tempReg, -static_cast<ssize_t>(TARGET_POINTER_SIZE));

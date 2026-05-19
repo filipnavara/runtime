@@ -375,7 +375,7 @@ bool UnixNativeCodeManager::IsUnwindable(PTR_VOID pvAddress)
     ASSERT(((uintptr_t)pvAddress & 1) == 0);
 #endif
 
-#if defined(TARGET_ARM64) || defined(TARGET_ARM) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARM64) || defined(TARGET_ARM) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     MethodInfo methodInfo;
     FindMethodInfo(pvAddress, &methodInfo);
     pMethodInfo = &methodInfo;
@@ -1140,6 +1140,103 @@ int UnixNativeCodeManager::TrailingEpilogueInstructionsCount(MethodInfo * pMetho
         }
     }
 
+#elif defined(TARGET_POWERPC64)
+
+// Unconditional and conditional branches.
+#define PPC_BRANCH_BITS       0x48000000
+#define PPC_BRANCH_COND_BITS  0x40000000
+#define PPC_BRANCH_XL_BITS    0x4C000000
+#define PPC_OPCODE_MASK       0xFC000000
+
+// ld RT, DS(RA)
+#define PPC_LD_BITS 0xE8000000
+#define PPC_LD_MASK 0xFC000003
+
+// addi RT, RA, SI
+#define PPC_ADDI_BITS 0x38000000
+#define PPC_ADDI_MASK 0xFC000000
+
+// add RT, RA, RB
+#define PPC_ADD_BITS 0x7C000214
+#define PPC_ADD_MASK 0xFC0007FE
+
+// subf RT, RA, RB
+#define PPC_SUBF_BITS 0x7C000050
+#define PPC_SUBF_MASK 0xFC0007FE
+
+// mtlr r0
+#define PPC_MTLR_R0 0x7C0803A6
+
+#define PPC_RT(instr) (((instr) >> 21) & 0x1F)
+#define PPC_RA(instr) (((instr) >> 16) & 0x1F)
+#define PPC_RB(instr) (((instr) >> 11) & 0x1F)
+
+    UnixNativeMethodInfo * pNativeMethodInfo = (UnixNativeMethodInfo *)pMethodInfo;
+    ASSERT(pNativeMethodInfo != NULL);
+
+    uint32_t* start  = (uint32_t*)pNativeMethodInfo->pMethodStartAddress;
+
+    // PPC64LE epilogues restore callee-saved registers and LR, restore SP,
+    // then return via blr. Once any of those instructions has executed, the
+    // platform unwinder may observe a frame state that no longer matches the
+    // normal body unwind state, so report the epilogue as unknown.
+    for (uint32_t* pInstr = (uint32_t*)pvAddress - 1; pInstr > start; pInstr--)
+    {
+        uint32_t instr = *pInstr;
+
+        if (((instr & PPC_OPCODE_MASK) == PPC_BRANCH_BITS) ||
+            ((instr & PPC_OPCODE_MASK) == PPC_BRANCH_COND_BITS) ||
+            ((instr & PPC_OPCODE_MASK) == PPC_BRANCH_XL_BITS))
+        {
+            break;
+        }
+
+        if (instr == PPC_MTLR_R0)
+        {
+            return -1;
+        }
+
+        if ((instr & PPC_LD_MASK) == PPC_LD_BITS)
+        {
+            int rt = PPC_RT(instr);
+            int ra = PPC_RA(instr);
+            if ((ra == 1) && ((rt == 0) || (rt >= 14)))
+            {
+                return -1;
+            }
+        }
+
+        if ((instr & PPC_ADDI_MASK) == PPC_ADDI_BITS)
+        {
+            int rt = PPC_RT(instr);
+            int ra = PPC_RA(instr);
+            if ((rt == 1) && ((ra == 1) || (ra == 31)))
+            {
+                return -1;
+            }
+        }
+
+        if ((instr & PPC_ADD_MASK) == PPC_ADD_BITS)
+        {
+            int rt = PPC_RT(instr);
+            int ra = PPC_RA(instr);
+            if ((rt == 1) && (ra == 1))
+            {
+                return -1;
+            }
+        }
+
+        if ((instr & PPC_SUBF_MASK) == PPC_SUBF_BITS)
+        {
+            int rt = PPC_RT(instr);
+            int rb = PPC_RB(instr);
+            if ((rt == 1) && (rb == 31))
+            {
+                return -1;
+            }
+        }
+    }
+
 #endif
 
     return 0;
@@ -1210,7 +1307,7 @@ bool UnixNativeCodeManager::GetReturnAddressHijackInfo(MethodInfo *    pMethodIn
     *ppvRetAddrLocation = (PTR_PTR_VOID)(pRegisterSet->GetSP() - sizeof(TADDR));
     return true;
 
-#elif defined(TARGET_ARM64) || defined(TARGET_ARM) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_ARM64) || defined(TARGET_ARM) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 
     if ((unwindBlockFlags & UBF_FUNC_HAS_ASSOCIATED_DATA) != 0)
         p += sizeof(int32_t);

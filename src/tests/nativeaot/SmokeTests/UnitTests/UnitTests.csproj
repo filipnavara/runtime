@@ -24,6 +24,7 @@
     <Compile Include="Generics.cs" />
     <Compile Include="Interfaces.cs" />
     <Compile Include="Ordering.cs" />
+    <Compile Include="AtomicPrimitives.cs" />
     <Compile Include="Threading.cs" />
     <Compile Include="StackTraces.cs" />
     <Compile Include="Main.cs" />

@@ -265,8 +265,11 @@ int LinearScan::BuildNode(GenTree* tree)
         case GT_ROR:
         {
             int srcCount = BuildBinaryUses(tree->AsOp());
-            buildInternalIntRegisterDefForNode(tree);
-            buildInternalRegisterUses();
+            if (tree->OperIs(GT_ROR) && !tree->gtGetOp2()->isContained())
+            {
+                buildInternalIntRegisterDefForNode(tree);
+                buildInternalRegisterUses();
+            }
             BuildDef(tree);
             return srcCount;
         }

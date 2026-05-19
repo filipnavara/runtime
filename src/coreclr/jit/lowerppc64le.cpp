@@ -313,6 +313,13 @@ void Lowering::ContainCheckMul(GenTreeOp* node)
 
 void Lowering::ContainCheckShiftRotate(GenTreeOp* node)
 {
+    GenTree* shiftBy = node->gtOp2;
+    assert(node->OperIsShiftOrRotate());
+
+    if (node->OperIs(GT_ROL, GT_ROR) && shiftBy->IsCnsIntOrI())
+    {
+        MakeSrcContained(node, shiftBy);
+    }
 }
 
 void Lowering::ContainCheckStoreLoc(GenTreeLclVarCommon* storeLoc) const

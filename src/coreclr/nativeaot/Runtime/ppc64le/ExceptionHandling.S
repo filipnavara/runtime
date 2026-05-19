@@ -20,7 +20,7 @@
 #define rsp_offsetof_ExInfo     THROW_ABI_FRAME_HEADER
 #define rsp_offsetof_Context    (THROW_ABI_FRAME_HEADER + STACKSIZEOF_ExInfo)
 
-#define OFFSETOF__PAL_LIMITED_CONTEXT__F14 0xB8
+#define OFFSETOF__PAL_LIMITED_CONTEXT__F14 0xF8
 
 #define CATCH_ABI_FRAME_HEADER  0x40
 #define CATCH_FRAME_SIZE        0x100
@@ -71,60 +71,73 @@ END_FUNC \name
 .endm
 
 .macro STORE_PAL_CONTEXT software
-    mflr 8
     .if \software
-        mr 0, 8
+        mflr 0
     .endif
 
-    mr 12, 1
     stdu 1, -THROW_FRAME_SIZE(1)
-    std 8, 16(1)
     .cfi_def_cfa 1, THROW_FRAME_SIZE
+
+    std 31, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__FP(1)
+    std 0,  rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__LR(1)
+    std 0,  rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__IP(1)
+    std 3,  rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R3(1)
+    std 4,  rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R4(1)
+    std 5,  rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R5(1)
+    std 6,  rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R6(1)
+    std 7,  rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R7(1)
+    std 8,  rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R8(1)
+    std 9,  rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R9(1)
+    std 10, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R10(1)
+    std 11, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R11(1)
+    std 12, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R12(1)
+    std 14, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R14(1)
+    std 15, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R15(1)
+    std 16, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R16(1)
+    std 17, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R17(1)
+    std 18, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R18(1)
+    std 19, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R19(1)
+    std 20, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R20(1)
+    std 21, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R21(1)
+    std 22, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R22(1)
+    std 23, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R23(1)
+    std 24, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R24(1)
+    std 25, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R25(1)
+    std 26, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R26(1)
+    std 27, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R27(1)
+    std 28, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R28(1)
+    std 29, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R29(1)
+    std 30, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R30(1)
+
+    .if \software
+        std 0, 16(1)
+    .else
+        mflr 8
+        std 8, 16(1)
+    .endif
     .cfi_offset 65, 16 - THROW_FRAME_SIZE
-    addi 9, 1, rsp_offsetof_Context
 
-    std 31, OFFSETOF__PAL_LIMITED_CONTEXT__FP(9)
-    std 0,  OFFSETOF__PAL_LIMITED_CONTEXT__LR(9)
-    std 3,  OFFSETOF__PAL_LIMITED_CONTEXT__R3(9)
-    std 4,  OFFSETOF__PAL_LIMITED_CONTEXT__R4(9)
-    std 14, OFFSETOF__PAL_LIMITED_CONTEXT__R14(9)
-    std 15, OFFSETOF__PAL_LIMITED_CONTEXT__R15(9)
-    std 16, OFFSETOF__PAL_LIMITED_CONTEXT__R16(9)
-    std 17, OFFSETOF__PAL_LIMITED_CONTEXT__R17(9)
-    std 18, OFFSETOF__PAL_LIMITED_CONTEXT__R18(9)
-    std 19, OFFSETOF__PAL_LIMITED_CONTEXT__R19(9)
-    std 20, OFFSETOF__PAL_LIMITED_CONTEXT__R20(9)
-    std 21, OFFSETOF__PAL_LIMITED_CONTEXT__R21(9)
-    std 22, OFFSETOF__PAL_LIMITED_CONTEXT__R22(9)
-    std 23, OFFSETOF__PAL_LIMITED_CONTEXT__R23(9)
-    std 24, OFFSETOF__PAL_LIMITED_CONTEXT__R24(9)
-    std 25, OFFSETOF__PAL_LIMITED_CONTEXT__R25(9)
-    std 26, OFFSETOF__PAL_LIMITED_CONTEXT__R26(9)
-    std 27, OFFSETOF__PAL_LIMITED_CONTEXT__R27(9)
-    std 28, OFFSETOF__PAL_LIMITED_CONTEXT__R28(9)
-    std 29, OFFSETOF__PAL_LIMITED_CONTEXT__R29(9)
-    std 30, OFFSETOF__PAL_LIMITED_CONTEXT__R30(9)
-    std 12, OFFSETOF__PAL_LIMITED_CONTEXT__SP(9)
-    std 0,  OFFSETOF__PAL_LIMITED_CONTEXT__IP(9)
+    addi 8, 1, THROW_FRAME_SIZE
+    std 8, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__SP(1)
 
-    stfd 14, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x00(9)
-    stfd 15, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x08(9)
-    stfd 16, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x10(9)
-    stfd 17, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x18(9)
-    stfd 18, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x20(9)
-    stfd 19, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x28(9)
-    stfd 20, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x30(9)
-    stfd 21, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x38(9)
-    stfd 22, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x40(9)
-    stfd 23, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x48(9)
-    stfd 24, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x50(9)
-    stfd 25, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x58(9)
-    stfd 26, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x60(9)
-    stfd 27, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x68(9)
-    stfd 28, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x70(9)
-    stfd 29, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x78(9)
-    stfd 30, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x80(9)
-    stfd 31, OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x88(9)
+    stfd 14, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x00(1)
+    stfd 15, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x08(1)
+    stfd 16, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x10(1)
+    stfd 17, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x18(1)
+    stfd 18, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x20(1)
+    stfd 19, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x28(1)
+    stfd 20, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x30(1)
+    stfd 21, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x38(1)
+    stfd 22, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x40(1)
+    stfd 23, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x48(1)
+    stfd 24, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x50(1)
+    stfd 25, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x58(1)
+    stfd 26, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x60(1)
+    stfd 27, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x68(1)
+    stfd 28, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x70(1)
+    stfd 29, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x78(1)
+    stfd 30, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x80(1)
+    stfd 31, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__F14 + 0x88(1)
 .endm
 
 .macro INIT_EXINFO exInfoReg, contextReg, kindReg

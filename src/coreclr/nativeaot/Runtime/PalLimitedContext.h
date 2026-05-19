@@ -145,6 +145,14 @@ struct PAL_LIMITED_CONTEXT
 
     uintptr_t  R3;
     uintptr_t  R4;
+    uintptr_t  R5;
+    uintptr_t  R6;
+    uintptr_t  R7;
+    uintptr_t  R8;
+    uintptr_t  R9;
+    uintptr_t  R10;
+    uintptr_t  R11;
+    uintptr_t  R12;
     uintptr_t  R14;
     uintptr_t  R15;
     uintptr_t  R16;

@@ -614,6 +614,14 @@ void StackFrameIterator::InternalInit(Thread * pThreadToWalk, PTR_PAL_LIMITED_CO
     //
     m_RegDisplay.pR3 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pCtx, R3);
     m_RegDisplay.pR4 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pCtx, R4);
+    m_RegDisplay.pR5 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pCtx, R5);
+    m_RegDisplay.pR6 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pCtx, R6);
+    m_RegDisplay.pR7 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pCtx, R7);
+    m_RegDisplay.pR8 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pCtx, R8);
+    m_RegDisplay.pR9 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pCtx, R9);
+    m_RegDisplay.pR10 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pCtx, R10);
+    m_RegDisplay.pR11 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pCtx, R11);
+    m_RegDisplay.pR12 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pCtx, R12);
 
 #elif defined(UNIX_AMD64_ABI)
     //
@@ -1990,6 +1998,16 @@ void StackFrameIterator::UnwindThrowSiteThunk()
     m_RegDisplay.pS11 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, S11);
     m_RegDisplay.pFP = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, FP);
 #elif defined(TARGET_POWERPC64)
+    m_RegDisplay.pR3 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, R3);
+    m_RegDisplay.pR4 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, R4);
+    m_RegDisplay.pR5 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, R5);
+    m_RegDisplay.pR6 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, R6);
+    m_RegDisplay.pR7 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, R7);
+    m_RegDisplay.pR8 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, R8);
+    m_RegDisplay.pR9 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, R9);
+    m_RegDisplay.pR10 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, R10);
+    m_RegDisplay.pR11 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, R11);
+    m_RegDisplay.pR12 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, R12);
     m_RegDisplay.pR14 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, R14);
     m_RegDisplay.pR15 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, R15);
     m_RegDisplay.pR16 = (PTR_uintptr_t)PTR_TO_MEMBER_TADDR(PAL_LIMITED_CONTEXT, pContext, R16);

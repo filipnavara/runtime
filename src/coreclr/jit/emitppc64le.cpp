@@ -168,6 +168,10 @@ bool emitter::emitInsMayWriteToGCReg(instruction ins)
         case INS_srad:
         case INS_srw:
         case INS_srd:
+        case INS_rlwinm:
+        case INS_rlwnm:
+        case INS_rldicl:
+        case INS_rldcl:
         case INS_sldi:
         case INS_and:
         case INS_andc:
@@ -281,12 +285,60 @@ static unsigned ppcSplit5_1(unsigned value)
     return ((value & 0x1F) << 1) | ((value >> 5) & 0x1);
 }
 
+static ssize_t ppcPack2(unsigned first, unsigned second)
+{
+    assert(first < 64);
+    assert(second < 64);
+    return static_cast<ssize_t>((first << 6) | second);
+}
+
+static unsigned ppcUnpackFirst(ssize_t value)
+{
+    return static_cast<unsigned>((value >> 6) & 0x3F);
+}
+
+static unsigned ppcUnpackSecond(ssize_t value)
+{
+    return static_cast<unsigned>(value & 0x3F);
+}
+
+static ssize_t ppcPackWordRotate(unsigned sh, unsigned mb, unsigned me)
+{
+    assert(sh < 32);
+    assert(mb < 32);
+    assert(me < 32);
+    return static_cast<ssize_t>((sh << 10) | (mb << 5) | me);
+}
+
 static emitter::code_t ppcEncodeRldicl(emitter::code_t code, regNumber ra, regNumber rs, unsigned sh, unsigned mb)
 {
     assert(sh < 64);
     assert(mb < 64);
     return code | (ppcReg(rs) << 21) | (ppcReg(ra) << 16) | ((sh & 0x1F) << 11) | (ppcSplit5_1(mb) << 5) |
            (((sh >> 5) & 0x1) << 1);
+}
+
+static emitter::code_t ppcEncodeRldcl(emitter::code_t code, regNumber ra, regNumber rs, regNumber rb, unsigned mb)
+{
+    assert(mb < 64);
+    return code | (ppcReg(rs) << 21) | (ppcReg(ra) << 16) | (ppcReg(rb) << 11) | (ppcSplit5_1(mb) << 5);
+}
+
+static emitter::code_t ppcEncodeRlwinm(
+    emitter::code_t code, regNumber ra, regNumber rs, unsigned sh, unsigned mb, unsigned me)
+{
+    assert(sh < 32);
+    assert(mb < 32);
+    assert(me < 32);
+    return code | (ppcReg(rs) << 21) | (ppcReg(ra) << 16) | (sh << 11) | (mb << 6) | (me << 1);
+}
+
+static emitter::code_t ppcEncodeRlwnm(
+    emitter::code_t code, regNumber ra, regNumber rs, regNumber rb, unsigned mb, unsigned me)
+{
+    assert(mb < 32);
+    assert(me < 32);
+    return code | (ppcReg(rs) << 21) | (ppcReg(ra) << 16) | (ppcReg(rb) << 11) | (mb << 6) | (me << 1);
 }
 
 static emitter::code_t ppcEncodeSpr(unsigned spr)
@@ -392,6 +444,17 @@ void emitter::emitIns_R_R_I(instruction ins, emitAttr attr, regNumber reg1, regN
     appendToCurIG(id);
 }
 
+void emitter::emitIns_R_R_I_I(instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, unsigned imm1, unsigned imm2)
+{
+    emitIns_R_R_I(ins, attr, reg1, reg2, ppcPack2(imm1, imm2));
+}
+
+void emitter::emitIns_R_R_I_I_I(
+    instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, unsigned imm1, unsigned imm2, unsigned imm3)
+{
+    emitIns_R_R_I(ins, attr, reg1, reg2, ppcPackWordRotate(imm1, imm2, imm3));
+}
+
 void emitter::emitIns_R_R_R(
     instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, regNumber reg3, insOpts opt)
 {
@@ -406,6 +469,27 @@ void emitter::emitIns_R_R_R(
 
     dispIns(id);
     appendToCurIG(id);
+}
+
+void emitter::emitIns_R_R_R_I(
+    instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, regNumber reg3, unsigned imm)
+{
+    instrDesc* id = emitNewInstrCns(attr, imm);
+
+    id->idIns(ins);
+    id->idReg1(reg1);
+    id->idReg2(reg2);
+    id->idReg3(reg3);
+    id->idCodeSize(sizeof(code_t));
+
+    dispIns(id);
+    appendToCurIG(id);
+}
+
+void emitter::emitIns_R_R_R_I_I(
+    instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, regNumber reg3, unsigned imm1, unsigned imm2)
+{
+    emitIns_R_R_R_I(ins, attr, reg1, reg2, reg3, static_cast<unsigned>(ppcPack2(imm1, imm2)));
 }
 
 void emitter::emitIns_R_C(
@@ -732,6 +816,39 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_srd:
             code = code | (ppcReg(id->idReg2()) << 21) | (ppcReg(id->idReg1()) << 16) |
                    (ppcReg(id->idReg3()) << 11);
+            break;
+
+        case INS_rlwinm:
+        {
+            ssize_t  packed = emitGetInsSC(id);
+            unsigned sh     = static_cast<unsigned>((packed >> 10) & 0x1F);
+            unsigned mb     = static_cast<unsigned>((packed >> 5) & 0x1F);
+            unsigned me     = static_cast<unsigned>(packed & 0x1F);
+            code            = ppcEncodeRlwinm(code, id->idReg1(), id->idReg2(), sh, mb, me);
+            break;
+        }
+
+        case INS_rlwnm:
+        {
+            ssize_t  packed = emitGetInsSC(id);
+            unsigned mb     = ppcUnpackFirst(packed);
+            unsigned me     = ppcUnpackSecond(packed);
+            code            = ppcEncodeRlwnm(code, id->idReg1(), id->idReg2(), id->idReg3(), mb, me);
+            break;
+        }
+
+        case INS_rldicl:
+        {
+            ssize_t  packed = emitGetInsSC(id);
+            unsigned sh     = ppcUnpackFirst(packed);
+            unsigned mb     = ppcUnpackSecond(packed);
+            code            = ppcEncodeRldicl(code, id->idReg1(), id->idReg2(), sh, mb);
+            break;
+        }
+
+        case INS_rldcl:
+            code = ppcEncodeRldcl(code, id->idReg1(), id->idReg2(), id->idReg3(),
+                                  static_cast<unsigned>(emitGetInsSC(id)));
             break;
 
         case INS_extsb:

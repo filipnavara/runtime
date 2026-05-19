@@ -51,8 +51,15 @@ void emitIns_R_R(instruction ins, emitAttr attr, regNumber reg1, regNumber reg2,
 void emitIns_R_R(instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, insFlags flags);
 void emitIns_R_R_I(
     instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, ssize_t imm, insOpts opt = INS_OPTS_NONE);
+void emitIns_R_R_I_I(
+    instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, unsigned imm1, unsigned imm2);
+void emitIns_R_R_I_I_I(
+    instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, unsigned imm1, unsigned imm2, unsigned imm3);
 void emitIns_R_R_R(
     instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, regNumber reg3, insOpts opt = INS_OPTS_NONE);
+void emitIns_R_R_R_I(instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, regNumber reg3, unsigned imm);
+void emitIns_R_R_R_I_I(
+    instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, regNumber reg3, unsigned imm1, unsigned imm2);
 void emitIns_R_L(instruction ins, emitAttr attr, BasicBlock* dst, regNumber reg);
 void emitIns_R_L(instruction ins, emitAttr attr, insGroup* dst, regNumber reg);
 void emitIns_R_C(instruction ins, emitAttr attr, regNumber targetReg, regNumber addrReg, CORINFO_FIELD_HANDLE fldHnd);

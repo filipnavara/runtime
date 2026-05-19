@@ -767,33 +767,49 @@ void CodeGen::genCodeForRotate(GenTree* tree)
 
     genConsumeOperands(tree->AsOp());
 
-    emitAttr    attr        = emitActualTypeSize(tree);
-    regNumber   targetReg   = tree->GetRegNum();
-    regNumber   operandReg  = operand->GetRegNum();
-    regNumber   shiftByReg  = shiftBy->GetRegNum();
-    regNumber   tempReg     = internalRegisters.GetSingle(tree);
-    instruction leftShift   = (attr == EA_4BYTE) ? INS_slw : INS_sld;
-    instruction rightShift  = (attr == EA_4BYTE) ? INS_srw : INS_srd;
-    ssize_t     countMask   = (attr == EA_4BYTE) ? 31 : 63;
+    emitAttr  attr       = emitActualTypeSize(tree);
+    regNumber targetReg  = tree->GetRegNum();
+    regNumber operandReg = operand->GetRegNum();
+    unsigned  width      = (attr == EA_4BYTE) ? 32 : 64;
+    unsigned  countMask  = width - 1;
 
-    instGen_Set_Reg_To_Imm(attr, REG_R0, countMask);
-    GetEmitter()->emitIns_R_R_R(INS_and, attr, tempReg, shiftByReg, REG_R0);
-    if (tree->OperIs(GT_ROL))
+    if (shiftBy->IsCnsIntOrI())
     {
-        GetEmitter()->emitIns_R_R_R(leftShift, attr, REG_R0, operandReg, tempReg);
-        GetEmitter()->emitIns_R_R_I(INS_xori, attr, tempReg, tempReg, countMask);
-        GetEmitter()->emitIns_R_R_I(INS_addi, attr, tempReg, tempReg, 1);
-        GetEmitter()->emitIns_R_R_R(rightShift, attr, tempReg, operandReg, tempReg);
+        unsigned rotateLeft = static_cast<unsigned>(shiftBy->AsIntCon()->gtIconVal) & countMask;
+        if (tree->OperIs(GT_ROR))
+        {
+            rotateLeft = (width - rotateLeft) & countMask;
+        }
+
+        if (attr == EA_4BYTE)
+        {
+            GetEmitter()->emitIns_R_R_I_I_I(INS_rlwinm, attr, targetReg, operandReg, rotateLeft, 0, 31);
+        }
+        else
+        {
+            GetEmitter()->emitIns_R_R_I_I(INS_rldicl, attr, targetReg, operandReg, rotateLeft, 0);
+        }
     }
     else
     {
-        GetEmitter()->emitIns_R_R_R(rightShift, attr, REG_R0, operandReg, tempReg);
-        GetEmitter()->emitIns_R_R_I(INS_xori, attr, tempReg, tempReg, countMask);
-        GetEmitter()->emitIns_R_R_I(INS_addi, attr, tempReg, tempReg, 1);
-        GetEmitter()->emitIns_R_R_R(leftShift, attr, tempReg, operandReg, tempReg);
+        regNumber shiftByReg = shiftBy->GetRegNum();
+        if (tree->OperIs(GT_ROR))
+        {
+            regNumber tempReg = internalRegisters.GetSingle(tree);
+            GetEmitter()->emitIns_R_R(INS_neg, attr, tempReg, shiftByReg);
+            shiftByReg = tempReg;
+        }
+
+        if (attr == EA_4BYTE)
+        {
+            GetEmitter()->emitIns_R_R_R_I_I(INS_rlwnm, attr, targetReg, operandReg, shiftByReg, 0, 31);
+        }
+        else
+        {
+            GetEmitter()->emitIns_R_R_R_I(INS_rldcl, attr, targetReg, operandReg, shiftByReg, 0);
+        }
     }
 
-    GetEmitter()->emitIns_R_R_R(INS_or, attr, targetReg, REG_R0, tempReg);
     genProduceReg(tree);
 }
 

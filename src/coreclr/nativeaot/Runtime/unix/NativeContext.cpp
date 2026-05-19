@@ -698,6 +698,14 @@
 #define ASSIGN_INTEGER_REGS  \
     ASSIGN_REG(R3, R3)       \
     ASSIGN_REG(R4, R4)       \
+    ASSIGN_REG(R5, R5)       \
+    ASSIGN_REG(R6, R6)       \
+    ASSIGN_REG(R7, R7)       \
+    ASSIGN_REG(R8, R8)       \
+    ASSIGN_REG(R9, R9)       \
+    ASSIGN_REG(R10, R10)     \
+    ASSIGN_REG(R11, R11)     \
+    ASSIGN_REG(R12, R12)     \
     ASSIGN_REG(R14, R14)     \
     ASSIGN_REG(R15, R15)     \
     ASSIGN_REG(R16, R16)     \

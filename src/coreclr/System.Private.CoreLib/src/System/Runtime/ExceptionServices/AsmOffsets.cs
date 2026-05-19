@@ -183,7 +183,7 @@ class AsmOffsets
 #elif TARGET_LOONGARCH64
     public const int SIZEOF__PAL_LIMITED_CONTEXT = 0x520;
 #elif TARGET_POWERPC64
-    public const int SIZEOF__PAL_LIMITED_CONTEXT = 0x148;
+    public const int SIZEOF__PAL_LIMITED_CONTEXT = 0x188;
 #elif TARGET_WASM
     public const int SIZEOF__PAL_LIMITED_CONTEXT = 0x14;
 #endif
@@ -207,7 +207,7 @@ class AsmOffsets
     public const int OFFSETOF__PAL_LIMITED_CONTEXT__IP = 0x108;
     public const int OFFSETOF__PAL_LIMITED_CONTEXT__FP = 0xb8;
 #elif TARGET_POWERPC64
-    public const int OFFSETOF__PAL_LIMITED_CONTEXT__IP = 0xB0;
+    public const int OFFSETOF__PAL_LIMITED_CONTEXT__IP = 0xF0;
     public const int OFFSETOF__PAL_LIMITED_CONTEXT__FP = 0x0;
 #elif TARGET_WASM
     public const int OFFSETOF__PAL_LIMITED_CONTEXT__IP = 0x10;

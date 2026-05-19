@@ -158,16 +158,16 @@
 .globl RhpGcProbeHijack
 .type RhpGcProbeHijack,@function
 RhpGcProbeHijack:
+    FixupHijackedCallstack
+
     addis 12, 2, RhpTrapThreads@toc@ha
     lwz 12, RhpTrapThreads@toc@l(12)
     andi. 12, 12, 1
     bne 1f
 
-    FixupHijackedCallstack
     blr
 
 1:
-    FixupHijackedCallstack
     li 12, ((PROBE_FLAGS >> 32) & 0xffff)
     sldi 12, 12, 32
     oris 12, 12, ((PROBE_FLAGS >> 16) & 0xffff)

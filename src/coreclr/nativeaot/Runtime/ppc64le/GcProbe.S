@@ -36,9 +36,11 @@
 .set PPC64_CALL_FRAME_SIZE, 256
 
 .set PROBE_FRAME_SIZE, 352
-.set PROBE_FLAGS_LO_HI16, 4084
-.set PROBE_FLAGS_LO_LO16, -1
-.set PROBE_FLAGS_THREAD_HIJACK, 2
+.set PROBE_FLAGS_SAVE_PRESERVED_R14_R30, 0x000000000001ffff
+.set PROBE_FLAGS_SAVE_SP,                0x0000000000020000
+.set PROBE_FLAGS_SAVE_R3_R10,            0x000000000ff00000
+.set PROBE_FLAGS_THREAD_HIJACK,          0x0000000200000000
+.set PROBE_FLAGS,                        (PROBE_FLAGS_SAVE_PRESERVED_R14_R30 + PROBE_FLAGS_SAVE_SP + PROBE_FLAGS_SAVE_R3_R10 + PROBE_FLAGS_THREAD_HIJACK)
 
 .set HIJACK_FIXUP_FRAME_SIZE, 256
 .set HIJACK_FIXUP_R3, 64
@@ -98,6 +100,21 @@
     lfd 13, \start+96(\base)
 .endm
 
+.macro INLINE_GETTHREAD_PPC64LE target
+    addis \target, 2, tls_CurrentThread@got@tprel@ha
+    ld \target, tls_CurrentThread@got@tprel@l(\target)
+    add \target, \target, 13
+.endm
+
+.macro FixupHijackedCallstack
+    INLINE_GETTHREAD_PPC64LE 11
+    ld 0, Thread_m_pvHijackedReturnAddress(11)
+    mtlr 0
+    li 12, 0
+    std 12, Thread_m_ppvHijackedReturnAddressLocation(11)
+    std 12, Thread_m_pvHijackedReturnAddress(11)
+.endm
+
 .macro SAVE_PRESERVED_R14_R30 base
     std 14, PInvokeTransitionFrame_m_PreservedRegs+0(\base)
     std 15, PInvokeTransitionFrame_m_PreservedRegs+8(\base)
@@ -142,37 +159,20 @@
 .globl RhpGcProbeHijack
 .type RhpGcProbeHijack,@function
 RhpGcProbeHijack:
-    stdu 1, -HIJACK_FIXUP_FRAME_SIZE(1)
-    SAVE_R3_R10 1
-    SAVE_F1_F13 1, HIJACK_FIXUP_F1
-
-    stdu 1, -PPC64_CALL_FRAME_SIZE(1)
-    bl RhpGetThread
-    nop
-    addi 1, 1, PPC64_CALL_FRAME_SIZE
-    mr 11, 3
-
-    RESTORE_F1_F13 1, HIJACK_FIXUP_F1
-    RESTORE_R3_R10 1
-    addi 1, 1, HIJACK_FIXUP_FRAME_SIZE
-
-    ld 0, Thread_m_pvHijackedReturnAddress(11)
-    mtlr 0
-    li 12, 0
-    std 12, Thread_m_ppvHijackedReturnAddressLocation(11)
-    std 12, Thread_m_pvHijackedReturnAddress(11)
-
     addis 12, 2, RhpTrapThreads@toc@ha
     lwz 12, RhpTrapThreads@toc@l(12)
     andi. 12, 12, 1
     bne 1f
+
+    FixupHijackedCallstack
     blr
 
 1:
-    li 12, PROBE_FLAGS_THREAD_HIJACK
+    FixupHijackedCallstack
+    li 12, ((PROBE_FLAGS >> 32) & 0xffff)
     sldi 12, 12, 32
-    oris 12, 12, PROBE_FLAGS_LO_HI16
-    addi 12, 12, PROBE_FLAGS_LO_LO16
+    oris 12, 12, ((PROBE_FLAGS >> 16) & 0xffff)
+    ori 12, 12, (PROBE_FLAGS & 0xffff)
     b RhpWaitForGC
     .size RhpGcProbeHijack, .-RhpGcProbeHijack
 

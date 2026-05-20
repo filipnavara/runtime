@@ -195,14 +195,8 @@ bool UnixNativeCodeManager::IsSafePoint(PTR_VOID pvAddress)
         codeOffset
     );
 
-#if !defined(TARGET_POWERPC64)
     if (decoder.IsInterruptible())
         return true;
-#else
-    // PPC64LE active-frame reporting for asynchronous interruptible IPs is not
-    // reliable yet. Use explicit safe points for inline suspend; otherwise the
-    // suspension machinery falls back to return-address hijacking.
-#endif
 
     if (decoder.IsSafePoint())
         return true;

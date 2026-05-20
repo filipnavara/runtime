@@ -578,7 +578,7 @@ namespace ILCompiler.ObjectWriter
                         blockToRelocate.Data.AsSpan(reloc.Offset),
                         reloc.RelocType,
                         relocSymbolName,
-                        relocTarget.Offset + reloc.Addend);
+                        relocTarget.Offset);
 
                     if (_options.HasFlag(ObjectWritingOptions.ControlFlowGuard))
                     {

@@ -71,7 +71,13 @@ StackFrameIterator::StackFrameIterator(Thread * pThreadToWalk, PInvokeTransition
 
     if (pInitialTransitionFrame == INTERRUPTED_THREAD_MARKER)
     {
-        InternalInit(pThreadToWalk, pThreadToWalk->GetInterruptedContext(), GcStackWalkFlags | ActiveStackFrame);
+        NATIVE_CONTEXT* pInterruptedContext = pThreadToWalk->GetInterruptedContext();
+        STRESS_LOG3(LF_STACKWALK, LL_INFO10000,
+            "----Init interrupted ctx---- [ GC ] ctx=%p IP=%pK SP=%p\n",
+            pInterruptedContext,
+            (void*)pInterruptedContext->GetIp(),
+            (void*)pInterruptedContext->GetSp());
+        InternalInit(pThreadToWalk, pInterruptedContext, GcStackWalkFlags | ActiveStackFrame);
     }
     else if (pInitialTransitionFrame == TOP_OF_STACK_MARKER)
     {

@@ -629,6 +629,8 @@ namespace ILCompiler.ObjectWriter
                         IMAGE_REL_BASED_PPC64_REL24 => R_PPC64_REL24,
                         IMAGE_REL_BASED_PPC64_TOC16_LO => R_PPC64_TOC16_LO,
                         IMAGE_REL_BASED_PPC64_TOC16_HA => R_PPC64_TOC16_HA,
+                        IMAGE_REL_BASED_PPC64_TPREL16_LO => R_PPC64_TPREL16_LO,
+                        IMAGE_REL_BASED_PPC64_TPREL16_HA => R_PPC64_TPREL16_HA,
                         _ => throw new NotSupportedException("Unknown relocation type: " + symbolicRelocation.Type)
                     };
 

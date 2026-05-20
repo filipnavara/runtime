@@ -35,6 +35,8 @@ namespace ILCompiler.DependencyAnalysis
         IMAGE_REL_BASED_PPC64_REL24          = 0x21,   // PPC64: B/BL 24-bit PC-relative branch
         IMAGE_REL_BASED_PPC64_TOC16_LO       = 0x22,   // PPC64: low 16 bits of TOC-relative address
         IMAGE_REL_BASED_PPC64_TOC16_HA       = 0x23,   // PPC64: high-adjusted 16 bits of TOC-relative address
+        IMAGE_REL_BASED_PPC64_TPREL16_LO     = 0x24,   // PPC64: low 16 bits of thread-pointer-relative address
+        IMAGE_REL_BASED_PPC64_TPREL16_HA     = 0x25,   // PPC64: high-adjusted 16 bits of thread-pointer-relative address
         IMAGE_REL_BASED_RELPTR32             = 0x7C,   // 32-bit relative address from byte starting reloc
                                                        // This is a special NGEN-specific relocation type
                                                        // for relative pointer (used to make NGen relocation
@@ -718,9 +720,11 @@ namespace ILCompiler.DependencyAnalysis
                     PutPpc64Rel24((uint*)location, value);
                     break;
                 case RelocType.IMAGE_REL_BASED_PPC64_TOC16_LO:
+                case RelocType.IMAGE_REL_BASED_PPC64_TPREL16_LO:
                     PutPpc64Toc16((uint*)location, value);
                     break;
                 case RelocType.IMAGE_REL_BASED_PPC64_TOC16_HA:
+                case RelocType.IMAGE_REL_BASED_PPC64_TPREL16_HA:
                     PutPpc64Toc16((uint*)location, (value + 0x8000) >> 16);
                     break;
 
@@ -782,6 +786,8 @@ namespace ILCompiler.DependencyAnalysis
                 RelocType.IMAGE_REL_BASED_PPC64_REL24 => 4,
                 RelocType.IMAGE_REL_BASED_PPC64_TOC16_LO => 4,
                 RelocType.IMAGE_REL_BASED_PPC64_TOC16_HA => 4,
+                RelocType.IMAGE_REL_BASED_PPC64_TPREL16_LO => 4,
+                RelocType.IMAGE_REL_BASED_PPC64_TPREL16_HA => 4,
 
                 RelocType.WASM_FUNCTION_INDEX_LEB => WASM_PADDED_RELOC_SIZE_32,
                 RelocType.WASM_TABLE_INDEX_SLEB => WASM_PADDED_RELOC_SIZE_32,
@@ -857,8 +863,10 @@ namespace ILCompiler.DependencyAnalysis
                 case RelocType.IMAGE_REL_BASED_PPC64_REL24:
                     return (long)GetPpc64Rel24((uint*)location);
                 case RelocType.IMAGE_REL_BASED_PPC64_TOC16_LO:
+                case RelocType.IMAGE_REL_BASED_PPC64_TPREL16_LO:
                     return GetPpc64Toc16((uint*)location);
                 case RelocType.IMAGE_REL_BASED_PPC64_TOC16_HA:
+                case RelocType.IMAGE_REL_BASED_PPC64_TPREL16_HA:
                     return GetPpc64Toc16((uint*)location) << 16;
                 case RelocType.WASM_FUNCTION_INDEX_LEB:
                 case RelocType.WASM_TABLE_INDEX_SLEB:

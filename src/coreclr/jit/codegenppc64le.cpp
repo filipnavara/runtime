@@ -711,6 +711,25 @@ void CodeGen::genSetRegToConst(regNumber targetReg, var_types targetType, GenTre
             ssize_t        cnsVal = con->IconValue();
 
             emitAttr attr = emitActualTypeSize(targetType);
+            if (TargetOS::IsUnix && m_compiler->IsTargetAbi(CORINFO_NATIVEAOT_ABI) && con->IsTlsIconHandle())
+            {
+                attr = EA_SET_FLG(attr, EA_CNS_RELOC_FLG | EA_CNS_TLSGD_RELOC);
+                instGen_Set_Reg_To_Imm(attr, targetReg, cnsVal,
+                                       INS_FLAGS_DONT_CARE DEBUGARG(con->gtTargetHandle) DEBUGARG(con->gtFlags));
+                regSet.verifyRegUsed(targetReg);
+                break;
+            }
+
+            if (TargetOS::IsUnix && con->IsIconHandle(GTF_ICON_TLS_HDL))
+            {
+                if (cnsVal == 0)
+                {
+                    GetEmitter()->emitIns_R_R(INS_mov, attr, targetReg, REG_TP);
+                    regSet.verifyRegUsed(targetReg);
+                    break;
+                }
+            }
+
             if (con->ImmedValNeedsReloc(m_compiler))
             {
                 attr = EA_SET_FLG(attr, EA_CNS_RELOC_FLG);
@@ -4353,12 +4372,19 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
         assert(reg != REG_R2);
 
         emitAttr relocAttr = EA_HANDLE_CNS_RELOC;
+        regNumber relocBaseReg = REG_R2;
+        if (EA_IS_CNS_TLSGD_RELOC(size))
+        {
+            relocAttr = EA_SET_FLG(relocAttr, EA_CNS_TLSGD_RELOC);
+            relocBaseReg = REG_TP;
+        }
+
         if (EA_IS_BYREF(size))
         {
             relocAttr = EA_SET_FLG(relocAttr, EA_BYREF_FLG);
         }
 
-        GetEmitter()->emitIns_R_R_I(INS_addis, relocAttr, reg, REG_R2, imm);
+        GetEmitter()->emitIns_R_R_I(INS_addis, relocAttr, reg, relocBaseReg, imm);
         GetEmitter()->emitIns_R_R_I(INS_addi, relocAttr, reg, reg, imm);
         return;
     }

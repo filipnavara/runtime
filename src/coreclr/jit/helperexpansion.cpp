@@ -699,6 +699,19 @@ bool Compiler::fgExpandThreadLocalAccessForCallNativeAOT(BasicBlock** pBlock, St
             tlsRefCall->gtFlags |= GTF_EXCEPT | (tlsCallIndir->gtFlags & GTF_GLOB_EFFECT);
             tlsRootAddr = tlsRefCall;
         }
+        else if (TargetArchitecture::IsPpc64le)
+        {
+            // Use the local-exec TLS model:
+            //
+            //      addis rD, r13, tlsRoot@tprel@ha
+            //      addi  rD, rD,  tlsRoot@tprel@l
+            //
+            // r13 is the PPC64 ELF thread pointer. The TLSGD flag is reused here to distinguish
+            // the TLS root symbol from plain TLS_HDL constants such as helper entrypoints.
+            GenTree* tlsRootOffset = gtNewIconHandleNode((size_t)tlsRootObject, GTF_ICON_TLS_HDL);
+            tlsRootOffset->gtFlags |= GTF_ICON_TLSGD_OFFSET;
+            tlsRootAddr = tlsRootOffset;
+        }
         else
         {
             unreached();
@@ -996,7 +1009,7 @@ bool Compiler::fgExpandThreadLocalAccessForCall(BasicBlock** pBlock, Statement* 
 #ifdef UNIX_X86_ABI
         tlsRefCall->gtFlags &= ~GTF_CALL_POP_ARGS;
 #endif // UNIX_X86_ABI
-#elif defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
         // Code sequence to access thread local variable on linux/arm64:
         //
         //      mrs xt, tpidr_elf0
@@ -1011,6 +1024,11 @@ bool Compiler::fgExpandThreadLocalAccessForCall(BasicBlock** pBlock, Statement* 
         //
         //      mov targetReg, $tp
         //      ld rd, targetReg(cns)
+        //
+        // Code sequence to access thread local variable on linux/ppc64le:
+        //
+        //      addi targetReg, r13, 0
+        //      ld rd, cns(targetReg)
         tlsValue = gtNewIconHandleNode(0, GTF_ICON_TLS_HDL);
 #else
         assert(!"Unsupported scenario of optimizing TLS access on Linux Arm32/x86");

@@ -71,16 +71,18 @@ END_FUNC \name
 .endm
 
 .macro STORE_PAL_CONTEXT software
-    .if \software
-        mflr 0
-    .endif
+    mflr 0
 
     stdu 1, -THROW_FRAME_SIZE(1)
     .cfi_def_cfa 1, THROW_FRAME_SIZE
 
     std 31, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__FP(1)
     std 0,  rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__LR(1)
-    std 0,  rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__IP(1)
+    .if \software
+        std 0,  rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__IP(1)
+    .else
+        std 4,  rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__IP(1)
+    .endif
     std 3,  rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R3(1)
     std 4,  rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R4(1)
     std 5,  rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R5(1)
@@ -109,12 +111,7 @@ END_FUNC \name
     std 29, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R29(1)
     std 30, rsp_offsetof_Context + OFFSETOF__PAL_LIMITED_CONTEXT__R30(1)
 
-    .if \software
-        std 0, 16(1)
-    .else
-        mflr 8
-        std 8, 16(1)
-    .endif
+    std 0, 16(1)
     .cfi_offset 65, 16 - THROW_FRAME_SIZE
 
     addi 8, 1, THROW_FRAME_SIZE
@@ -400,7 +397,6 @@ END_FUNC \name
 // void RhpThrowHwEx(uintptr_t exceptionCode, uintptr_t faultingIP)
 //
 DEFINE_FUNC RhpThrowHwEx
-    mr 0, 4
     STORE_PAL_CONTEXT 0
 
     addi 14, 1, rsp_offsetof_ExInfo
@@ -417,8 +413,6 @@ DEFINE_FUNC RhpThrowHwEx
     mr 4, 14
     addi 12, 1, THROW_FRAME_SIZE
     std 12, OFFSETOF__PAL_LIMITED_CONTEXT__SP(15)
-    ld 0, OFFSETOF__PAL_LIMITED_CONTEXT__LR(15)
-    std 0, OFFSETOF__PAL_LIMITED_CONTEXT__IP(15)
     bl RhThrowHwEx
 DEFINE_LABEL RhpThrowHwEx2
     nop

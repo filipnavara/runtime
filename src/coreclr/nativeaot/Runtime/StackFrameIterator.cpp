@@ -2037,27 +2037,8 @@ void StackFrameIterator::UnwindThrowSiteThunk()
     ASSERT_UNCONDITIONALLY("NYI for this arch");
 #endif
 
-#if defined(TARGET_POWERPC64)
-    uintptr_t contextIP = pContext->IP;
-    uintptr_t contextSP = pContext->GetSp();
-
-    if (contextIP == 0)
-    {
-        contextIP = pContext->LR;
-    }
-
-    if (contextSP == 0)
-    {
-        const uintptr_t STACKSIZEOF_Context = ((sizeof(PAL_LIMITED_CONTEXT) + (STACK_ALIGN_SIZE-1)) & ~(STACK_ALIGN_SIZE-1));
-        contextSP = (uintptr_t)dac_cast<TADDR>(pContext) + STACKSIZEOF_Context;
-    }
-
-    m_RegDisplay.SetIP(PCODEToPINSTR(contextIP));
-    m_RegDisplay.SetSP(contextSP);
-#else
     m_RegDisplay.SetIP(PCODEToPINSTR(pContext->IP));
     m_RegDisplay.SetSP(pContext->GetSp());
-#endif
     SetControlPC(dac_cast<PTR_VOID>(m_RegDisplay.GetIP()));
 
     // We expect the throw site to be in managed code, and since this function's notion of how to unwind

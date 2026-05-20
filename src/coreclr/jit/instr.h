@@ -658,7 +658,7 @@ enum emitAttr : unsigned
                 EA_DSP_RELOC_FLG = 0x400, // Is the displacement of the instruction relocatable?
                 EA_CNS_RELOC_FLG = 0x800, // Is the immediate of the instruction relocatable?
                 EA_CNS_SEC_RELOC = 0x1000, // Is the offset immediate that should be relocatable
-                EA_CNS_TLSGD_RELOC = 0x2000, // Is the tlsgd constant to pass to tls_get_addr(). Only on linux/x64/NativeAot
+                EA_CNS_TLSGD_RELOC = 0x2000, // Is a TLS symbol relocation sequence. Only on Unix/NativeAOT.
 };
 
 #define EA_ATTR(x)                  ((emitAttr)(x))

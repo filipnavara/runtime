@@ -4372,11 +4372,13 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
         assert(reg != REG_R2);
 
         emitAttr relocAttr = EA_HANDLE_CNS_RELOC;
-        regNumber relocBaseReg = REG_R2;
         if (EA_IS_CNS_TLSGD_RELOC(size))
         {
             relocAttr = EA_SET_FLG(relocAttr, EA_CNS_TLSGD_RELOC);
-            relocBaseReg = REG_TP;
+            GetEmitter()->emitIns_R_R_I(INS_addis, relocAttr, reg, REG_R2, imm);
+            GetEmitter()->emitIns_R_R_I(INS_ld, relocAttr, reg, reg, imm);
+            GetEmitter()->emitIns_R_R_R_I(INS_add, relocAttr, reg, reg, REG_TP, imm);
+            return;
         }
 
         if (EA_IS_BYREF(size))
@@ -4384,7 +4386,7 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
             relocAttr = EA_SET_FLG(relocAttr, EA_BYREF_FLG);
         }
 
-        GetEmitter()->emitIns_R_R_I(INS_addis, relocAttr, reg, relocBaseReg, imm);
+        GetEmitter()->emitIns_R_R_I(INS_addis, relocAttr, reg, REG_R2, imm);
         GetEmitter()->emitIns_R_R_I(INS_addi, relocAttr, reg, reg, imm);
         return;
     }

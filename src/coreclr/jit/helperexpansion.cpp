@@ -701,13 +701,14 @@ bool Compiler::fgExpandThreadLocalAccessForCallNativeAOT(BasicBlock** pBlock, St
         }
         else if (TargetArchitecture::IsPpc64le)
         {
-            // Use the local-exec TLS model:
+            // Use the initial-exec TLS model so the generated code is compatible with shared libraries:
             //
-            //      addis rD, r13, tlsRoot@tprel@ha
-            //      addi  rD, rD,  tlsRoot@tprel@l
+            //      addis rD, r2, tlsRoot@got@tprel@ha
+            //      ld    rD, tlsRoot@got@tprel@l(rD)
+            //      add   rD, rD, tlsRoot@tls
             //
-            // r13 is the PPC64 ELF thread pointer. The TLSGD flag is reused here to distinguish
-            // the TLS root symbol from plain TLS_HDL constants such as helper entrypoints.
+            // The TLSGD flag is reused here to distinguish the TLS root symbol from plain TLS_HDL
+            // constants such as helper entrypoints.
             GenTree* tlsRootOffset = gtNewIconHandleNode((size_t)tlsRootObject, GTF_ICON_TLS_HDL);
             tlsRootOffset->gtFlags |= GTF_ICON_TLSGD_OFFSET;
             tlsRootAddr = tlsRootOffset;

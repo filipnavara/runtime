@@ -4264,6 +4264,9 @@ namespace Internal.JitInterface
                 CorInfoReloc.PPC64_TOC16_HA => RelocType.IMAGE_REL_BASED_PPC64_TOC16_HA,
                 CorInfoReloc.PPC64_TPREL16_LO => RelocType.IMAGE_REL_BASED_PPC64_TPREL16_LO,
                 CorInfoReloc.PPC64_TPREL16_HA => RelocType.IMAGE_REL_BASED_PPC64_TPREL16_HA,
+                CorInfoReloc.PPC64_GOT_TPREL16_HA => RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16_HA,
+                CorInfoReloc.PPC64_GOT_TPREL16_LO_DS => RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16_LO_DS,
+                CorInfoReloc.PPC64_TLS => RelocType.IMAGE_REL_BASED_PPC64_TLS,
                 CorInfoReloc.WASM_FUNCTION_INDEX_LEB => RelocType.WASM_FUNCTION_INDEX_LEB,
                 CorInfoReloc.WASM_TABLE_INDEX_SLEB => RelocType.WASM_TABLE_INDEX_SLEB,
                 CorInfoReloc.WASM_MEMORY_ADDR_LEB => RelocType.WASM_MEMORY_ADDR_LEB,
@@ -4337,9 +4340,11 @@ namespace Internal.JitInterface
 
             int relocationAddend = 0;
             if (relocType is RelocType.IMAGE_REL_BASED_PPC64_TOC16_LO or RelocType.IMAGE_REL_BASED_PPC64_TOC16_HA
-                or RelocType.IMAGE_REL_BASED_PPC64_TPREL16_LO or RelocType.IMAGE_REL_BASED_PPC64_TPREL16_HA)
+                or RelocType.IMAGE_REL_BASED_PPC64_TPREL16_LO or RelocType.IMAGE_REL_BASED_PPC64_TPREL16_HA
+                or RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16_HA or RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16_LO_DS
+                or RelocType.IMAGE_REL_BASED_PPC64_TLS)
             {
-                // The high-adjusted half cannot faithfully encode its original addend in the instruction.
+                // PPC64 split-instruction and marker relocations carry the addend in the relocation entry.
                 relocationAddend = relocDelta;
                 Relocation.WriteValue(relocType, location, 0);
             }

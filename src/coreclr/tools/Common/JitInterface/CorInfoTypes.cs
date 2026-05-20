@@ -510,6 +510,8 @@ namespace Internal.JitInterface
         PPC64_REL24,                           // PowerPC64: B, BL
         PPC64_TOC16_LO,                        // PowerPC64: low 16 bits of TOC-relative address
         PPC64_TOC16_HA,                        // PowerPC64: high-adjusted 16 bits of TOC-relative address
+        PPC64_TPREL16_LO,                      // PowerPC64: low 16 bits of thread-pointer-relative address
+        PPC64_TPREL16_HA,                      // PowerPC64: high-adjusted 16 bits of thread-pointer-relative address
 
         // Wasm relocs
         WASM_FUNCTION_INDEX_LEB,             // Wasm: a function index encoded as a 5-byte varuint32. Used for the immediate argument of a call instruction.

@@ -41,8 +41,13 @@ namespace ILCompiler.DependencyAnalysis
                 case ReadyToRunHelperId.GetThreadStaticBase:
                     {
                         MetadataType target = (MetadataType)Target;
+                        ISortableSymbolNode index = factory.TypeThreadStaticIndex(target);
+                        if (index is TypeThreadStaticIndexNode ti && ti.IsInlined)
+                        {
+                            throw new NotImplementedException();
+                        }
 
-                        encoder.EmitMOV(encoder.TargetRegister.Arg2, factory.TypeThreadStaticIndex(target));
+                        encoder.EmitMOV(encoder.TargetRegister.Arg2, index);
 
                         // First arg: address of the TypeManager slot that provides the helper with
                         // information about module index and the type manager instance (which is used

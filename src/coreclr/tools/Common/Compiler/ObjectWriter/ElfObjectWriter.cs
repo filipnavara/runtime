@@ -617,6 +617,7 @@ namespace ILCompiler.ObjectWriter
                 Span<byte> relocationEntry = stackalloc byte[24];
                 var relocationStream = new MemoryStream(24 * relocationList.Count);
                 _sections[sectionIndex].RelocationStream = relocationStream;
+
                 foreach (SymbolicRelocation symbolicRelocation in relocationList)
                 {
                     uint symbolIndex = _symbolNameToIndex[symbolicRelocation.SymbolName];
@@ -627,22 +628,43 @@ namespace ILCompiler.ObjectWriter
                         IMAGE_REL_BASED_RELPTR32 => R_PPC64_REL32,
                         IMAGE_REL_BASED_REL32 => R_PPC64_REL32,
                         IMAGE_REL_BASED_PPC64_REL24 => R_PPC64_REL24,
-                        IMAGE_REL_BASED_PPC64_TOC16_LO => R_PPC64_TOC16_LO,
-                        IMAGE_REL_BASED_PPC64_TOC16_HA => R_PPC64_TOC16_HA,
-                        IMAGE_REL_BASED_PPC64_TPREL16_LO => R_PPC64_TPREL16_LO,
-                        IMAGE_REL_BASED_PPC64_TPREL16_HA => R_PPC64_TPREL16_HA,
-                        IMAGE_REL_BASED_PPC64_GOT_TPREL16_HA => R_PPC64_GOT_TPREL16_HA,
-                        IMAGE_REL_BASED_PPC64_GOT_TPREL16_LO_DS => R_PPC64_GOT_TPREL16_LO_DS,
-                        IMAGE_REL_BASED_PPC64_TLS => R_PPC64_TLS,
+                        IMAGE_REL_BASED_PPC64_TOC16 => R_PPC64_TOC16_HA,
+                        IMAGE_REL_BASED_PPC64_TPREL16 => R_PPC64_TPREL16_HA,
+                        IMAGE_REL_BASED_PPC64_GOT_TPREL16 => R_PPC64_GOT_TPREL16_HA,
                         _ => throw new NotSupportedException("Unknown relocation type: " + symbolicRelocation.Type)
                     };
 
-                    BinaryPrimitives.WriteUInt64LittleEndian(relocationEntry, (ulong)symbolicRelocation.Offset);
-                    BinaryPrimitives.WriteUInt64LittleEndian(relocationEntry.Slice(8), ((ulong)symbolIndex << 32) | type);
-                    BinaryPrimitives.WriteInt64LittleEndian(relocationEntry.Slice(16), symbolicRelocation.Addend);
-                    relocationStream.Write(relocationEntry);
+                    EmitPpc64Relocation(relocationStream, relocationEntry, symbolicRelocation, symbolIndex, type);
+
+                    if (symbolicRelocation.Type is IMAGE_REL_BASED_PPC64_TOC16)
+                    {
+                        EmitPpc64Relocation(relocationStream, relocationEntry, symbolicRelocation, symbolIndex, R_PPC64_TOC16_LO, sizeof(uint));
+                    }
+                    else if (symbolicRelocation.Type is IMAGE_REL_BASED_PPC64_TPREL16)
+                    {
+                        EmitPpc64Relocation(relocationStream, relocationEntry, symbolicRelocation, symbolIndex, R_PPC64_TPREL16_LO, sizeof(uint));
+                    }
+                    else if (symbolicRelocation.Type is IMAGE_REL_BASED_PPC64_GOT_TPREL16)
+                    {
+                        EmitPpc64Relocation(relocationStream, relocationEntry, symbolicRelocation, symbolIndex, R_PPC64_GOT_TPREL16_LO_DS, sizeof(uint));
+                        EmitPpc64Relocation(relocationStream, relocationEntry, symbolicRelocation, symbolIndex, R_PPC64_TLS, 2 * sizeof(uint));
+                    }
                 }
             }
+        }
+
+        private static void EmitPpc64Relocation(
+            MemoryStream relocationStream,
+            Span<byte> relocationEntry,
+            SymbolicRelocation symbolicRelocation,
+            uint symbolIndex,
+            uint type,
+            long offsetDelta = 0)
+        {
+            BinaryPrimitives.WriteUInt64LittleEndian(relocationEntry, (ulong)(symbolicRelocation.Offset + offsetDelta));
+            BinaryPrimitives.WriteUInt64LittleEndian(relocationEntry.Slice(8), ((ulong)symbolIndex << 32) | type);
+            BinaryPrimitives.WriteInt64LittleEndian(relocationEntry.Slice(16), symbolicRelocation.Addend);
+            relocationStream.Write(relocationEntry);
         }
 
         private protected override void EmitSectionsAndLayout()

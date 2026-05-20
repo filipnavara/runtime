@@ -128,8 +128,9 @@
 .endm
 
 .macro INLINE_GETTHREAD_PPC64LE target
-    addis \target, 13, tls_CurrentThread@tprel@ha
-    addi \target, \target, tls_CurrentThread@tprel@l
+    addis \target, 2, tls_CurrentThread@got@tprel@ha
+    ld \target, tls_CurrentThread@got@tprel@l(\target)
+    add \target, \target, tls_CurrentThread@tls
 .endm
 
 .macro FixupHijackedCallstack

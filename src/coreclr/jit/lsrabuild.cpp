@@ -1235,17 +1235,25 @@ bool LinearScan::isCandidateMultiRegLclVar(GenTreeLclVar* lclNode)
     LclVarDsc* varDsc = m_compiler->lvaGetDesc(lclNode);
     assert(varDsc->lvPromoted);
     bool isMultiReg = (m_compiler->lvaGetPromotionType(varDsc) == Compiler::PROMOTION_TYPE_INDEPENDENT);
+
+    if (isMultiReg)
+    {
+        for (unsigned int i = 0; i < varDsc->lvFieldCnt; i++)
+        {
+            LclVarDsc* fieldVarDsc = m_compiler->lvaGetDesc(varDsc->lvFieldLclStart + i);
+            if (!isCandidateVar(fieldVarDsc))
+            {
+                isMultiReg = false;
+                break;
+            }
+        }
+    }
+
     if (!isMultiReg)
     {
         lclNode->ClearMultiReg();
     }
-#ifdef DEBUG
-    for (unsigned int i = 0; i < varDsc->lvFieldCnt; i++)
-    {
-        LclVarDsc* fieldVarDsc = m_compiler->lvaGetDesc(varDsc->lvFieldLclStart + i);
-        assert(isCandidateVar(fieldVarDsc) == isMultiReg);
-    }
-#endif // DEBUG
+
     return isMultiReg;
 }
 
@@ -4110,7 +4118,10 @@ int LinearScan::BuildStoreLoc(GenTreeLclVarCommon* storeLoc)
 
     if (storeLoc->IsMultiRegLclVar())
     {
-        return BuildMultiRegStoreLoc(storeLoc->AsLclVar());
+        if (isCandidateMultiRegLclVar(storeLoc->AsLclVar()))
+        {
+            return BuildMultiRegStoreLoc(storeLoc->AsLclVar());
+        }
     }
 
 // First, define internal registers.

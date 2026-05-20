@@ -8681,6 +8681,13 @@ bool Compiler::IsTargetIntrinsic(NamedIntrinsic intrinsicName)
             return false;
     }
 
+#elif defined(TARGET_POWERPC64)
+    switch (intrinsicName)
+    {
+        default:
+            return false;
+    }
+
 #elif defined(TARGET_WASM)
 
     // TODO-WASM-CQ: we can likely support more intrinsics here

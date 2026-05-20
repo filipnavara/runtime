@@ -524,12 +524,20 @@ void Thread::GcScanRootsWorker(ScanFunc * pfnEnumCallback, ScanContext * pvCallb
         {
             frameIterator.CalculateCurrentMethodState();
 
-            STRESS_LOG1(LF_GCROOTS, LL_INFO1000, "Scanning method %pK\n", (void*)frameIterator.GetRegisterSet()->IP);
+            REGDISPLAY* pRegisterSet = frameIterator.GetRegisterSet();
+            STRESS_LOG5(LF_GCROOTS, LL_INFO1000,
+                "Scanning method state active=%d IP=%pK SP=%p FP=%p safe=%pK\n",
+                frameIterator.IsActiveStackFrame(),
+                (void*)pRegisterSet->IP,
+                (void*)pRegisterSet->GetSP(),
+                (void*)pRegisterSet->GetFP(),
+                (void*)frameIterator.GetEffectiveSafePointAddress());
+            STRESS_LOG1(LF_GCROOTS, LL_INFO1000, "Scanning method %pK\n", (void*)pRegisterSet->IP);
 
             EnumGcRefs(frameIterator.GetCodeManager(),
                                             frameIterator.GetMethodInfo(),
                                             frameIterator.GetEffectiveSafePointAddress(),
-                                            frameIterator.GetRegisterSet(),
+                                            pRegisterSet,
                                             pfnEnumCallback,
                                             pvCallbackData,
                                             frameIterator.IsActiveStackFrame());
@@ -893,6 +901,11 @@ bool Thread::InlineSuspend(NATIVE_CONTEXT* interruptedContext)
     Unhijack();
 
     m_interruptedContext = interruptedContext;
+    STRESS_LOG3(LF_GCROOTS, LL_INFO1000,
+        "InlineSuspend interrupted ctx=%p IP=%pK SP=%p\n",
+        interruptedContext,
+        (void*)interruptedContext->GetIp(),
+        (void*)interruptedContext->GetSp());
     WaitForGC(INTERRUPTED_THREAD_MARKER);
     m_interruptedContext = NULL;
 

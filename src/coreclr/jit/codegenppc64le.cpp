@@ -422,11 +422,16 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             bool     sourceIsFloat = varTypeUsesFloatReg(op1);
             if (!op1->isContained() && (targetIsFloat != sourceIsFloat))
             {
-                NYI_IF((genTypeSize(treeNode) != 8) || (genTypeSize(op1) != 8), "32-bit floating-point bitcast");
+                const unsigned targetSize = genTypeSize(treeNode);
+                const unsigned sourceSize = genTypeSize(op1);
+                noway_assert(targetSize == sourceSize);
 
                 regNumber sourceReg = genConsumeReg(op1);
                 regNumber targetReg = treeNode->GetRegNum();
-                GetEmitter()->emitIns_R_R(targetIsFloat ? INS_mtfprd : INS_mffprd, EA_8BYTE, targetReg, sourceReg);
+                GetEmitter()->emitIns_R_R(
+                    targetIsFloat ? ((targetSize == 8) ? INS_mtfprd : INS_mtfprwz)
+                                  : ((targetSize == 8) ? INS_mffprd : INS_mffprwz),
+                    EA_ATTR(targetSize), targetReg, sourceReg);
                 genProduceReg(treeNode);
                 break;
             }

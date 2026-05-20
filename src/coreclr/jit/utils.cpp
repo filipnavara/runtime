@@ -235,7 +235,18 @@ const char* getRegNameFloat(regNumber reg, var_types type)
 
     return regNamesFloat[reg];
 
-#elif defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
+#elif defined(TARGET_LOONGARCH64)
+
+    static const char* regNamesFloat[] = {
+#define REGDEF(name, rnum, mask, sname) sname,
+#include "register.h"
+    };
+
+    assert((unsigned)reg < ArrLen(regNamesFloat));
+
+    return regNamesFloat[reg];
+
+#elif defined(TARGET_POWERPC64)
 
     static const char* regNamesFloat[] = {
 #define REGDEF(name, rnum, mask, sname) sname,

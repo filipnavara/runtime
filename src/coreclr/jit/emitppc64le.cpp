@@ -439,6 +439,10 @@ void emitter::emitIns_R_R_I(instruction ins, emitAttr attr, regNumber reg1, regN
     id->idReg1(reg1);
     id->idReg2(reg2);
     id->idCodeSize(sizeof(code_t));
+    if (EA_IS_CNS_TLSGD_RELOC(attr))
+    {
+        id->idSetTlsGD();
+    }
 
     dispIns(id);
     appendToCurIG(id);
@@ -1004,10 +1008,10 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         switch (id->idIns())
         {
             case INS_addis:
-                relocType = CorInfoReloc::PPC64_TOC16_HA;
+                relocType = id->idIsTlsGD() ? CorInfoReloc::PPC64_TPREL16_HA : CorInfoReloc::PPC64_TOC16_HA;
                 break;
             case INS_addi:
-                relocType = CorInfoReloc::PPC64_TOC16_LO;
+                relocType = id->idIsTlsGD() ? CorInfoReloc::PPC64_TPREL16_LO : CorInfoReloc::PPC64_TOC16_LO;
                 break;
             default:
                 unreached();

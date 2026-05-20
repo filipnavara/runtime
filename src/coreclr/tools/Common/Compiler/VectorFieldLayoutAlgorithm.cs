@@ -57,8 +57,12 @@ namespace ILCompiler
                     // 16-byte alignment for __m256.
                     alignment = new LayoutInt(16);
                 }
-                else if (defType.Context.Target.Architecture == TargetArchitecture.LoongArch64 ||
-                         defType.Context.Target.Architecture == TargetArchitecture.Ppc64le)
+                else if (defType.Context.Target.Architecture == TargetArchitecture.LoongArch64)
+                {
+                    // TODO-LoongArch64: Update alignment to proper value when implement LoongArch64 intrinsic.
+                    alignment = new LayoutInt(16);
+                }
+                else if (defType.Context.Target.Architecture == TargetArchitecture.Ppc64le)
                 {
                     alignment = new LayoutInt(16);
                 }
@@ -90,8 +94,12 @@ namespace ILCompiler
                     // 16-byte alignment for __m256.
                     alignment = new LayoutInt(16);
                 }
-                else if (defType.Context.Target.Architecture == TargetArchitecture.LoongArch64 ||
-                         defType.Context.Target.Architecture == TargetArchitecture.Ppc64le)
+                else if (defType.Context.Target.Architecture == TargetArchitecture.LoongArch64)
+                {
+                    // TODO-LoongArch64: Update alignment to proper value when implement LoongArch64 intrinsic.
+                    alignment = new LayoutInt(16);
+                }
+                else if (defType.Context.Target.Architecture == TargetArchitecture.Ppc64le)
                 {
                     alignment = new LayoutInt(16);
                 }

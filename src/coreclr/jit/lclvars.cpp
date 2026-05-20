@@ -4462,6 +4462,25 @@ void Compiler::lvaFixVirtualFrameOffsets()
 
         JITDUMP("--- delta bump %d for FP frame\n", delta);
     }
+#elif defined(TARGET_POWERPC64)
+    else
+    {
+        // FP is used. PPC64 saves LR, the optional frame pointer, and callee-saved
+        // registers above the local frame. Virtual local offsets include this save
+        // area, so remove it when converting them to FP-relative offsets.
+        int fixedSaveSlotCount = compCalleeRegsPushed + 1; // LR
+        if (codeGen->isFramePointerUsed())
+        {
+            fixedSaveSlotCount++;
+        }
+
+        fixedSaveSlotCount =
+            roundUp(static_cast<unsigned>(fixedSaveSlotCount * TARGET_POINTER_SIZE), static_cast<unsigned>(STACK_ALIGN)) /
+            TARGET_POINTER_SIZE;
+        delta += fixedSaveSlotCount * TARGET_POINTER_SIZE;
+
+        JITDUMP("--- delta bump %d for PPC64 FP frame\n", delta);
+    }
 #elif defined(TARGET_WASM)
     else
     {
@@ -4532,7 +4551,7 @@ void Compiler::lvaFixVirtualFrameOffsets()
             if (varDsc->lvIsParam && !varDsc->lvIsRegArg)
             {
                 assert(codeGen->isFramePointerUsed());
-                localDelta += FIRST_ARG_STACK_OFFS - codeGen->genCallerSPtoFPdelta();
+                localDelta = FIRST_ARG_STACK_OFFS - codeGen->genCallerSPtoFPdelta();
             }
 #endif
 

@@ -4902,6 +4902,19 @@ void Compiler::lvaAssignVirtualFrameOffsetsToLocals()
     assert(compCalleeRegsPushed >= 2); // always FP/RA.
     stkOffs -= (compCalleeRegsPushed << 3);
 
+#elif defined(TARGET_POWERPC64)
+
+    int fixedSaveSlotCount = compCalleeRegsPushed + 1; // LR
+    if (codeGen->isFramePointerUsed())
+    {
+        fixedSaveSlotCount++;
+    }
+
+    fixedSaveSlotCount =
+        roundUp(static_cast<unsigned>(fixedSaveSlotCount * TARGET_POINTER_SIZE), static_cast<unsigned>(STACK_ALIGN)) /
+        TARGET_POINTER_SIZE;
+    stkOffs -= fixedSaveSlotCount * TARGET_POINTER_SIZE;
+
 #elif HAS_FIXED_REGISTER_SET
 #ifdef TARGET_ARM
     // On ARM32 LR is part of the pushed registers and is always stored at the
@@ -5451,7 +5464,7 @@ void Compiler::lvaAssignVirtualFrameOffsetsToLocals()
 
             // Reserve the stack space for this variable
             stkOffs = lvaAllocLocalAndSetVirtualOffset(lclNum, lvaLclStackHomeSize(lclNum), stkOffs);
-#if defined(TARGET_ARMARCH) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARMARCH) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
             // If we have an incoming register argument that has a promoted field then we
             // need to copy the lvStkOff (the stack home) from the reg arg to the field lclvar
             //
@@ -5464,7 +5477,7 @@ void Compiler::lvaAssignVirtualFrameOffsetsToLocals()
                     fieldVarDsc->SetStackOffset(varDsc->GetStackOffset() + fieldVarDsc->lvFldOffset);
                 }
             }
-#endif // defined(TARGET_ARMARCH) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#endif // defined(TARGET_ARMARCH) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
         }
     }
 
@@ -5598,6 +5611,17 @@ void Compiler::lvaAssignVirtualFrameOffsetsToLocals()
         pushedCount += 1; // pushed EBP (frame pointer)
     }
     pushedCount += 1; // pushed PC (return address)
+#endif
+
+#ifdef TARGET_POWERPC64
+    pushedCount += 1; // LR
+    if (codeGen->isFramePointerUsed())
+    {
+        pushedCount += 1;
+    }
+    pushedCount =
+        roundUp(static_cast<unsigned>(pushedCount * TARGET_POINTER_SIZE), static_cast<unsigned>(STACK_ALIGN)) /
+        TARGET_POINTER_SIZE;
 #endif
 
     noway_assert(compLclFrameSize + originalFrameSize ==
@@ -5981,7 +6005,12 @@ void Compiler::lvaAlignFrame()
     // if needed.
 #if defined(TARGET_POWERPC64)
     // PPC64 frames also reserve a link register save slot.
-    bool regPushedCountAligned = ((compCalleeRegsPushed + 1) % (16 / REGSIZE_BYTES)) == 0;
+    int fixedSaveSlotCount = compCalleeRegsPushed + 1;
+    if (codeGen->isFramePointerUsed())
+    {
+        fixedSaveSlotCount++;
+    }
+    bool regPushedCountAligned = (fixedSaveSlotCount % (16 / REGSIZE_BYTES)) == 0;
 #else
     bool regPushedCountAligned = (compCalleeRegsPushed % (16 / REGSIZE_BYTES)) == 0;
 #endif

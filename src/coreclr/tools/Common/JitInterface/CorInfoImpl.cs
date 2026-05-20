@@ -4262,13 +4262,9 @@ namespace Internal.JitInterface
                 CorInfoReloc.RISCV64_PCREL_I => RelocType.IMAGE_REL_BASED_RISCV64_PCREL_I,
                 CorInfoReloc.RISCV64_PCREL_S => RelocType.IMAGE_REL_BASED_RISCV64_PCREL_S,
                 CorInfoReloc.PPC64_REL24 => RelocType.IMAGE_REL_BASED_PPC64_REL24,
-                CorInfoReloc.PPC64_TOC16_LO => RelocType.IMAGE_REL_BASED_PPC64_TOC16_LO,
-                CorInfoReloc.PPC64_TOC16_HA => RelocType.IMAGE_REL_BASED_PPC64_TOC16_HA,
-                CorInfoReloc.PPC64_TPREL16_LO => RelocType.IMAGE_REL_BASED_PPC64_TPREL16_LO,
-                CorInfoReloc.PPC64_TPREL16_HA => RelocType.IMAGE_REL_BASED_PPC64_TPREL16_HA,
-                CorInfoReloc.PPC64_GOT_TPREL16_HA => RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16_HA,
-                CorInfoReloc.PPC64_GOT_TPREL16_LO_DS => RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16_LO_DS,
-                CorInfoReloc.PPC64_TLS => RelocType.IMAGE_REL_BASED_PPC64_TLS,
+                CorInfoReloc.PPC64_TOC16 => RelocType.IMAGE_REL_BASED_PPC64_TOC16,
+                CorInfoReloc.PPC64_TPREL16 => RelocType.IMAGE_REL_BASED_PPC64_TPREL16,
+                CorInfoReloc.PPC64_GOT_TPREL16 => RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16,
                 CorInfoReloc.WASM_FUNCTION_INDEX_LEB => RelocType.WASM_FUNCTION_INDEX_LEB,
                 CorInfoReloc.WASM_TABLE_INDEX_SLEB => RelocType.WASM_TABLE_INDEX_SLEB,
                 CorInfoReloc.WASM_MEMORY_ADDR_LEB => RelocType.WASM_MEMORY_ADDR_LEB,
@@ -4340,25 +4336,11 @@ namespace Internal.JitInterface
             relocDelta += addlDelta;
 
             RelocType relocType = GetRelocType(fRelocType);
-            int relocationAddend = 0;
-            if (relocType is RelocType.IMAGE_REL_BASED_PPC64_TOC16_LO or RelocType.IMAGE_REL_BASED_PPC64_TOC16_HA
-                or RelocType.IMAGE_REL_BASED_PPC64_TPREL16_LO or RelocType.IMAGE_REL_BASED_PPC64_TPREL16_HA
-                or RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16_HA or RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16_LO_DS
-                or RelocType.IMAGE_REL_BASED_PPC64_TLS)
-            {
-                // PPC64 split-instruction and marker relocations carry the addend in the relocation entry.
-                relocationAddend = relocDelta;
-                Relocation.WriteValue(relocType, location, 0);
-            }
-            else
-            {
-                // relocDelta is stored as the value
-                Relocation.WriteValue(relocType, location, relocDelta);
-            }
+            Relocation.WriteValue(relocType, location, relocDelta);
 
             if (sourceBlock.Count == 0)
                 sourceBlock.EnsureCapacity(length / 32 + 1);
-            sourceBlock.Add(new Relocation(relocType, relocOffset, relocTarget, relocationAddend));
+            sourceBlock.Add(new Relocation(relocType, relocOffset, relocTarget));
         }
 
         private CorInfoReloc getRelocTypeHint(void* target)

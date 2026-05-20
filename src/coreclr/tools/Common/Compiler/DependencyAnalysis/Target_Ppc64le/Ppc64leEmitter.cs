@@ -147,10 +147,9 @@ namespace ILCompiler.DependencyAnalysis.Ppc64le
         {
             Debug.Assert(regDst != Register.R0);
 
-            Builder.EmitReloc(symbol, RelocType.IMAGE_REL_BASED_PPC64_TOC16_HA);
+            Builder.EmitReloc(symbol, RelocType.IMAGE_REL_BASED_PPC64_TOC16);
             EmitADDIS(regDst, Register.R2, 0);
 
-            Builder.EmitReloc(symbol, RelocType.IMAGE_REL_BASED_PPC64_TOC16_LO);
             EmitADDI(regDst, regDst, 0);
         }
 
@@ -163,10 +162,9 @@ namespace ILCompiler.DependencyAnalysis.Ppc64le
             EmitMFLR(Register.R2);
             EmitMTLR(Register.R0);
 
-            Builder.EmitReloc(entryPoint, RelocType.IMAGE_REL_BASED_PPC64_TOC16_HA);
+            Builder.EmitReloc(entryPoint, RelocType.IMAGE_REL_BASED_PPC64_TOC16);
             EmitADDIS(Register.R11, Register.R0, 0);
 
-            Builder.EmitReloc(entryPoint, RelocType.IMAGE_REL_BASED_PPC64_TOC16_LO);
             EmitADDI(Register.R11, Register.R11, 0);
 
             EmitSUBF(Register.R2, Register.R11, Register.R2);

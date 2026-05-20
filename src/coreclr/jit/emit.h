@@ -705,7 +705,9 @@ protected:
         insFormat _idInsFmt : 7;
 #elif defined(TARGET_LOONGARCH64)
         unsigned _idCodeSize : 5; // the instruction(s) size of this instrDesc described.
-#elif defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#elif defined(TARGET_RISCV64)
+        unsigned _idCodeSize : 6; // the instruction(s) size of this instrDesc described.
+#elif defined(TARGET_POWERPC64)
         unsigned _idCodeSize : 6; // the instruction(s) size of this instrDesc described.
 #elif defined(TARGET_ARM64)
         static_assert(IF_COUNT <= 1024);
@@ -745,16 +747,24 @@ protected:
         void idInsFmt(insFormat insFmt)
         {
         }
-#elif defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#elif defined(TARGET_RISCV64)
         insFormat idInsFmt() const
         {
             NYI_RISCV64("idInsFmt-----unimplemented on RISCV64 yet----");
-            NYI_POWERPC64("idInsFmt-----unimplemented on POWERPC64 yet----");
             return (insFormat)0;
         }
         void idInsFmt(insFormat insFmt)
         {
             NYI_RISCV64("idInsFmt-----unimplemented on RISCV64 yet----");
+        }
+#elif defined(TARGET_POWERPC64)
+        insFormat idInsFmt() const
+        {
+            NYI_POWERPC64("idInsFmt-----unimplemented on POWERPC64 yet----");
+            return (insFormat)0;
+        }
+        void idInsFmt(insFormat insFmt)
+        {
             NYI_POWERPC64("idInsFmt-----unimplemented on POWERPC64 yet----");
         }
 #else
@@ -899,8 +909,13 @@ protected:
         unsigned _idLclVar : 1; // access a local on stack.
 #endif
 
-#if defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#if defined(TARGET_RISCV64)
         // TODO-RISCV64: maybe delete on future
+        opSize   _idOpSize : 3; // operand size: 0=1 , 1=2 , 2=4 , 3=8, 4=16
+        insOpts  _idInsOpt : 6; // options for instructions
+        unsigned _idLclVar : 1; // access a local on stack
+#elif defined(TARGET_POWERPC64)
+        // TODO-PPC64LE: maybe delete on future
         opSize   _idOpSize : 3; // operand size: 0=1 , 1=2 , 2=4 , 3=8, 4=16
         insOpts  _idInsOpt : 6; // options for instructions
         unsigned _idLclVar : 1; // access a local on stack
@@ -1141,7 +1156,7 @@ protected:
                 return iiaJmpOffset;
             }
 
-#elif defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#elif defined(TARGET_RISCV64)
             struct
             {
                 regNumber    _idReg3 : REGNUM_BITS;
@@ -1157,7 +1172,23 @@ protected:
             {
                 return iiaEncodedInstr;
             }
-#endif // defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#elif defined(TARGET_POWERPC64)
+            struct
+            {
+                regNumber    _idReg3 : REGNUM_BITS;
+                regNumber    _idReg4 : REGNUM_BITS;
+                unsigned int iiaEncodedInstr; // instruction's binary encoding.
+            };
+
+            void iiaSetInstrEncode(unsigned int encode)
+            {
+                iiaEncodedInstr = encode;
+            }
+            unsigned int iiaGetInstrEncode() const
+            {
+                return iiaEncodedInstr;
+            }
+#endif // TARGET_RISCV64 || TARGET_POWERPC64
 
             // Used for instrDesc that has relocatable immediate offset
             bool iiaSecRel;
@@ -1273,14 +1304,26 @@ protected:
             assert(sz <= 16);
             _idCodeSize = sz;
         }
-#elif defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#elif defined(TARGET_RISCV64)
         unsigned idCodeSize() const
         {
             return _idCodeSize;
         }
         void idCodeSize(unsigned sz)
         {
-            // RISCV64/PPC64LE instrDesc is not always meaning only one instruction.
+            // RISC-V instrDesc is not always meaning only one instruction.
+            // e.g. the `emitter::emitLoadImmediate` for emitting the immediates.
+            assert(sz <= 32);
+            _idCodeSize = sz;
+        }
+#elif defined(TARGET_POWERPC64)
+        unsigned idCodeSize() const
+        {
+            return _idCodeSize;
+        }
+        void idCodeSize(unsigned sz)
+        {
+            // PPC64LE instrDesc is not always meaning only one instruction.
             // e.g. the `emitter::emitLoadImmediate` for emitting the immediates.
             assert(sz <= 32);
             _idCodeSize = sz;
@@ -1644,7 +1687,7 @@ protected:
 
 #endif // TARGET_LOONGARCH64
 
-#if defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#if defined(TARGET_RISCV64)
         insOpts idInsOpt() const
         {
             return (insOpts)_idInsOpt;
@@ -1678,7 +1721,43 @@ protected:
             assert(reg == idAddr()->_idReg4);
         }
 
-#endif // TARGET_RISCV64 || TARGET_POWERPC64
+#endif // TARGET_RISCV64
+
+#if defined(TARGET_POWERPC64)
+        insOpts idInsOpt() const
+        {
+            return (insOpts)_idInsOpt;
+        }
+        void idInsOpt(insOpts opt)
+        {
+            _idInsOpt = opt;
+            assert(opt == _idInsOpt);
+        }
+
+        regNumber idReg3() const
+        {
+            assert(!idIsSmallDsc());
+            return idAddr()->_idReg3;
+        }
+        void idReg3(regNumber reg)
+        {
+            assert(!idIsSmallDsc());
+            idAddr()->_idReg3 = reg;
+            assert(reg == idAddr()->_idReg3);
+        }
+        regNumber idReg4() const
+        {
+            assert(!idIsSmallDsc());
+            return idAddr()->_idReg4;
+        }
+        void idReg4(regNumber reg)
+        {
+            assert(!idIsSmallDsc());
+            idAddr()->_idReg4 = reg;
+            assert(reg == idAddr()->_idReg4);
+        }
+
+#endif // TARGET_POWERPC64
 
         inline static bool fitsInSmallCns(cnsval_ssize_t val)
         {
@@ -1958,7 +2037,7 @@ protected:
         }
 #endif // TARGET_LOONGARCH64
 
-#if defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#if defined(TARGET_RISCV64)
         bool idIsLclVar() const
         {
             return _idLclVar != 0;
@@ -1967,7 +2046,18 @@ protected:
         {
             _idLclVar = 1;
         }
-#endif // TARGET_RISCV64 || TARGET_POWERPC64
+#endif // TARGET_RISCV64
+
+#if defined(TARGET_POWERPC64)
+        bool idIsLclVar() const
+        {
+            return _idLclVar != 0;
+        }
+        void idSetIsLclVar()
+        {
+            _idLclVar = 1;
+        }
+#endif // TARGET_POWERPC64
 
         bool idIsCnsReloc() const
         {
@@ -2192,7 +2282,24 @@ protected:
 #define PERFSCORE_LATENCY_WR_GENERAL       PERFSCORE_LATENCY_1C
 #define PERFSCORE_LATENCY_RD_WR_GENERAL    PERFSCORE_LATENCY_4C
 
-#elif defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#elif defined(TARGET_RISCV64)
+// a read,write or modify from stack location, possible def to use latency from L0 cache
+#define PERFSCORE_LATENCY_RD_STACK         PERFSCORE_LATENCY_3C
+#define PERFSCORE_LATENCY_WR_STACK         PERFSCORE_LATENCY_1C
+#define PERFSCORE_LATENCY_RD_WR_STACK      PERFSCORE_LATENCY_3C
+
+// a read, write or modify from constant location, possible def to use latency from L0 cache
+#define PERFSCORE_LATENCY_RD_CONST_ADDR    PERFSCORE_LATENCY_3C
+#define PERFSCORE_LATENCY_WR_CONST_ADDR    PERFSCORE_LATENCY_1C
+#define PERFSCORE_LATENCY_RD_WR_CONST_ADDR PERFSCORE_LATENCY_3C
+
+// a read, write or modify from memory location, possible def to use latency from L0 or L1 cache
+// plus an extra cost  (of 1.0) for a increased chance  of a cache miss
+#define PERFSCORE_LATENCY_RD_GENERAL       PERFSCORE_LATENCY_4C
+#define PERFSCORE_LATENCY_WR_GENERAL       PERFSCORE_LATENCY_1C
+#define PERFSCORE_LATENCY_RD_WR_GENERAL    PERFSCORE_LATENCY_4C
+
+#elif defined(TARGET_POWERPC64)
 // a read,write or modify from stack location, possible def to use latency from L0 cache
 #define PERFSCORE_LATENCY_RD_STACK         PERFSCORE_LATENCY_3C
 #define PERFSCORE_LATENCY_WR_STACK         PERFSCORE_LATENCY_1C
@@ -3370,9 +3477,13 @@ private:
     instrDesc* emitNewInstrLclVarPair(emitAttr attr, cnsval_ssize_t cns);
 #endif // !TARGET_ARM64
 
-#if defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#if defined(TARGET_RISCV64)
     instrDesc* emitNewInstrLoadImm(emitAttr attr, cnsval_ssize_t cns);
-#endif // TARGET_RISCV64 || TARGET_POWERPC64
+#endif // TARGET_RISCV64
+
+#if defined(TARGET_POWERPC64)
+    instrDesc* emitNewInstrLoadImm(emitAttr attr, cnsval_ssize_t cns);
+#endif // TARGET_POWERPC64
 
     static const BYTE emitFmtToOps[];
 
@@ -3453,7 +3564,10 @@ public:
 #elif defined(TARGET_LOONGARCH64)
     bool emitInsMayWriteToGCReg(instruction ins);
     bool emitInsWritesToLclVarStackLoc(instrDesc* id);
-#elif defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#elif defined(TARGET_RISCV64)
+    bool emitInsMayWriteToGCReg(instruction ins);
+    bool emitInsWritesToLclVarStackLoc(instrDesc* id);
+#elif defined(TARGET_POWERPC64)
     bool emitInsMayWriteToGCReg(instruction ins);
     bool emitInsWritesToLclVarStackLoc(instrDesc* id);
 #endif // TARGET_LOONGARCH64

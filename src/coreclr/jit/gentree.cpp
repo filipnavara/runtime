@@ -5560,7 +5560,7 @@ bool Compiler::gtMarkAddrMode(GenTree* addr, int* pCostEx, int* pCostSz, var_typ
                 addrModeCostSz += 4;
             }
         }
-#elif defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#elif defined(TARGET_RISCV64)
         if (base)
         {
             addrModeCostEx += base->GetCostEx();
@@ -5576,7 +5576,28 @@ bool Compiler::gtMarkAddrMode(GenTree* addr, int* pCostEx, int* pCostSz, var_typ
         {
             if (!emitter::isValidSimm12(cns))
             {
-                // TODO-PPC64LE-CQ, TODO-RISCV64-CQ: tune for this target.
+                // TODO-RISCV64-CQ: tune for this target.
+                addrModeCostEx += 1;
+                addrModeCostSz += 4;
+            }
+        }
+#elif defined(TARGET_POWERPC64)
+        if (base)
+        {
+            addrModeCostEx += base->GetCostEx();
+            addrModeCostSz += base->GetCostSz();
+        }
+
+        if (idx)
+        {
+            addrModeCostEx += idx->GetCostEx();
+            addrModeCostSz += idx->GetCostSz();
+        }
+        if (cns != 0)
+        {
+            if (!emitter::isValidSimm12(cns))
+            {
+                // TODO-PPC64LE-CQ: tune for this target.
                 addrModeCostEx += 1;
                 addrModeCostSz += 4;
             }
@@ -6163,8 +6184,12 @@ unsigned Compiler::gtSetEvalOrder(GenTree* tree)
                 // TODO-LoongArch64-CQ: tune the costs.
                 costEx = 2;
                 costSz = 8;
-#elif defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#elif defined(TARGET_RISCV64)
                 // TODO-RISCV64-CQ: tune the costs.
+                costEx = 2;
+                costSz = 8;
+#elif defined(TARGET_POWERPC64)
+                // TODO-PPC64LE-CQ: tune the costs.
                 costEx = 2;
                 costSz = 8;
 #elif defined(TARGET_WASM)
@@ -6732,8 +6757,12 @@ unsigned Compiler::gtSetEvalOrder(GenTree* tree)
                     // TODO-LoongArch64-CQ: tune the costs.
                     costEx = 1;
                     costSz = 4;
-#elif defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#elif defined(TARGET_RISCV64)
                     // TODO-RISCV64-CQ: tune the costs.
+                    costEx = 1;
+                    costSz = 4;
+#elif defined(TARGET_POWERPC64)
+                    // TODO-PPC64LE-CQ: tune the costs.
                     costEx = 1;
                     costSz = 4;
 #elif defined(TARGET_WASM)

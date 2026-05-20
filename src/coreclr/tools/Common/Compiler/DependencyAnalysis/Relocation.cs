@@ -33,13 +33,9 @@ namespace ILCompiler.DependencyAnalysis
         IMAGE_REL_BASED_RISCV64_PCREL_I      = 0x19,   // RiscV64: auipc + I-type
         IMAGE_REL_BASED_RISCV64_PCREL_S      = 0x20,   // RiscV64: auipc + S-type
         IMAGE_REL_BASED_PPC64_REL24          = 0x21,   // PPC64: B/BL 24-bit PC-relative branch
-        IMAGE_REL_BASED_PPC64_TOC16_LO       = 0x22,   // PPC64: low 16 bits of TOC-relative address
-        IMAGE_REL_BASED_PPC64_TOC16_HA       = 0x23,   // PPC64: high-adjusted 16 bits of TOC-relative address
-        IMAGE_REL_BASED_PPC64_TPREL16_LO     = 0x24,   // PPC64: low 16 bits of thread-pointer-relative address
-        IMAGE_REL_BASED_PPC64_TPREL16_HA     = 0x25,   // PPC64: high-adjusted 16 bits of thread-pointer-relative address
-        IMAGE_REL_BASED_PPC64_GOT_TPREL16_HA    = 0x26, // PPC64: high-adjusted 16 bits of GOT thread-pointer-relative offset address
-        IMAGE_REL_BASED_PPC64_GOT_TPREL16_LO_DS = 0x27, // PPC64: low DS bits of GOT thread-pointer-relative offset address
-        IMAGE_REL_BASED_PPC64_TLS               = 0x28, // PPC64: TLS marker relocation
+        IMAGE_REL_BASED_PPC64_TOC16          = 0x22,   // PPC64: addis+addi TOC-relative address
+        IMAGE_REL_BASED_PPC64_TPREL16        = 0x23,   // PPC64: addis+addi thread-pointer-relative address
+        IMAGE_REL_BASED_PPC64_GOT_TPREL16    = 0x24,   // PPC64: addis+ld+add GOT thread-pointer-relative access
         IMAGE_REL_BASED_RELPTR32             = 0x7C,   // 32-bit relative address from byte starting reloc
                                                        // This is a special NGEN-specific relocation type
                                                        // for relative pointer (used to make NGen relocation
@@ -120,7 +116,6 @@ namespace ILCompiler.DependencyAnalysis
         public readonly RelocType RelocType;
         public readonly int Offset;
         public readonly ISymbolNode Target;
-        public readonly int Addend;
 
         //*****************************************************************************
         //  Extract the 16-bit immediate from ARM Thumb2 Instruction (format T2_N)
@@ -634,12 +629,12 @@ namespace ILCompiler.DependencyAnalysis
             Debug.Assert(GetPpc64Rel24(pCode) == offset);
         }
 
-        private static unsafe short GetPpc64Toc16(uint* pCode)
+        private static unsafe short GetPpc64Imm16(uint* pCode)
         {
             return unchecked((short)(*pCode & 0xFFFF));
         }
 
-        private static unsafe void PutPpc64Toc16(uint* pCode, long value)
+        private static unsafe void PutPpc64Imm16(uint* pCode, long value)
         {
             uint instr = *pCode;
 
@@ -648,16 +643,28 @@ namespace ILCompiler.DependencyAnalysis
 
             *pCode = instr;
 
-            Debug.Assert(GetPpc64Toc16(pCode) == unchecked((short)value));
+            Debug.Assert(GetPpc64Imm16(pCode) == unchecked((short)value));
         }
 
-        public Relocation(RelocType relocType, int offset, ISymbolNode target, int addend = 0)
+        private static unsafe long GetPpc64HaLo(uint* pCode)
+        {
+            return ((long)GetPpc64Imm16(pCode) << 16) + GetPpc64Imm16(pCode + 1);
+        }
+
+        private static unsafe void PutPpc64HaLo(uint* pCode, long value)
+        {
+            PutPpc64Imm16(pCode, (value + 0x8000) >> 16);
+            PutPpc64Imm16(pCode + 1, value);
+
+            Debug.Assert(GetPpc64HaLo(pCode) == value);
+        }
+
+        public Relocation(RelocType relocType, int offset, ISymbolNode target)
         {
             Debug.Assert(target != null);
             RelocType = relocType;
             Offset = offset;
             Target = target;
-            Addend = addend;
         }
 
         public static unsafe void WriteValue(RelocType relocType, void* location, long value)
@@ -722,17 +729,10 @@ namespace ILCompiler.DependencyAnalysis
                 case RelocType.IMAGE_REL_BASED_PPC64_REL24:
                     PutPpc64Rel24((uint*)location, value);
                     break;
-                case RelocType.IMAGE_REL_BASED_PPC64_TOC16_LO:
-                case RelocType.IMAGE_REL_BASED_PPC64_TPREL16_LO:
-                case RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16_LO_DS:
-                    PutPpc64Toc16((uint*)location, value);
-                    break;
-                case RelocType.IMAGE_REL_BASED_PPC64_TOC16_HA:
-                case RelocType.IMAGE_REL_BASED_PPC64_TPREL16_HA:
-                case RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16_HA:
-                    PutPpc64Toc16((uint*)location, (value + 0x8000) >> 16);
-                    break;
-                case RelocType.IMAGE_REL_BASED_PPC64_TLS:
+                case RelocType.IMAGE_REL_BASED_PPC64_TOC16:
+                case RelocType.IMAGE_REL_BASED_PPC64_TPREL16:
+                case RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16:
+                    PutPpc64HaLo((uint*)location, value);
                     break;
 
                 case RelocType.WASM_TYPE_INDEX_LEB:
@@ -762,7 +762,7 @@ namespace ILCompiler.DependencyAnalysis
             }
         }
 
-        public static readonly int MaxSize = 8;
+        public static readonly int MaxSize = 12;
         // Note: Please update the above field if the max size
         // changes when adding a new case to this method.
         public static int GetSize(RelocType relocType)
@@ -789,13 +789,9 @@ namespace ILCompiler.DependencyAnalysis
                 RelocType.IMAGE_REL_BASED_RISCV64_PCREL_I => 8,
                 RelocType.IMAGE_REL_BASED_RISCV64_PCREL_S => 8,
                 RelocType.IMAGE_REL_BASED_PPC64_REL24 => 4,
-                RelocType.IMAGE_REL_BASED_PPC64_TOC16_LO => 4,
-                RelocType.IMAGE_REL_BASED_PPC64_TOC16_HA => 4,
-                RelocType.IMAGE_REL_BASED_PPC64_TPREL16_LO => 4,
-                RelocType.IMAGE_REL_BASED_PPC64_TPREL16_HA => 4,
-                RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16_HA => 4,
-                RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16_LO_DS => 4,
-                RelocType.IMAGE_REL_BASED_PPC64_TLS => 4,
+                RelocType.IMAGE_REL_BASED_PPC64_TOC16 => 8,
+                RelocType.IMAGE_REL_BASED_PPC64_TPREL16 => 8,
+                RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16 => 12,
 
                 RelocType.WASM_FUNCTION_INDEX_LEB => WASM_PADDED_RELOC_SIZE_32,
                 RelocType.WASM_TABLE_INDEX_SLEB => WASM_PADDED_RELOC_SIZE_32,
@@ -870,16 +866,10 @@ namespace ILCompiler.DependencyAnalysis
                     return GetRiscV64AuipcCombo((uint*)location, isStype);
                 case RelocType.IMAGE_REL_BASED_PPC64_REL24:
                     return (long)GetPpc64Rel24((uint*)location);
-                case RelocType.IMAGE_REL_BASED_PPC64_TOC16_LO:
-                case RelocType.IMAGE_REL_BASED_PPC64_TPREL16_LO:
-                case RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16_LO_DS:
-                    return GetPpc64Toc16((uint*)location);
-                case RelocType.IMAGE_REL_BASED_PPC64_TOC16_HA:
-                case RelocType.IMAGE_REL_BASED_PPC64_TPREL16_HA:
-                case RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16_HA:
-                    return GetPpc64Toc16((uint*)location) << 16;
-                case RelocType.IMAGE_REL_BASED_PPC64_TLS:
-                    return 0;
+                case RelocType.IMAGE_REL_BASED_PPC64_TOC16:
+                case RelocType.IMAGE_REL_BASED_PPC64_TPREL16:
+                case RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16:
+                    return GetPpc64HaLo((uint*)location);
                 case RelocType.WASM_FUNCTION_INDEX_LEB:
                 case RelocType.WASM_TABLE_INDEX_SLEB:
                 case RelocType.WASM_TABLE_INDEX_I32:

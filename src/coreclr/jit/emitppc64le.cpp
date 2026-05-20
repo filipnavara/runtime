@@ -1008,29 +1008,28 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
 
     if (id->idIsCnsReloc())
     {
-        CorInfoReloc relocType;
         switch (id->idIns())
         {
             case INS_addis:
-                relocType = id->idIsTlsGD() ? CorInfoReloc::PPC64_GOT_TPREL16_HA : CorInfoReloc::PPC64_TOC16_HA;
+                // Record the compound relocation once the second instruction has also been emitted, so the
+                // relocation writer can preserve the full inline addend.
                 break;
             case INS_addi:
                 assert(!id->idIsTlsGD());
-                relocType = CorInfoReloc::PPC64_TOC16_LO;
+                emitRecordRelocation(dst - sizeof(code_t), reinterpret_cast<void*>(emitGetInsSC(id)),
+                                     CorInfoReloc::PPC64_TOC16);
                 break;
             case INS_ld:
                 assert(id->idIsTlsGD());
-                relocType = CorInfoReloc::PPC64_GOT_TPREL16_LO_DS;
+                emitRecordRelocation(dst - sizeof(code_t), reinterpret_cast<void*>(emitGetInsSC(id)),
+                                     CorInfoReloc::PPC64_GOT_TPREL16);
                 break;
             case INS_add:
                 assert(id->idIsTlsGD());
-                relocType = CorInfoReloc::PPC64_TLS;
                 break;
             default:
                 unreached();
         }
-
-        emitRecordRelocation(dst, reinterpret_cast<void*>(emitGetInsSC(id)), relocType);
     }
 
 UPDATE_GC_INFO:
@@ -1115,13 +1114,12 @@ unsigned emitter::emitOutputLabelLoad(BYTE* dst, instrDesc* id)
         assert(id->idCodeSize() == 2 * sizeof(code_t));
 
         emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), reg, REG_R2, 0));
-        emitRecordRelocation(cur, reinterpret_cast<void*>(value), CorInfoReloc::PPC64_TOC16_HA);
         cur += sizeof(code_t);
 
         emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addi), reg, reg, 0));
-        emitRecordRelocation(cur, reinterpret_cast<void*>(value), CorInfoReloc::PPC64_TOC16_LO);
         cur += sizeof(code_t);
 
+        emitRecordRelocation(dst, reinterpret_cast<void*>(value), CorInfoReloc::PPC64_TOC16);
         return static_cast<unsigned>(cur - dst);
     }
 
@@ -1173,13 +1171,12 @@ unsigned emitter::emitOutputConstAddr(BYTE* dst, instrDesc* id)
         assert(id->idCodeSize() == 2 * sizeof(code_t));
 
         emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), reg, REG_R2, 0));
-        emitRecordRelocation(cur, reinterpret_cast<void*>(value), CorInfoReloc::PPC64_TOC16_HA);
         cur += sizeof(code_t);
 
         emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addi), reg, reg, 0));
-        emitRecordRelocation(cur, reinterpret_cast<void*>(value), CorInfoReloc::PPC64_TOC16_LO);
         cur += sizeof(code_t);
 
+        emitRecordRelocation(dst, reinterpret_cast<void*>(value), CorInfoReloc::PPC64_TOC16);
         return static_cast<unsigned>(cur - dst);
     }
 
@@ -1233,16 +1230,15 @@ unsigned emitter::emitOutputConstLoad(BYTE* dst, instrDesc* id)
         assert(id->idCodeSize() == 3 * sizeof(code_t));
 
         emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), addrReg, REG_R2, 0));
-        emitRecordRelocation(cur, reinterpret_cast<void*>(addr), CorInfoReloc::PPC64_TOC16_HA);
         cur += sizeof(code_t);
 
         emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addi), addrReg, addrReg, 0));
-        emitRecordRelocation(cur, reinterpret_cast<void*>(addr), CorInfoReloc::PPC64_TOC16_LO);
         cur += sizeof(code_t);
 
         emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(id->idIns()), id->idReg1(), addrReg, 0));
         cur += sizeof(code_t);
 
+        emitRecordRelocation(dst, reinterpret_cast<void*>(addr), CorInfoReloc::PPC64_TOC16);
         return static_cast<unsigned>(cur - dst);
     }
 

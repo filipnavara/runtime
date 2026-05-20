@@ -298,7 +298,7 @@ namespace ILCompiler.ObjectWriter.WasmInstructions
             for (int i = 0; i < buffer.Length; i++)
             {
                 Relocation r = buffer[i];
-                buffer[i] = new Relocation(r.RelocType, r.Offset + offset, r.Target, r.Addend);
+                buffer[i] = new Relocation(r.RelocType, r.Offset + offset, r.Target);
             }
         }
     }

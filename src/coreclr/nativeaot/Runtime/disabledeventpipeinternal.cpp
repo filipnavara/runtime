@@ -33,11 +33,7 @@ EXTERN_C intptr_t QCALLTYPE EventPipeInternal_CreateProvider(
     EventPipeCallback pCallbackFunc,
     void* pCallbackContext)
 {
-#ifdef TARGET_POWERPC64
-    return 1;
-#else
     return 0;
-#endif
 }
 
 EXTERN_C intptr_t QCALLTYPE EventPipeInternal_DefineEvent(

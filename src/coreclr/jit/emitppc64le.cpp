@@ -476,7 +476,7 @@ void emitter::emitIns_R_R_R(
 }
 
 void emitter::emitIns_R_R_R_I(
-    instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, regNumber reg3, unsigned imm)
+    instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, regNumber reg3, ssize_t imm)
 {
     instrDesc* id = emitNewInstrCns(attr, imm);
 
@@ -485,6 +485,10 @@ void emitter::emitIns_R_R_R_I(
     id->idReg2(reg2);
     id->idReg3(reg3);
     id->idCodeSize(sizeof(code_t));
+    if (EA_IS_CNS_TLSGD_RELOC(attr))
+    {
+        id->idSetTlsGD();
+    }
 
     dispIns(id);
     appendToCurIG(id);
@@ -493,7 +497,7 @@ void emitter::emitIns_R_R_R_I(
 void emitter::emitIns_R_R_R_I_I(
     instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, regNumber reg3, unsigned imm1, unsigned imm2)
 {
-    emitIns_R_R_R_I(ins, attr, reg1, reg2, reg3, static_cast<unsigned>(ppcPack2(imm1, imm2)));
+    emitIns_R_R_R_I(ins, attr, reg1, reg2, reg3, static_cast<ssize_t>(ppcPack2(imm1, imm2)));
 }
 
 void emitter::emitIns_R_C(
@@ -1008,10 +1012,19 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         switch (id->idIns())
         {
             case INS_addis:
-                relocType = id->idIsTlsGD() ? CorInfoReloc::PPC64_TPREL16_HA : CorInfoReloc::PPC64_TOC16_HA;
+                relocType = id->idIsTlsGD() ? CorInfoReloc::PPC64_GOT_TPREL16_HA : CorInfoReloc::PPC64_TOC16_HA;
                 break;
             case INS_addi:
-                relocType = id->idIsTlsGD() ? CorInfoReloc::PPC64_TPREL16_LO : CorInfoReloc::PPC64_TOC16_LO;
+                assert(!id->idIsTlsGD());
+                relocType = CorInfoReloc::PPC64_TOC16_LO;
+                break;
+            case INS_ld:
+                assert(id->idIsTlsGD());
+                relocType = CorInfoReloc::PPC64_GOT_TPREL16_LO_DS;
+                break;
+            case INS_add:
+                assert(id->idIsTlsGD());
+                relocType = CorInfoReloc::PPC64_TLS;
                 break;
             default:
                 unreached();

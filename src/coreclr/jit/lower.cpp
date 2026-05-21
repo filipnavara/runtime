@@ -627,7 +627,7 @@ GenTree* Lowering::LowerNode(GenTree* node)
         case GT_STORE_LCL_FLD:
             return LowerStoreLocCommon(node->AsLclVarCommon());
 
-#if defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64) || defined(TARGET_RISCV64)
         case GT_CMPXCHG:
             RISCV64_ONLY(CheckImmedAndMakeContained(node, node->AsCmpXchg()->Data()));
             CheckImmedAndMakeContained(node, node->AsCmpXchg()->Comparand());

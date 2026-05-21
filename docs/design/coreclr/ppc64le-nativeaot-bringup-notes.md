@@ -3,20 +3,19 @@
 This note tracks PPC64LE NativeAOT bring-up decisions that are easy to lose in
 local debugging history.
 
-## PPC64LE ABI Thunk Nodes
+## PPC64LE ABI Entry Points And Thunks
 
 PPC64LE ELFv2 uses `r2` as the TOC pointer. Cross-module calls enter global
 entry points with `r12` holding the callee entry address, allowing the callee to
 derive its own TOC. Calls that may cross TOC domains must assume `r2` can be
 clobbered and restore the caller TOC after returning.
 
-`Ppc64leUnmanagedCallersOnlyExportThunkNode` was originally used for inbound
-native-to-managed exports. It generated a PPC64LE global-entry-like shim for
-`[UnmanagedCallersOnly(EntryPoint = ...)]` methods, established the NativeAOT
-image TOC, and tail-jumped into the managed method body. The better long-term
-shape is to make the JITted method body itself use a PPC64LE global-entry
-prolog when compiling an `UnmanagedCallersOnly` method, since these methods are
-expected to be entered from unmanaged code.
+PPC64LE no longer uses a separate export thunk for
+`[UnmanagedCallersOnly(EntryPoint = ...)]` methods. The export alias points
+directly at the managed method body. The JIT emits the PPC64LE global-entry TOC
+setup in the method prolog, and the ELF writer annotates matching symbols with
+localentry 16 so same-module calls can skip that setup while external callers
+enter through the global entry.
 
 `Ppc64leExternFunctionThunkNode` is an outbound managed-to-native shim for
 external helper symbols used by the JIT. It saves LR and the managed TOC,
@@ -265,9 +264,9 @@ NativeAOT can still make same-module native calls to `[UnmanagedCallersOnly]`
 entrypoints such as startup helpers. PPC64 ELFv2 handles this with dual entry
 points: external callers enter at the symbol value, while local calls branch to
 `symbol+localentry` and preserve the current TOC. The PPC64LE UCO prolog uses
-`addis/addi/subf` to establish `r2`; because PPC64 `st_other` cannot encode a
-12-byte local entry offset, the JIT pads the global entry with a `nop` and the
-ELF writer annotates matching symbols with localentry 16.
+`addis/addi/subf/nop` to establish `r2`; the `nop` pads the global entry to a
+16-byte local entry offset. In `st_other`, localentry 16 is encoded as
+`4 << STO_PPC64_LOCAL_BIT` (`0x80`), not as the byte count itself.
 
 Indirect unmanaged calls already use the PPC64LE global-entry convention:
 save managed `r2`, move the target address into `r12`, branch through CTR, then

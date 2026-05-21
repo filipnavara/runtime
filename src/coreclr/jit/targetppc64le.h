@@ -48,7 +48,11 @@
 #define LAST_FP_ARGREG           REG_F13
 
 #define HAS_FIXED_REGISTER_SET   1
-#define REGNUM_BITS              7
+// The emitter also uses idReg1/idReg2 to pack the live callee-saved GC
+// register mask on small call descriptors. PPC64LE has 17 integer
+// callee-saved registers, so each field must be able to hold half of
+// that mask, not just a physical register number.
+#define REGNUM_BITS              9
 #define REGSIZE_BYTES            8
 #define FP_REGSIZE_BYTES         8
 #define FPSAVE_REGSIZE_BYTES     8

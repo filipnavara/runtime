@@ -5,7 +5,7 @@
 
 Usage from lldb:
 
-    command script import docs/design/coreclr/scripts/dump_nativeaot_stresslog_lldb.py
+    command script import src/tools/StressLogAnalyzer/scripts/dump_nativeaot_stresslog_lldb.py
     dump_nativeaot_stresslog /tmp/stresslog-capture
 
 The command writes stresslog-map.txt plus one binary file per StressLogChunk.

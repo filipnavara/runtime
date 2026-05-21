@@ -5,7 +5,7 @@
 
 Usage from gdb:
 
-    source docs/design/coreclr/scripts/dump_nativeaot_stresslog_gdb.py
+    source src/tools/StressLogAnalyzer/scripts/dump_nativeaot_stresslog_gdb.py
     dump_nativeaot_stresslog /tmp/stresslog-capture
 
 The command writes stresslog-map.txt plus one binary file per StressLogChunk.

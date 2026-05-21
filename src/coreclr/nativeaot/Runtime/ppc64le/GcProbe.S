@@ -1,6 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+#include "AsmMacros_Shared.h"
+
 .abiversion 2
 .text
 
@@ -15,7 +17,6 @@
 .endm
 
 .globl RhpTrapThreads
-.globl RhpGetThread
 .globl RhpGcPoll2
 .globl RhpWaitForGC2
 
@@ -127,14 +128,8 @@
     lfd 13, \start+96(\base)
 .endm
 
-.macro INLINE_GETTHREAD_PPC64LE target
-    addis \target, 2, tls_CurrentThread@got@tprel@ha
-    ld \target, tls_CurrentThread@got@tprel@l(\target)
-    add \target, \target, tls_CurrentThread@tls
-.endm
-
 .macro FixupHijackedCallstack
-    INLINE_GETTHREAD_PPC64LE 11
+    INLINE_GETTHREAD 11
     ld 0, Thread_m_pvHijackedReturnAddress(11)
     mtlr 0
     li 12, 0

@@ -1,6 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+#include "AsmMacros_Shared.h"
+
 .abiversion 2
 .text
 
@@ -157,8 +159,7 @@
 DEFINE_FUNC RhpNewFast
     PUSH_ALLOC_FRAME
     mr 14, 3
-    bl RhpGetThread
-    nop
+    INLINE_GET_ALLOC_CONTEXT_BASE 3
 
     lwz 5, 4(14)        // MethodTable::m_uBaseSize
     ALLOC_OBJECT_FAST
@@ -195,8 +196,7 @@ DEFINE_FUNC RhNewString
     cmpld 15, 5
     bgt 1f
 
-    bl RhpGetThread
-    nop
+    INLINE_GET_ALLOC_CONTEXT_BASE 3
 
     sldi 5, 15, 1
     addi 5, 5, 29       // align(STRING_BASE_SIZE + 2 * length, 8)
@@ -223,8 +223,7 @@ DEFINE_FUNC RhpNewArrayFast
     cmpld 15, 5
     bgt 1f
 
-    bl RhpGetThread
-    nop
+    INLINE_GET_ALLOC_CONTEXT_BASE 3
 
     lhz 5, 0(14)        // MethodTable::m_usComponentSize
     mulld 5, 15, 5

@@ -265,13 +265,8 @@ namespace System.Runtime.CompilerServices
                 const int Grow = 10;
 #endif
 
-                // The cctor bookkeeping lock is recursive and Lock's fast path uses the unchecked thread ID.
-                // Make sure the ID exists before taking the lock so cctor-triggered reentrancy cannot look like
-                // contention on the same thread.
-                _ = CurrentManagedThreadId;
-
                 // WASMTODO: Remove this when the Initialize method gets called by the runtime startup
-#if TARGET_WASM || TARGET_POWERPC64
+#if TARGET_WASM
                 if (s_cctorGlobalLock == null)
                 {
                     Interlocked.CompareExchange(ref s_cctorGlobalLock, new Lock(useTrivialWaits: true), null);
@@ -280,7 +275,7 @@ namespace System.Runtime.CompilerServices
                 {
                     Interlocked.CompareExchange(ref s_cctorArrays, new Cctor[10][], null);
                 }
-#endif // TARGET_WASM || TARGET_POWERPC64
+#endif // TARGET_WASM
 
                 using (s_cctorGlobalLock.EnterScope())
                 {

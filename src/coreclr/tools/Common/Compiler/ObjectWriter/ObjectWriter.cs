@@ -2,7 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -279,49 +278,26 @@ namespace ILCompiler.ObjectWriter
                 new SymbolDefinition(sectionIndex, offset, size, global, other));
         }
 
-        private byte GetSymbolOther(ISymbolDefinitionNode symbol, byte[] data)
+        private byte GetSymbolOther(ISymbolDefinitionNode symbol)
         {
             if (_nodeFactory.Target.Architecture != TargetArchitecture.Ppc64le)
             {
                 return 0;
             }
 
-            if (symbol is not IMethodNode { Method.IsUnmanagedCallersOnly: true })
+            if (symbol is not IMethodBodyNode { Method.IsUnmanagedCallersOnly: true })
             {
                 return 0;
             }
 
-            // PPC64 ELFv2 supports dual entry points. The global entry starts at
-            // the symbol value and establishes r2 from r12. Local same-module
+            // PPC64 ELFv2 supports dual entry points. The JIT compiles
+            // UnmanagedCallersOnly method bodies as reverse P/Invokes and emits
+            // a 16-byte global-entry TOC setup in the prolog. Local same-module
             // calls branch to symbol+localentry and keep the existing TOC.
-            if (!HasPpc64leGlobalEntryTocSetup(data, symbol.Offset))
-            {
-                return 0;
-            }
-
-            // The JIT emits a 16-byte global entry sequence. ELFv2 encodes
-            // localentry 16 as 4 << STO_PPC64_LOCAL_BIT, where the bit is 5.
+            // ELFv2 encodes localentry 16 as 4 << STO_PPC64_LOCAL_BIT, where
+            // the bit is 5.
             const byte Ppc64LocalEntryOffset16 = 4 << 5;
             return Ppc64LocalEntryOffset16;
-        }
-
-        private static bool HasPpc64leGlobalEntryTocSetup(byte[] data, int offset)
-        {
-            const uint AddisR11R0 = 0x3D600000;
-            const uint AddiR11R11 = 0x396B0000;
-            const uint SubfR2R11R12 = 0x7C4B6050;
-            const uint Nop = 0x60000000;
-
-            if (offset < 0 || offset + (4 * sizeof(uint)) > data.Length)
-            {
-                return false;
-            }
-
-            ReadOnlySpan<byte> code = data.AsSpan(offset);
-            return ((BinaryPrimitives.ReadUInt32LittleEndian(code) & 0xFFFF0000) == AddisR11R0) &&
-                   ((BinaryPrimitives.ReadUInt32LittleEndian(code.Slice(sizeof(uint))) & 0xFFFF0000) == AddiR11R11) &&
-                   (BinaryPrimitives.ReadUInt32LittleEndian(code.Slice(2 * sizeof(uint))) == SubfR2R11R12) &&
-                   (BinaryPrimitives.ReadUInt32LittleEndian(code.Slice(3 * sizeof(uint))) == Nop);
         }
 
         /// <summary>
@@ -484,7 +460,7 @@ namespace ILCompiler.ObjectWriter
                 foreach (ISymbolDefinitionNode n in nodeContents.DefinedSymbols)
                 {
                     Utf8String mangledName = n == node ? currentSymbolName : GetMangledName(n);
-                    byte symbolOther = GetSymbolOther(n, nodeContents.Data);
+                    byte symbolOther = GetSymbolOther(n);
                     sectionWriter.EmitSymbolDefinition(
                         mangledName,
                         n.Offset + thumbBit,

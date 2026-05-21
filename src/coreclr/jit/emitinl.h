@@ -414,10 +414,52 @@ inline ssize_t emitter::emitGetInsAmdAny(const instrDesc* id) const
     id->idReg2((regNumber)encodeMask); // Save in idReg2
 
 #elif defined(TARGET_POWERPC64)
-    (void)encodeMask;
-    assert(regmask == RBM_NONE);
-    id->idReg1(REG_R0);
-    id->idReg2(REG_R0);
+    assert(REGNUM_BITS >= 9);
+    assert((regmask & ~RBM_INT_CALLEE_SAVED) == RBM_NONE);
+
+    encodeMask = 0;
+
+    if ((regmask & RBM_R14) != RBM_NONE)
+        encodeMask |= 0x001;
+    if ((regmask & RBM_R15) != RBM_NONE)
+        encodeMask |= 0x002;
+    if ((regmask & RBM_R16) != RBM_NONE)
+        encodeMask |= 0x004;
+    if ((regmask & RBM_R17) != RBM_NONE)
+        encodeMask |= 0x008;
+    if ((regmask & RBM_R18) != RBM_NONE)
+        encodeMask |= 0x010;
+    if ((regmask & RBM_R19) != RBM_NONE)
+        encodeMask |= 0x020;
+    if ((regmask & RBM_R20) != RBM_NONE)
+        encodeMask |= 0x040;
+    if ((regmask & RBM_R21) != RBM_NONE)
+        encodeMask |= 0x080;
+    if ((regmask & RBM_R22) != RBM_NONE)
+        encodeMask |= 0x100;
+
+    id->idReg1((regNumber)encodeMask); // Save in idReg1
+
+    encodeMask = 0;
+
+    if ((regmask & RBM_R23) != RBM_NONE)
+        encodeMask |= 0x001;
+    if ((regmask & RBM_R24) != RBM_NONE)
+        encodeMask |= 0x002;
+    if ((regmask & RBM_R25) != RBM_NONE)
+        encodeMask |= 0x004;
+    if ((regmask & RBM_R26) != RBM_NONE)
+        encodeMask |= 0x008;
+    if ((regmask & RBM_R27) != RBM_NONE)
+        encodeMask |= 0x010;
+    if ((regmask & RBM_R28) != RBM_NONE)
+        encodeMask |= 0x020;
+    if ((regmask & RBM_R29) != RBM_NONE)
+        encodeMask |= 0x040;
+    if ((regmask & RBM_R30) != RBM_NONE)
+        encodeMask |= 0x080;
+
+    id->idReg2((regNumber)encodeMask); // Save in idReg2
 
 #else
     NYI("unknown target");
@@ -590,8 +632,46 @@ inline ssize_t emitter::emitGetInsAmdAny(const instrDesc* id) const
         regmask |= RBM_S11;
 
 #elif defined(TARGET_POWERPC64)
-    (void)encodeMask;
-    regmask = RBM_NONE;
+    assert(REGNUM_BITS >= 9);
+    encodeMask = id->idReg1();
+
+    if ((encodeMask & 0x001) != 0)
+        regmask |= RBM_R14;
+    if ((encodeMask & 0x002) != 0)
+        regmask |= RBM_R15;
+    if ((encodeMask & 0x004) != 0)
+        regmask |= RBM_R16;
+    if ((encodeMask & 0x008) != 0)
+        regmask |= RBM_R17;
+    if ((encodeMask & 0x010) != 0)
+        regmask |= RBM_R18;
+    if ((encodeMask & 0x020) != 0)
+        regmask |= RBM_R19;
+    if ((encodeMask & 0x040) != 0)
+        regmask |= RBM_R20;
+    if ((encodeMask & 0x080) != 0)
+        regmask |= RBM_R21;
+    if ((encodeMask & 0x100) != 0)
+        regmask |= RBM_R22;
+
+    encodeMask = id->idReg2();
+
+    if ((encodeMask & 0x001) != 0)
+        regmask |= RBM_R23;
+    if ((encodeMask & 0x002) != 0)
+        regmask |= RBM_R24;
+    if ((encodeMask & 0x004) != 0)
+        regmask |= RBM_R25;
+    if ((encodeMask & 0x008) != 0)
+        regmask |= RBM_R26;
+    if ((encodeMask & 0x010) != 0)
+        regmask |= RBM_R27;
+    if ((encodeMask & 0x020) != 0)
+        regmask |= RBM_R28;
+    if ((encodeMask & 0x040) != 0)
+        regmask |= RBM_R29;
+    if ((encodeMask & 0x080) != 0)
+        regmask |= RBM_R30;
 
 #else
     NYI("unknown target");

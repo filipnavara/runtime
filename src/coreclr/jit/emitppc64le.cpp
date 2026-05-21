@@ -256,6 +256,25 @@ static emitter::code_t ppcEncodeDForm(emitter::code_t code, regNumber rt, regNum
     return code | (ppcRegOrFReg(rt) << 21) | (ppcReg(ra) << 16) | ((unsigned)imm & 0xFFFF);
 }
 
+static bool ppcOffsetFitsInstruction(instruction ins, ssize_t offset)
+{
+    if (!emitter::isValidSimm16(offset))
+    {
+        return false;
+    }
+
+    switch (ins)
+    {
+        case INS_ld:
+        case INS_lwa:
+        case INS_std:
+            return (offset & 0x3) == 0;
+
+        default:
+            return true;
+    }
+}
+
 static ssize_t ppcSignExtend16(uint64_t value)
 {
     ssize_t part = static_cast<ssize_t>(value & 0xFFFF);
@@ -605,7 +624,7 @@ void emitter::emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int va
         imm      = base + offs;
     }
 
-    if (!isValidSimm16(imm))
+    if (!ppcOffsetFitsInstruction(ins, imm))
     {
         const bool isLea   = (ins == INS_lea);
         regNumber  addrReg = tmpReg;
@@ -680,7 +699,7 @@ void emitter::emitIns_S_R(instruction ins, emitAttr attr, regNumber ireg, int va
         imm      = base + offs;
     }
 
-    if (!isValidSimm16(imm))
+    if (!ppcOffsetFitsInstruction(ins, imm))
     {
         NYI_POWERPC64("large stack local offset");
     }
@@ -720,11 +739,13 @@ void emitter::emitIns_R_AR(instruction ins, emitAttr attr, regNumber ireg, regNu
         ins = INS_addi;
     }
 
+    assert(ppcOffsetFitsInstruction(ins, offs));
     emitIns_R_R_I(ins, attr, ireg, reg, offs);
 }
 
 void emitter::emitIns_AR_R(instruction ins, emitAttr attr, regNumber ireg, regNumber reg, int offs)
 {
+    assert(ppcOffsetFitsInstruction(ins, offs));
     emitIns_R_R_I(ins, attr, ireg, reg, offs);
 }
 
@@ -992,6 +1013,7 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_stb:
         case INS_stfs:
         case INS_stfd:
+            assert(id->idIsCnsReloc() || ppcOffsetFitsInstruction(id->idIns(), emitGetInsSC(id)));
             code = ppcEncodeDForm(code, id->idReg1(), id->idReg2(), id->idIsCnsReloc() ? 0 : emitGetInsSC(id));
             break;
 

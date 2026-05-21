@@ -35,6 +35,21 @@ def _eval_uint(frame: lldb.SBFrame, expression: str) -> int:
     return int(value.GetValueAsUnsigned())
 
 
+def _find_symbol_address(target: lldb.SBTarget, names: tuple[str, ...]) -> int:
+    for name in names:
+        symbols = target.FindSymbols(name, lldb.eSymbolTypeData)
+        for i in range(symbols.GetSize()):
+            symbol = symbols.GetContextAtIndex(i).GetSymbol()
+            if not symbol.IsValid():
+                continue
+
+            address = symbol.GetStartAddress().GetLoadAddress(target)
+            if address != lldb.LLDB_INVALID_ADDRESS:
+                return address
+
+    raise RuntimeError(f"failed to find any of these data symbols: {', '.join(names)}")
+
+
 def _field_offset(sbtype: lldb.SBType, name: str) -> int:
     for i in range(sbtype.GetNumberOfFields()):
         field = sbtype.GetFieldAtIndex(i)
@@ -121,7 +136,13 @@ def dump_nativeaot_stresslog(debugger, command, result, internal_dict) -> None:
         if chunk_size == 0:
             chunk_size = _eval_uint(frame, "sizeof(StressLogChunk)")
 
-        log_addr = _eval_uint(frame, "(uintptr_t)&StressLog::theLog")
+        try:
+            log_addr = _eval_uint(frame, "(uintptr_t)&StressLog::theLog")
+        except RuntimeError:
+            # LLDB cannot always evaluate C++ expressions against a core file.
+            # The mangled fallback keeps the command usable for qemu-user cores.
+            log_addr = _find_symbol_address(target, ("StressLog::theLog", "_ZN9StressLog6theLogE"))
+
         log_data = _read_memory(process, log_addr, log_type.GetByteSize())
         module_offset = _read_field(log_data, log_offsets, "moduleOffset", pointer_size)
         logs = _read_field(log_data, log_offsets, "logs", pointer_size)

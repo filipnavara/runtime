@@ -4173,7 +4173,10 @@ int LinearScan::BuildStoreLoc(GenTreeLclVarCommon* storeLoc)
             }
 #endif // SWIFT_SUPPORT
 
-            if (!emitter::isValidSimm16(base + static_cast<int>(fieldOffset)))
+            var_types regType = returnTypeDesc->GetReturnRegType(i);
+            int       offset  = base + static_cast<int>(fieldOffset);
+            if (!emitter::isValidSimm16(offset) ||
+                (varTypeUsesIntReg(regType) && (genTypeSize(regType) == REGSIZE_BYTES) && ((offset & 0x3) != 0)))
             {
                 buildInternalIntRegisterDefForNode(storeLoc);
                 break;
@@ -4184,7 +4187,9 @@ int LinearScan::BuildStoreLoc(GenTreeLclVarCommon* storeLoc)
     {
         bool fpBased = false;
         int  offset  = m_compiler->lvaFrameAddress(storeLoc->GetLclNum(), &fpBased) + storeLoc->GetLclOffs();
-        if (!emitter::isValidSimm16(offset))
+        var_types regType = varDsc->GetRegisterType(storeLoc);
+        if (!emitter::isValidSimm16(offset) ||
+            (varTypeUsesIntReg(regType) && (genTypeSize(regType) == REGSIZE_BYTES) && ((offset & 0x3) != 0)))
         {
             buildInternalIntRegisterDefForNode(storeLoc);
         }

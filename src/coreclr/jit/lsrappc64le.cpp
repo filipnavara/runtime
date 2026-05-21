@@ -14,11 +14,35 @@
 #include "codegen.h"
 #include "lsra.h"
 
-static bool ppc64leNeedsLargeLclOffsetTemp(Compiler* compiler, GenTreeLclVarCommon* lclNode)
+static bool ppc64leOffsetFitsInstruction(instruction ins, ssize_t offset)
+{
+    if (!emitter::isValidSimm16(offset))
+    {
+        return false;
+    }
+
+    switch (ins)
+    {
+        case INS_ld:
+        case INS_std:
+            return (offset & 0x3) == 0;
+
+        case INS_lwa:
+            // Codegen handles unaligned signed-16 displacements as lwz+extsw,
+            // so LSRA only needs an address temp when the displacement does
+            // not fit the D-form signed-16 field at all.
+            return true;
+
+        default:
+            return true;
+    }
+}
+
+static bool ppc64leNeedsLclOffsetTemp(Compiler* compiler, instruction ins, GenTreeLclVarCommon* lclNode)
 {
     bool fpBased = false;
     int  offset  = compiler->lvaFrameAddress(lclNode->GetLclNum(), &fpBased) + lclNode->GetLclOffs();
-    return !emitter::isValidSimm16(offset);
+    return !ppc64leOffsetFitsInstruction(ins, offset);
 }
 
 static bool ppc64leOffsetRangeFitsSimm16(int offset, unsigned size)
@@ -67,8 +91,10 @@ int LinearScan::BuildNode(GenTree* tree)
             }
 
             LclVarDsc* varDsc = m_compiler->lvaGetDesc(tree->AsLclVar());
+            var_types targetType = varDsc->GetRegisterType(tree->AsLclVar());
             if (!varDsc->lvIsRegCandidate() && !tree->AsLclVar()->IsMultiReg() &&
-                ((tree->gtFlags & GTF_SPILLED) == 0) && ppc64leNeedsLargeLclOffsetTemp(m_compiler, tree->AsLclVar()))
+                ((tree->gtFlags & GTF_SPILLED) == 0) &&
+                ppc64leNeedsLclOffsetTemp(m_compiler, m_compiler->codeGen->ins_Load(targetType), tree->AsLclVar()))
             {
                 buildInternalIntRegisterDefForNode(tree);
                 buildInternalRegisterUses();
@@ -79,7 +105,8 @@ int LinearScan::BuildNode(GenTree* tree)
         }
 
         case GT_LCL_FLD:
-            if (!tree->TypeIs(TYP_STRUCT) && ppc64leNeedsLargeLclOffsetTemp(m_compiler, tree->AsLclFld()))
+            if (!tree->TypeIs(TYP_STRUCT) &&
+                ppc64leNeedsLclOffsetTemp(m_compiler, m_compiler->codeGen->ins_Load(tree->TypeGet()), tree->AsLclFld()))
             {
                 buildInternalIntRegisterDefForNode(tree);
                 buildInternalRegisterUses();
@@ -511,7 +538,18 @@ int LinearScan::BuildIndir(GenTreeIndir* indirTree)
 {
     assert(!indirTree->TypeIs(TYP_STRUCT));
 
-    if (!emitter::isValidSimm16(indirTree->Offset()))
+    instruction ins = INS_invalid;
+    if (indirTree->OperIs(GT_STOREIND))
+    {
+        ins = m_compiler->codeGen->ins_Store(indirTree->TypeGet());
+    }
+    else
+    {
+        assert(indirTree->OperIs(GT_IND, GT_NULLCHECK));
+        ins = m_compiler->codeGen->ins_Load(indirTree->TypeGet());
+    }
+
+    if (!ppc64leOffsetFitsInstruction(ins, indirTree->Offset()))
     {
         buildInternalIntRegisterDefForNode(indirTree);
     }
@@ -681,7 +719,15 @@ int LinearScan::BuildPutArgStk(GenTreePutArgStk* argNode)
         bool fpBased = false;
         int  offset = m_compiler->lvaFrameAddress(m_compiler->lvaOutgoingArgSpaceVar, &fpBased) +
                      static_cast<int>(argNode->getArgOffset()) + FIRST_ARG_STACK_OFFS;
-        if (!emitter::isValidSimm16(offset))
+        instruction storeIns = m_compiler->codeGen->ins_Store(genActualType(src));
+        emitAttr    storeAttr = emitTypeSize(genActualType(src));
+
+        if ((EA_SIZE(storeAttr) < EA_PTRSIZE) && varTypeUsesIntReg(genActualType(src)))
+        {
+            storeIns = INS_std;
+        }
+
+        if (!ppc64leOffsetFitsInstruction(storeIns, offset))
         {
             buildInternalIntRegisterDefForNode(argNode);
         }

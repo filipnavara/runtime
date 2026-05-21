@@ -71,6 +71,13 @@
     addi 1, 1, 304
 .endm
 
+.macro TAIL_FAILED_ALLOC isOverflow
+    mr 3, 14
+    li 4, \isOverflow
+    POP_ALLOC_FRAME
+    b RhExceptionHandling_FailedAllocation
+.endm
+
 .macro SLOW_OBJECT_ALLOC
     mr 3, 14
     mr 4, 15
@@ -85,9 +92,7 @@
     blr
 
 1:
-    POP_ALLOC_FRAME
-    trap
-    blr
+    TAIL_FAILED_ALLOC 0
 .endm
 
 .macro SLOW_ARRAY_ALLOC
@@ -104,9 +109,7 @@
     blr
 
 1:
-    POP_ALLOC_FRAME
-    trap
-    blr
+    TAIL_FAILED_ALLOC 0
 .endm
 
 // r3: Thread
@@ -194,7 +197,7 @@ DEFINE_FUNC RhNewString
     lis 5, 0x3fff
     ori 5, 5, 0xffdf
     cmpld 15, 5
-    bgt 1f
+    bgt .LRhNewStringOverflow
 
     INLINE_GET_ALLOC_CONTEXT_BASE 3
 
@@ -204,10 +207,8 @@ DEFINE_FUNC RhNewString
     and 5, 5, 8
     ALLOC_ARRAY_FAST
 
-1:
-    POP_ALLOC_FRAME
-    trap
-    blr
+.LRhNewStringOverflow:
+    TAIL_FAILED_ALLOC 1
 END_FUNC RhNewString
 
 // Allocate a one dimensional, zero based array.
@@ -221,7 +222,7 @@ DEFINE_FUNC RhpNewArrayFast
     lis 5, 0x7fff
     ori 5, 5, 0xffff
     cmpld 15, 5
-    bgt 1f
+    bgt .LRhpNewArrayFastOverflow
 
     INLINE_GET_ALLOC_CONTEXT_BASE 3
 
@@ -232,10 +233,8 @@ DEFINE_FUNC RhpNewArrayFast
     and 5, 5, 8
     ALLOC_ARRAY_FAST
 
-1:
-    POP_ALLOC_FRAME
-    trap
-    blr
+.LRhpNewArrayFastOverflow:
+    TAIL_FAILED_ALLOC 1
 END_FUNC RhpNewArrayFast
 
 DEFINE_FUNC RhpNewPtrArrayFast

@@ -385,6 +385,34 @@ Struct-return and copy checklist:
   frame layout, not hidden inside return-copy code unless the ABI specifically
   requires it.
 
+## Current JIT Gaps
+
+The PPC64LE JIT backend still has several known incomplete areas. Keep this
+list current as the bring-up matures:
+
+- Atomic IR support is present for pointer-sized and 32-bit `Interlocked.*`
+  operations that lower to `GT_CMPXCHG`, `GT_XADD`, `GT_XCHG`, `GT_XAND`, and
+  `GT_XORR`. The PPC64LE backend uses conservative `sync` barriers around
+  `lwarx`/`ldarx` plus `stwcx.`/`stdcx.` reservation loops. Byte and short
+  overloads still fall back to helpers.
+- OSR root frames need PPC64LE-specific handling in
+  `genOSRHandleTier0CalleeSavedRegistersAndFrame`, or OSR should remain
+  explicitly blocked.
+- Varargs are not implemented in the PPC64LE ABI classifier and
+  `genJmpPlaceVarArgs`.
+- Fast tail calls are disabled. Codegen still has defensive NYI paths for fast
+  tail call stack argument placement and call emission.
+- SIMD/VSX and hardware intrinsics are not implemented. `FEATURE_SIMD` is
+  intentionally blocked for PPC64LE.
+- Floating-point callee-saved registers F14-F31 are not available to LSRA until
+  prolog/epilog save and restore support is implemented.
+- Large stack-frame and large local-offset cases still have NYI paths. Prefer
+  fixing address lowering, LSRA temporary allocation, or frame layout instead
+  of hiding special cases in individual codegen sites.
+- PPC64LE lowering is intentionally conservative: many containment hooks are
+  empty, target intrinsics return false, and optimized write barriers are not
+  emitted. These are mostly code quality gaps once correctness is stable.
+
 `RhpGcProbeHijack` is entered by overwriting a return address during thread
 hijacking. It must preserve any valid return values and avoid clobbering
 registers or stack locations that may hold the interrupted method's return

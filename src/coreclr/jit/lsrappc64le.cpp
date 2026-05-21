@@ -284,6 +284,87 @@ int LinearScan::BuildNode(GenTree* tree)
             return srcCount;
         }
 
+        case GT_CMPXCHG:
+        {
+            GenTreeCmpXchg* cmpXchg = tree->AsCmpXchg();
+
+            int srcCount = 1;
+            assert(!cmpXchg->Addr()->isContained());
+            setDelayFree(BuildUse(cmpXchg->Addr()));
+
+            GenTree* data = cmpXchg->Data();
+            if (!data->isContained())
+            {
+                srcCount++;
+                setDelayFree(BuildUse(data));
+            }
+            else
+            {
+                unreached();
+            }
+
+            GenTree* comparand = cmpXchg->Comparand();
+            if (!comparand->isContained())
+            {
+                srcCount++;
+                setDelayFree(BuildUse(comparand));
+            }
+            else
+            {
+                unreached();
+            }
+
+            BuildDef(tree);
+            return srcCount;
+        }
+
+        case GT_XORR:
+        case GT_XAND:
+        case GT_XADD:
+        case GT_XCHG:
+        {
+            int srcCount = 1;
+
+            GenTree* addr = tree->gtGetOp1();
+            assert(!addr->isContained());
+            setDelayFree(BuildUse(addr));
+
+            GenTree* data = tree->gtGetOp2();
+            if (!data->isContained())
+            {
+                srcCount++;
+                setDelayFree(BuildUse(data));
+            }
+            else
+            {
+                unreached();
+            }
+
+            const bool hasReturnValue = !tree->TypeIs(TYP_VOID);
+            if (!hasReturnValue)
+            {
+                buildInternalIntRegisterDefForNode(tree);
+            }
+
+            if (!tree->OperIs(GT_XCHG))
+            {
+                buildInternalIntRegisterDefForNode(tree);
+            }
+
+            if (!hasReturnValue || !tree->OperIs(GT_XCHG))
+            {
+                setInternalRegsDelayFree = true;
+                buildInternalRegisterUses();
+            }
+
+            if (hasReturnValue)
+            {
+                BuildDef(tree);
+            }
+
+            return srcCount;
+        }
+
         case GT_EQ:
         case GT_NE:
         case GT_LT:

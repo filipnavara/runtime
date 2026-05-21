@@ -1026,7 +1026,8 @@ bool Compiler::fgExpandThreadLocalAccessForCall(BasicBlock** pBlock, Statement* 
         //      mov targetReg, $tp
         //      ld rd, targetReg(cns)
         //
-        // Code sequence to access thread local variable on linux/ppc64le:
+        // Code sequence to access the thread pointer on linux/ppc64le. The
+        // following indirection adds the per-thread block offset:
         //
         //      addi targetReg, r13, 0
         //      ld rd, cns(targetReg)

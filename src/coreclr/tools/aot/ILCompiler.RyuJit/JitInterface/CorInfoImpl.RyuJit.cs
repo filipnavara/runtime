@@ -607,30 +607,30 @@ namespace Internal.JitInterface
                     id = ReadyToRunHelper.NewObject;
                     break;
                 case CorInfoHelpFunc.CORINFO_HELP_NEWSFAST:
-                    return ExternFunctionSymbolForCall(new Utf8String("RhpNewFast"u8));
+                    return _compilation.NodeFactory.ExternFunctionSymbol(new Utf8String("RhpNewFast"u8));
                 case CorInfoHelpFunc.CORINFO_HELP_NEWSFAST_FINALIZE:
-                    return ExternFunctionSymbolForCall(new Utf8String("RhpNewFinalizable"u8));
+                    return _compilation.NodeFactory.ExternFunctionSymbol(new Utf8String("RhpNewFinalizable"u8));
                 case CorInfoHelpFunc.CORINFO_HELP_NEWSFAST_ALIGN8:
-                    return ExternFunctionSymbolForCall(new Utf8String("RhpNewFastAlign8"u8));
+                    return _compilation.NodeFactory.ExternFunctionSymbol(new Utf8String("RhpNewFastAlign8"u8));
                 case CorInfoHelpFunc.CORINFO_HELP_NEWSFAST_ALIGN8_FINALIZE:
-                    return ExternFunctionSymbolForCall(new Utf8String("RhpNewFinalizableAlign8"u8));
+                    return _compilation.NodeFactory.ExternFunctionSymbol(new Utf8String("RhpNewFinalizableAlign8"u8));
                 case CorInfoHelpFunc.CORINFO_HELP_NEWSFAST_ALIGN8_VC:
-                    return ExternFunctionSymbolForCall(new Utf8String("RhpNewFastMisalign"u8));
+                    return _compilation.NodeFactory.ExternFunctionSymbol(new Utf8String("RhpNewFastMisalign"u8));
                 case CorInfoHelpFunc.CORINFO_HELP_NEWARR_1_DIRECT:
                     id = ReadyToRunHelper.NewArray;
                     break;
                 case CorInfoHelpFunc.CORINFO_HELP_NEWARR_1_PTR:
-                    return ExternFunctionSymbolForCall(new Utf8String("RhpNewPtrArrayFast"u8));
+                    return _compilation.NodeFactory.ExternFunctionSymbol(new Utf8String("RhpNewPtrArrayFast"u8));
                 case CorInfoHelpFunc.CORINFO_HELP_NEWARR_1_ALIGN8:
-                    return ExternFunctionSymbolForCall(new Utf8String("RhpNewArrayFastAlign8"u8));
+                    return _compilation.NodeFactory.ExternFunctionSymbol(new Utf8String("RhpNewArrayFastAlign8"u8));
                 case CorInfoHelpFunc.CORINFO_HELP_NEWARR_1_VC:
-                    return ExternFunctionSymbolForCall(new Utf8String("RhpNewArrayFast"u8));
+                    return _compilation.NodeFactory.ExternFunctionSymbol(new Utf8String("RhpNewArrayFast"u8));
 
                 case CorInfoHelpFunc.CORINFO_HELP_STACK_PROBE:
-                    return ExternFunctionSymbolForCall(new Utf8String("RhpStackProbe"u8));
+                    return _compilation.NodeFactory.ExternFunctionSymbol(new Utf8String("RhpStackProbe"u8));
 
                 case CorInfoHelpFunc.CORINFO_HELP_POLL_GC:
-                    return ExternFunctionSymbolForCall(new Utf8String("RhpGcPoll"u8));
+                    return _compilation.NodeFactory.ExternFunctionSymbol(new Utf8String("RhpGcPoll"u8));
 
                 case CorInfoHelpFunc.CORINFO_HELP_LMUL:
                     id = ReadyToRunHelper.LMul;
@@ -777,7 +777,7 @@ namespace Internal.JitInterface
                         return _compilation.NodeFactory.ExternFunctionSymbol(new Utf8String("RhpInterfaceDispatchGuarded"u8));
                     return _compilation.NodeFactory.ExternFunctionSymbol(new Utf8String("RhpInterfaceDispatch"u8));
                 case CorInfoHelpFunc.CORINFO_HELP_INTERFACELOOKUP_FOR_SLOT:
-                    return ExternFunctionSymbolForCall(new Utf8String("RhpResolveInterfaceMethodFast"u8));
+                    return _compilation.NodeFactory.ExternFunctionSymbol(new Utf8String("RhpResolveInterfaceMethodFast"u8));
 
                 case CorInfoHelpFunc.CORINFO_HELP_TYPEHANDLE_TO_RUNTIMETYPE_MAYBENULL:
                     id = ReadyToRunHelper.TypeHandleToRuntimeType;
@@ -810,7 +810,7 @@ namespace Internal.JitInterface
             ISymbolNode entryPoint;
             if (mangledName != null)
             {
-                entryPoint = ExternFunctionSymbolForCall(new Utf8String(mangledName));
+                entryPoint = _compilation.NodeFactory.ExternFunctionSymbol(new Utf8String(mangledName));
             }
             else
             {
@@ -818,11 +818,6 @@ namespace Internal.JitInterface
             }
 
             return entryPoint;
-        }
-
-        private ISymbolNode ExternFunctionSymbolForCall(Utf8String symbolName)
-        {
-            return _compilation.NodeFactory.ExternFunctionSymbol(symbolName);
         }
 
         private void getFunctionEntryPoint(CORINFO_METHOD_STRUCT_* ftn, ref CORINFO_CONST_LOOKUP pResult, CORINFO_ACCESS_FLAGS accessFlags)

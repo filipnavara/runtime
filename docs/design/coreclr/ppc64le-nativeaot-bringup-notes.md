@@ -266,7 +266,12 @@ points: external callers enter at the symbol value, while local calls branch to
 `symbol+localentry` and preserve the current TOC. The PPC64LE UCO prolog uses
 `addis/addi/subf/nop` to establish `r2`; the `nop` pads the global entry to a
 16-byte local entry offset. In `st_other`, localentry 16 is encoded as
-`4 << STO_PPC64_LOCAL_BIT` (`0x80`), not as the byte count itself.
+`4 << STO_PPC64_LOCAL_BIT` (`0x80`), not as the byte count itself. The ELF
+writer applies this based on the compiled method body being
+`IsUnmanagedCallersOnly`; it does not need to pattern-match the prolog bytes
+because the JIT interface always sets `CORJIT_FLAG_REVERSE_PINVOKE` for these
+methods, and the PPC64LE prolog hook emits the global-entry sequence for every
+reverse P/Invoke body.
 
 Indirect unmanaged calls already use the PPC64LE global-entry convention:
 save managed `r2`, move the target address into `r12`, branch through CTR, then

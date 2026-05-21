@@ -822,13 +822,6 @@ namespace Internal.JitInterface
 
         private ISymbolNode ExternFunctionSymbolForCall(Utf8String symbolName)
         {
-            if (_compilation.NodeFactory.Target.Architecture == TargetArchitecture.Ppc64le &&
-                !_compilation.NodeFactory.Target.IsWindows &&
-                Ppc64leRuntimeImportMethodNode.ShouldUseExternFunctionThunk(symbolName))
-            {
-                return _compilation.NodeFactory.Ppc64leExternFunctionThunk(symbolName);
-            }
-
             return _compilation.NodeFactory.ExternFunctionSymbol(symbolName);
         }
 

@@ -122,6 +122,22 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
         return seg;
     };
 
+    auto consumeParameterSlots = [this](unsigned slots) {
+        assert(slots > 0);
+
+        for (unsigned i = 0; i < slots; i++)
+        {
+            if (m_intRegs.Count() > 0)
+            {
+                m_intRegs.Dequeue();
+            }
+            else
+            {
+                m_stackArgSize += TARGET_POINTER_SIZE;
+            }
+        }
+    };
+
     if (!isManagedCall && varTypeIsStruct(type) && !passedByRef && (floatFields == 0) && (intFields == 0) &&
         (m_intRegs.Count() > 0))
     {
@@ -155,6 +171,11 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
             assert(varTypeIsFloating(type));
 
             ABIPassingSegment seg = ABIPassingSegment::InRegister(m_floatRegs.Dequeue(), offset, passedSize);
+            // PPC64 ELFv2 maps every fixed argument to an ordered parameter slot.
+            // Floating-point values are passed in FPRs, but they still consume
+            // the corresponding GPR/stack slot that determines where the
+            // following non-FP argument is passed.
+            consumeParameterSlots(1);
             return ABIPassingInformation::FromSegmentByValue(comp, seg);
         }
         else
@@ -173,6 +194,10 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
 
             auto seg0 = ABIPassingSegment::InRegister(queue0.Dequeue(), lowering->offsets[0], genTypeSize(type0));
             auto seg1 = ABIPassingSegment::InRegister(queue1.Dequeue(), lowering->offsets[1], genTypeSize(type1));
+            if (intFields == 0)
+            {
+                consumeParameterSlots(roundUp(passedSize, TARGET_POINTER_SIZE) / TARGET_POINTER_SIZE);
+            }
             return ABIPassingInformation::FromSegments(comp, seg0, seg1);
         }
     }

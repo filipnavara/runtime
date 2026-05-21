@@ -16,13 +16,59 @@ The baseline WSL flow is:
 ./build.sh clr -c Release -arch x64
 ./build.sh clr.tools+clr.nativeaotlibs -c Release -arch x64 /p:StripSymbols=false
 
-./src/tests/build.sh -release -nativeaot -os linux -arch ppc64le \
-    -tree nativeaot/SmokeTests \
+ROOTFS_DIR=/ ./src/tests/build.sh -release -ppc64le -cross -nativeaot \
+    -tree:nativeaot/SmokeTests \
+    -log:NativeAOTSmoke \
     /p:BuildNativeAOTRuntimePack=true \
     /p:UseLocalTargetingRuntimePack=true \
     /p:UseLocalILCompilerPack=true \
     /p:UseLocalAppHostPack=true \
+    /p:IsXUnitLogCheckerSupported=false \
     /p:StripSymbols=false
+```
+
+`-ppc64le` and `-cross` are both required. `-ppc64le` selects the target RID;
+`-cross` sets up the native CMake cross build. Use `ROOTFS_DIR=/` for the
+multi-arch/builtin-binfmt flow where the PPC64LE libraries are installed on the
+WSL system instead of downloaded into a runtime rootfs.
+
+Until the SDK knows `linux-ppc64le` as a NativeAOT-capable RID, locally patch
+`.dotnet/sdk/11.0.100-preview.5.26227.104/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.Sdk.FrameworkReferenceResolution.targets`
+so `ProcessFrameworkReferences` receives `PublishAot=false` for
+`RuntimeIdentifier=linux-ppc64le`:
+
+```xml
+<_ProcessFrameworkReferencesPublishAot>$(PublishAot)</_ProcessFrameworkReferencesPublishAot>
+<_ProcessFrameworkReferencesPublishAot Condition="'$(RuntimeIdentifier)' == 'linux-ppc64le'">false</_ProcessFrameworkReferencesPublishAot>
+...
+PublishAot="$(_ProcessFrameworkReferencesPublishAot)"
+```
+
+This only bypasses the SDK's NativeAOT support gate. The test build still uses
+the in-tree NativeAOT compiler, build targets, runtime pack, and local packs.
+`IsXUnitLogCheckerSupported=false` avoids publishing the host-side
+`XUnitLogChecker` as `linux-ppc64le`, which would require a regular CoreCLR
+runtime pack that does not exist during bring-up.
+
+The NativeAOT Unix build targets must map `linux-ppc64le` to the GNU toolchain
+triple `powerpc64le-linux-gnu`. If a stale local runtime pack still generates
+`--target=ppc64le-linux-gnu`, rebuild the NativeAOT runtime pack or refresh the
+generated `Microsoft.NETCore.Native.Unix.targets`; otherwise Clang will not find
+the cross GCC startup files and `libgcc`.
+
+Run the rebuilt smoke scripts directly under the existing qemu-user/binfmt
+setup. `DwarfDump` is currently ignored in this flow:
+
+```sh
+export CORE_ROOT=$PWD/artifacts/tests/coreclr/linux.ppc64le.Release/Tests/Core_Root
+export CLRCustomTestLauncher=$PWD/src/tests/Common/scripts/nativeaottest.sh
+export GLIBC_TUNABLES=glibc.rtld.optional_static_tls=128000
+
+find artifacts/tests/coreclr/linux.ppc64le.Release/nativeaot/SmokeTests \
+    -name '*.sh' ! -path '*DwarfDump*' | sort |
+while IFS= read -r script; do
+    bash "$script"
+done
 ```
 
 When the build is only compiling an individual smoke test, pass the same

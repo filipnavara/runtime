@@ -150,11 +150,35 @@ static bool ppcOffsetRangeFitsSimm16(int offset, unsigned size)
     return emitter::isValidSimm16(offset) && emitter::isValidSimm16(lastOffset);
 }
 
-static bool ppcLclOffsetFitsSimm16(Compiler* compiler, unsigned lclNum, unsigned lclOffs)
+static bool ppcOffsetFitsInstruction(instruction ins, ssize_t offset)
+{
+    if (!emitter::isValidSimm16(offset))
+    {
+        return false;
+    }
+
+    switch (ins)
+    {
+        case INS_ld:
+        case INS_std:
+            return (offset & 0x3) == 0;
+
+        case INS_lwa:
+            // DS-form lwa requires a 4-byte-aligned displacement. For an
+            // unaligned signed-16 displacement, genInstrWithConstant emits
+            // lwz+extsw instead, so no address temporary is needed.
+            return true;
+
+        default:
+            return true;
+    }
+}
+
+static bool ppcLclOffsetFitsInstruction(Compiler* compiler, instruction ins, unsigned lclNum, unsigned lclOffs)
 {
     regNumber baseReg = REG_NA;
     int       offset  = ppcGetLclFrameOffset(compiler, lclNum, lclOffs, &baseReg);
-    return emitter::isValidSimm16(offset);
+    return ppcOffsetFitsInstruction(ins, offset);
 }
 
 static void ppcEmitSignExtendSmallLoadIfNeeded(emitter* emit, var_types targetType, regNumber targetReg)
@@ -1315,12 +1339,12 @@ void CodeGen::genCodeForLclVar(GenTreeLclVar* tree)
         var_types targetType = varDsc->GetRegisterType(tree);
         assert(targetType != TYP_STRUCT);
 
-        regNumber baseReg = REG_NA;
-        int       offset  = ppcGetLclFrameOffset(m_compiler, tree, &baseReg);
-        regNumber tmpReg  = emitter::isValidSimm16(offset) ? REG_NA : internalRegisters.GetSingle(tree);
+        instruction loadIns = ins_Load(targetType);
+        regNumber   baseReg = REG_NA;
+        int         offset  = ppcGetLclFrameOffset(m_compiler, tree, &baseReg);
+        regNumber   tmpReg  = ppcOffsetFitsInstruction(loadIns, offset) ? REG_NA : internalRegisters.GetSingle(tree);
 
-        genInstrWithConstant(ins_Load(targetType), emitTypeSize(targetType), tree->GetRegNum(), baseReg, offset,
-                             tmpReg);
+        genInstrWithConstant(loadIns, emitTypeSize(targetType), tree->GetRegNum(), baseReg, offset, tmpReg);
         ppcEmitSignExtendSmallLoadIfNeeded(GetEmitter(), targetType, tree->GetRegNum());
         genProduceReg(tree);
     }
@@ -1335,11 +1359,12 @@ void CodeGen::genCodeForLclFld(GenTreeLclFld* tree)
     regNumber targetReg  = tree->GetRegNum();
     assert(targetReg != REG_NA);
 
-    regNumber baseReg = REG_NA;
-    int       offset  = ppcGetLclFrameOffset(m_compiler, tree, &baseReg);
-    regNumber tmpReg  = emitter::isValidSimm16(offset) ? REG_NA : internalRegisters.GetSingle(tree);
+    instruction loadIns = ins_Load(targetType);
+    regNumber   baseReg = REG_NA;
+    int         offset  = ppcGetLclFrameOffset(m_compiler, tree, &baseReg);
+    regNumber   tmpReg  = ppcOffsetFitsInstruction(loadIns, offset) ? REG_NA : internalRegisters.GetSingle(tree);
 
-    genInstrWithConstant(ins_Load(targetType), emitTypeSize(targetType), targetReg, baseReg, offset, tmpReg);
+    genInstrWithConstant(loadIns, emitTypeSize(targetType), targetReg, baseReg, offset, tmpReg);
     ppcEmitSignExtendSmallLoadIfNeeded(GetEmitter(), targetType, targetReg);
     genProduceReg(tree);
 }
@@ -1573,7 +1598,7 @@ void CodeGen::genCodeForStoreLclFld(GenTreeLclFld* tree)
 
     instruction storeIns = ins_StoreFromSrc(dataReg, targetType);
     emitAttr    attr     = emitTypeSize(targetType);
-    if (ppcLclOffsetFitsSimm16(m_compiler, tree->GetLclNum(), tree->GetLclOffs()))
+    if (ppcLclOffsetFitsInstruction(m_compiler, storeIns, tree->GetLclNum(), tree->GetLclOffs()))
     {
         GetEmitter()->emitIns_S_R(storeIns, attr, dataReg, tree->GetLclNum(), tree->GetLclOffs());
     }
@@ -1641,7 +1666,7 @@ void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* lclNode)
 
         instruction storeIns = ins_StoreFromSrc(dataReg, targetType);
         emitAttr    attr     = varTypeIsGC(data) ? emitTypeSize(data) : emitActualTypeSize(targetType);
-        if (ppcLclOffsetFitsSimm16(m_compiler, lclNode->GetLclNum(), lclNode->GetLclOffs()))
+        if (ppcLclOffsetFitsInstruction(m_compiler, storeIns, lclNode->GetLclNum(), lclNode->GetLclOffs()))
         {
             GetEmitter()->emitIns_S_R(storeIns, attr, dataReg, lclNode->GetLclNum(), lclNode->GetLclOffs());
         }
@@ -1652,6 +1677,14 @@ void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* lclNode)
             regNumber tmpReg  = internalRegisters.GetSingle(lclNode);
 
             genInstrWithConstant(storeIns, attr, dataReg, baseReg, offset, tmpReg);
+        }
+
+        if (varTypeIsGC(targetType) && data->OperIsLocalRead() &&
+            (data->AsLclVarCommon()->GetLclNum() == lclNode->GetLclNum()) && (varDsc->GetRegNum() == dataReg))
+        {
+            // The local's home is moving from its incoming register to its stack slot.
+            // Stop reporting the old register before future call safe points.
+            gcInfo.gcMarkRegSetNpt(genRegMask(dataReg));
         }
 
         genUpdateLife(lclNode);
@@ -1672,12 +1705,13 @@ void CodeGen::genCodeForIndir(GenTreeIndir* tree)
     GenTree* addr = tree->Addr();
     assert(!addr->isContained());
 
-    ssize_t offset = tree->Offset();
-    regNumber baseReg   = genConsumeReg(addr);
-    var_types targetType = tree->TypeGet();
-    regNumber targetReg  = tree->GetRegNum();
+    ssize_t    offset     = tree->Offset();
+    regNumber  baseReg    = genConsumeReg(addr);
+    var_types  targetType = tree->TypeGet();
+    regNumber  targetReg  = tree->GetRegNum();
+    instruction loadIns    = ins_Load(targetType);
 
-    if (!emitter::isValidSimm16(offset))
+    if (!ppcOffsetFitsInstruction(loadIns, offset))
     {
         regNumber tempReg = internalRegisters.GetSingle(tree);
         instGen_Set_Reg_To_Imm(EA_PTRSIZE, tempReg, offset);
@@ -1691,8 +1725,7 @@ void CodeGen::genCodeForIndir(GenTreeIndir* tree)
         instGen_MemoryBarrier(BARRIER_FULL);
     }
 
-    GetEmitter()->emitIns_R_AR(ins_Load(targetType), emitActualTypeSize(targetType), targetReg, baseReg,
-                               static_cast<int>(offset));
+    GetEmitter()->emitIns_R_AR(loadIns, emitActualTypeSize(targetType), targetReg, baseReg, static_cast<int>(offset));
     ppcEmitSignExtendSmallLoadIfNeeded(GetEmitter(), targetType, targetReg);
 
     if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
@@ -1710,10 +1743,11 @@ void CodeGen::genCodeForNullCheck(GenTreeIndir* tree)
     GenTree* addr = tree->Addr();
     assert(!addr->isContained());
 
-    ssize_t offset = tree->Offset();
-    regNumber baseReg = genConsumeReg(addr);
+    ssize_t    offset  = tree->Offset();
+    regNumber  baseReg = genConsumeReg(addr);
+    instruction loadIns = ins_Load(tree->TypeGet());
 
-    if (!emitter::isValidSimm16(offset))
+    if (!ppcOffsetFitsInstruction(loadIns, offset))
     {
         regNumber tempReg = internalRegisters.GetSingle(tree);
         instGen_Set_Reg_To_Imm(EA_PTRSIZE, tempReg, offset);
@@ -1722,8 +1756,7 @@ void CodeGen::genCodeForNullCheck(GenTreeIndir* tree)
         offset  = 0;
     }
 
-    GetEmitter()->emitIns_R_AR(ins_Load(tree->TypeGet()), emitActualTypeSize(tree), REG_R0, baseReg,
-                               static_cast<int>(offset));
+    GetEmitter()->emitIns_R_AR(loadIns, emitActualTypeSize(tree), REG_R0, baseReg, static_cast<int>(offset));
 }
 
 //---------------------------------------------------------------------
@@ -1799,10 +1832,12 @@ void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
         return;
     }
 
-    ssize_t offset = tree->Offset();
+    ssize_t   offset  = tree->Offset();
     regNumber baseReg = genConsumeReg(addr);
+    var_types type    = tree->TypeGet();
+    instruction storeIns = ins_Store(type);
 
-    if (!emitter::isValidSimm16(offset))
+    if (!ppcOffsetFitsInstruction(storeIns, offset))
     {
         regNumber tempReg = internalRegisters.GetSingle(tree);
         instGen_Set_Reg_To_Imm(EA_PTRSIZE, tempReg, offset);
@@ -1826,16 +1861,15 @@ void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
         dataReg = data->GetRegNum();
     }
 
-    var_types type    = tree->TypeGet();
     assert(dataReg != REG_NA);
+    storeIns = ins_StoreFromSrc(dataReg, type);
 
     if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
     {
         instGen_MemoryBarrier(BARRIER_FULL);
     }
 
-    GetEmitter()->emitIns_AR_R(ins_StoreFromSrc(dataReg, type), emitActualTypeSize(type), dataReg, baseReg,
-                               static_cast<int>(offset));
+    GetEmitter()->emitIns_AR_R(storeIns, emitActualTypeSize(type), dataReg, baseReg, static_cast<int>(offset));
 
     if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
     {
@@ -2086,7 +2120,7 @@ void CodeGen::genCodeForCpObj(GenTreeBlk* cpObjNode)
                                                                   unsigned    lclStoreOffset,
                                                                   unsigned    regStoreOffset) {
             if ((dstLclNum != BAD_VAR_NUM) &&
-                ppcLclOffsetFitsSimm16(m_compiler, dstLclNum, dstLclOffs + lclStoreOffset))
+                ppcLclOffsetFitsInstruction(m_compiler, storeIns, dstLclNum, dstLclOffs + lclStoreOffset))
             {
                 emit->emitIns_S_R(storeIns, attr, dataReg, dstLclNum, dstLclOffs + lclStoreOffset);
             }
@@ -2692,8 +2726,15 @@ bool CodeGen::genInstrWithConstant(
     }
 #endif
 
-    if (emitter::isValidSimm16(imm))
+    if (ppcOffsetFitsInstruction(ins, imm))
     {
+        if ((ins == INS_lwa) && ((imm & 0x3) != 0))
+        {
+            GetEmitter()->emitIns_R_R_I(INS_lwz, attr, reg1, reg2, imm);
+            GetEmitter()->emitIns_R_R(INS_extsw, EA_PTRSIZE, reg1, reg1);
+            return true;
+        }
+
         GetEmitter()->emitIns_R_R_I(ins, attr, reg1, reg2, imm);
         return true;
     }
@@ -3304,7 +3345,7 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
 
             regNumber baseReg = REG_NA;
             int       offset  = ppcGetLclFrameOffset(m_compiler, varNumOut, argOffsetOut, &baseReg);
-            regNumber tmpReg  = emitter::isValidSimm16(offset) ? REG_NA : internalRegisters.GetSingle(treeNode);
+            regNumber tmpReg  = ppcOffsetFitsInstruction(storeIns, offset) ? REG_NA : internalRegisters.GetSingle(treeNode);
             genInstrWithConstant(storeIns, storeAttr, REG_R0, baseReg, offset, tmpReg);
         }
         else
@@ -3313,7 +3354,7 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
 
             regNumber baseReg = REG_NA;
             int       offset  = ppcGetLclFrameOffset(m_compiler, varNumOut, argOffsetOut, &baseReg);
-            regNumber tmpReg  = emitter::isValidSimm16(offset) ? REG_NA : internalRegisters.GetSingle(treeNode);
+            regNumber tmpReg  = ppcOffsetFitsInstruction(storeIns, offset) ? REG_NA : internalRegisters.GetSingle(treeNode);
             genInstrWithConstant(storeIns, storeAttr, source->GetRegNum(), baseReg, offset, tmpReg);
         }
 
@@ -3961,7 +4002,8 @@ void CodeGen::genSetGSSecurityCookie(regNumber initReg, bool* pInitRegZeroed)
 
     regNumber baseReg = REG_NA;
     int       offset  = ppcGetLclFrameOffset(m_compiler, m_compiler->lvaGSSecurityCookie, 0, &baseReg);
-    regNumber tmpReg  = emitter::isValidSimm16(offset) ? REG_NA : ((initReg != REG_TMP_0) ? REG_TMP_0 : REG_SCRATCH);
+    regNumber tmpReg =
+        ppcOffsetFitsInstruction(INS_std, offset) ? REG_NA : ((initReg != REG_TMP_0) ? REG_TMP_0 : REG_SCRATCH);
 
     genInstrWithConstant(INS_std, EA_PTRSIZE, initReg, baseReg, offset, tmpReg);
 

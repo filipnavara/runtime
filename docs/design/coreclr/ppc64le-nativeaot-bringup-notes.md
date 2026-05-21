@@ -114,7 +114,7 @@ all reachable `StressLogChunk` instances to a directory. The decoder reconstruct
 the readable log by resolving format strings from the NativeAOT ELF image:
 
 ```sh
-python3 docs/design/coreclr/scripts/decode_nativeaot_stresslog.py \
+python3 src/tools/StressLogAnalyzer/scripts/decode_nativeaot_stresslog.py \
     /tmp/stresslog-capture \
     --module ./artifacts/tests/coreclr/linux.ppc64le.Release/nativeaot/SmokeTests/DynamicGenerics/DynamicGenerics/native/DynamicGenerics \
     --output /tmp/stresslog.txt
@@ -125,7 +125,7 @@ GDB capture from a stopped process or core:
 ```text
 (gdb) set pagination off
 (gdb) handle SIG34 nostop noprint pass
-(gdb) source docs/design/coreclr/scripts/dump_nativeaot_stresslog_gdb.py
+(gdb) source src/tools/StressLogAnalyzer/scripts/dump_nativeaot_stresslog_gdb.py
 (gdb) dump_nativeaot_stresslog /tmp/stresslog-capture
 ```
 
@@ -146,7 +146,7 @@ LLDB capture from a stopped process or core:
 
 ```text
 (lldb) process handle -p true -n false -s false SIG34
-(lldb) command script import docs/design/coreclr/scripts/dump_nativeaot_stresslog_lldb.py
+(lldb) command script import src/tools/StressLogAnalyzer/scripts/dump_nativeaot_stresslog_lldb.py
 (lldb) dump_nativeaot_stresslog /tmp/stresslog-capture
 ```
 

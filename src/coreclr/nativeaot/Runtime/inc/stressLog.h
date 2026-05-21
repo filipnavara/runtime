@@ -262,6 +262,9 @@ public:
 // private:
     static ThreadStressLog* CreateThreadStressLog(Thread * pThread);
     static ThreadStressLog* CreateThreadStressLogHelper(Thread * pThread);
+#if defined(TARGET_POWERPC64) && defined(TARGET_UNIX)
+    static void DumpToDirectory(const char* directory);
+#endif
 
 #else // DACCESS_COMPILE
 public:

@@ -631,6 +631,7 @@ namespace ILCompiler.ObjectWriter
                         IMAGE_REL_BASED_PPC64_TOC16 => R_PPC64_TOC16_HA,
                         IMAGE_REL_BASED_PPC64_TPREL16 => R_PPC64_TPREL16_HA,
                         IMAGE_REL_BASED_PPC64_GOT_TPREL16 => R_PPC64_GOT_TPREL16_HA,
+                        IMAGE_REL_BASED_PPC64_GOT16 => R_PPC64_GOT16_HA,
                         _ => throw new NotSupportedException("Unknown relocation type: " + symbolicRelocation.Type)
                     };
 
@@ -648,6 +649,10 @@ namespace ILCompiler.ObjectWriter
                     {
                         EmitPpc64Relocation(relocationStream, relocationEntry, symbolicRelocation, symbolIndex, R_PPC64_GOT_TPREL16_LO_DS, sizeof(uint));
                         EmitPpc64Relocation(relocationStream, relocationEntry, symbolicRelocation, symbolIndex, R_PPC64_TLS, 2 * sizeof(uint));
+                    }
+                    else if (symbolicRelocation.Type is IMAGE_REL_BASED_PPC64_GOT16)
+                    {
+                        EmitPpc64Relocation(relocationStream, relocationEntry, symbolicRelocation, symbolIndex, R_PPC64_GOT16_LO_DS, sizeof(uint));
                     }
                 }
             }

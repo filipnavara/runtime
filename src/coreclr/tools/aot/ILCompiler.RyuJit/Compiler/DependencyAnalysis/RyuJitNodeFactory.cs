@@ -32,6 +32,11 @@ namespace ILCompiler.DependencyAnalysis
                 }
                 else if (method.HasCustomAttribute("System.Runtime", "RuntimeImportAttribute"))
                 {
+                    if (Target.Architecture == TargetArchitecture.Ppc64le && !Target.IsWindows && Ppc64leRuntimeImportMethodNode.ShouldUseThunk(method))
+                    {
+                        return new Ppc64leRuntimeImportMethodNode(method, NameMangler);
+                    }
+
                     return new RuntimeImportMethodNode(method, NameMangler);
                 }
             }

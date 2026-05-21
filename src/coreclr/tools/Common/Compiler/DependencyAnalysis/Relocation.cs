@@ -36,6 +36,7 @@ namespace ILCompiler.DependencyAnalysis
         IMAGE_REL_BASED_PPC64_TOC16          = 0x22,   // PPC64: addis+addi TOC-relative address
         IMAGE_REL_BASED_PPC64_TPREL16        = 0x23,   // PPC64: addis+addi thread-pointer-relative address
         IMAGE_REL_BASED_PPC64_GOT_TPREL16    = 0x24,   // PPC64: addis+ld+add GOT thread-pointer-relative access
+        IMAGE_REL_BASED_PPC64_GOT16          = 0x25,   // PPC64: addis+ld GOT function address access
         IMAGE_REL_BASED_RELPTR32             = 0x7C,   // 32-bit relative address from byte starting reloc
                                                        // This is a special NGEN-specific relocation type
                                                        // for relative pointer (used to make NGen relocation
@@ -732,6 +733,7 @@ namespace ILCompiler.DependencyAnalysis
                 case RelocType.IMAGE_REL_BASED_PPC64_TOC16:
                 case RelocType.IMAGE_REL_BASED_PPC64_TPREL16:
                 case RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16:
+                case RelocType.IMAGE_REL_BASED_PPC64_GOT16:
                     PutPpc64HaLo((uint*)location, value);
                     break;
 
@@ -794,6 +796,7 @@ namespace ILCompiler.DependencyAnalysis
                 RelocType.IMAGE_REL_BASED_PPC64_TOC16 => 8,
                 RelocType.IMAGE_REL_BASED_PPC64_TPREL16 => 8,
                 RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16 => 12,
+                RelocType.IMAGE_REL_BASED_PPC64_GOT16 => 8,
 
                 RelocType.WASM_FUNCTION_INDEX_LEB => WASM_PADDED_RELOC_SIZE_32,
                 RelocType.WASM_TABLE_INDEX_SLEB => WASM_PADDED_RELOC_SIZE_32,
@@ -871,6 +874,7 @@ namespace ILCompiler.DependencyAnalysis
                 case RelocType.IMAGE_REL_BASED_PPC64_TOC16:
                 case RelocType.IMAGE_REL_BASED_PPC64_TPREL16:
                 case RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16:
+                case RelocType.IMAGE_REL_BASED_PPC64_GOT16:
                     return GetPpc64HaLo((uint*)location);
                 case RelocType.WASM_FUNCTION_INDEX_LEB:
                 case RelocType.WASM_TABLE_INDEX_SLEB:

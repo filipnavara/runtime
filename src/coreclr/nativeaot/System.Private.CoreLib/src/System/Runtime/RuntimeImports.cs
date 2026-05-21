@@ -26,6 +26,110 @@ namespace System.Runtime
     {
         internal const string RuntimeLibrary = "*";
 
+#if TARGET_POWERPC64
+        private const string AcosImport = "RhpPpc64leMathAcos";
+        private const string AcosfImport = "RhpPpc64leMathAcosF";
+        private const string AcoshImport = "RhpPpc64leMathAcosh";
+        private const string AcoshfImport = "RhpPpc64leMathAcoshF";
+        private const string AsinImport = "RhpPpc64leMathAsin";
+        private const string AsinfImport = "RhpPpc64leMathAsinF";
+        private const string AsinhImport = "RhpPpc64leMathAsinh";
+        private const string AsinhfImport = "RhpPpc64leMathAsinhF";
+        private const string AtanImport = "RhpPpc64leMathAtan";
+        private const string AtanfImport = "RhpPpc64leMathAtanF";
+        private const string Atan2Import = "RhpPpc64leMathAtan2";
+        private const string Atan2fImport = "RhpPpc64leMathAtan2F";
+        private const string AtanhImport = "RhpPpc64leMathAtanh";
+        private const string AtanhfImport = "RhpPpc64leMathAtanhF";
+        private const string CbrtImport = "RhpPpc64leMathCbrt";
+        private const string CbrtfImport = "RhpPpc64leMathCbrtF";
+        private const string CeilImport = "RhpPpc64leMathCeil";
+        private const string CeilfImport = "RhpPpc64leMathCeilF";
+        private const string CosImport = "RhpPpc64leMathCos";
+        private const string CosfImport = "RhpPpc64leMathCosF";
+        private const string CoshImport = "RhpPpc64leMathCosh";
+        private const string CoshfImport = "RhpPpc64leMathCoshF";
+        private const string ExpImport = "RhpPpc64leMathExp";
+        private const string ExpfImport = "RhpPpc64leMathExpF";
+        private const string FloorImport = "RhpPpc64leMathFloor";
+        private const string FloorfImport = "RhpPpc64leMathFloorF";
+        private const string LogImport = "RhpPpc64leMathLog";
+        private const string LogfImport = "RhpPpc64leMathLogF";
+        private const string Log2Import = "RhpPpc64leMathLog2";
+        private const string Log2fImport = "RhpPpc64leMathLog2F";
+        private const string Log10Import = "RhpPpc64leMathLog10";
+        private const string Log10fImport = "RhpPpc64leMathLog10F";
+        private const string PowImport = "RhpPpc64leMathPow";
+        private const string PowfImport = "RhpPpc64leMathPowF";
+        private const string SinImport = "RhpPpc64leMathSin";
+        private const string SinfImport = "RhpPpc64leMathSinF";
+        private const string SinhImport = "RhpPpc64leMathSinh";
+        private const string SinhfImport = "RhpPpc64leMathSinhF";
+        private const string SqrtImport = "RhpPpc64leMathSqrt";
+        private const string SqrtfImport = "RhpPpc64leMathSqrtF";
+        private const string TanImport = "RhpPpc64leMathTan";
+        private const string TanfImport = "RhpPpc64leMathTanF";
+        private const string TanhImport = "RhpPpc64leMathTanh";
+        private const string TanhfImport = "RhpPpc64leMathTanhF";
+        private const string FmodImport = "RhpPpc64leMathFMod";
+        private const string FmodfImport = "RhpPpc64leMathFModF";
+        private const string FmaImport = "RhpPpc64leMathFma";
+        private const string FmafImport = "RhpPpc64leMathFmaF";
+        private const string ModfImport = "RhpPpc64leMathModF";
+        private const string ModffImport = "RhpPpc64leMathModFF";
+#else
+        private const string AcosImport = "acos";
+        private const string AcosfImport = "acosf";
+        private const string AcoshImport = "acosh";
+        private const string AcoshfImport = "acoshf";
+        private const string AsinImport = "asin";
+        private const string AsinfImport = "asinf";
+        private const string AsinhImport = "asinh";
+        private const string AsinhfImport = "asinhf";
+        private const string AtanImport = "atan";
+        private const string AtanfImport = "atanf";
+        private const string Atan2Import = "atan2";
+        private const string Atan2fImport = "atan2f";
+        private const string AtanhImport = "atanh";
+        private const string AtanhfImport = "atanhf";
+        private const string CbrtImport = "cbrt";
+        private const string CbrtfImport = "cbrtf";
+        private const string CeilImport = "ceil";
+        private const string CeilfImport = "ceilf";
+        private const string CosImport = "cos";
+        private const string CosfImport = "cosf";
+        private const string CoshImport = "cosh";
+        private const string CoshfImport = "coshf";
+        private const string ExpImport = "exp";
+        private const string ExpfImport = "expf";
+        private const string FloorImport = "floor";
+        private const string FloorfImport = "floorf";
+        private const string LogImport = "log";
+        private const string LogfImport = "logf";
+        private const string Log2Import = "log2";
+        private const string Log2fImport = "log2f";
+        private const string Log10Import = "log10";
+        private const string Log10fImport = "log10f";
+        private const string PowImport = "pow";
+        private const string PowfImport = "powf";
+        private const string SinImport = "sin";
+        private const string SinfImport = "sinf";
+        private const string SinhImport = "sinh";
+        private const string SinhfImport = "sinhf";
+        private const string SqrtImport = "sqrt";
+        private const string SqrtfImport = "sqrtf";
+        private const string TanImport = "tan";
+        private const string TanfImport = "tanf";
+        private const string TanhImport = "tanh";
+        private const string TanhfImport = "tanhf";
+        private const string FmodImport = "fmod";
+        private const string FmodfImport = "fmodf";
+        private const string FmaImport = "fma";
+        private const string FmafImport = "fmaf";
+        private const string ModfImport = "modf";
+        private const string ModffImport = "modff";
+#endif
+
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
         [RuntimeImport(RuntimeLibrary, "RhGetThreadEntryPointAddress")]
 #if TARGET_UNIX
@@ -673,203 +777,203 @@ namespace System.Runtime
         internal static extern object InterlockedExchange([NotNullIfNotNull(nameof(value))] ref object? location1, object? value);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "acos")]
+        [RuntimeImport(RuntimeLibrary, AcosImport)]
         internal static extern double acos(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "acosf")]
+        [RuntimeImport(RuntimeLibrary, AcosfImport)]
         internal static extern float acosf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "acosh")]
+        [RuntimeImport(RuntimeLibrary, AcoshImport)]
         internal static extern double acosh(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "acoshf")]
+        [RuntimeImport(RuntimeLibrary, AcoshfImport)]
         internal static extern float acoshf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "asin")]
+        [RuntimeImport(RuntimeLibrary, AsinImport)]
         internal static extern double asin(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "asinf")]
+        [RuntimeImport(RuntimeLibrary, AsinfImport)]
         internal static extern float asinf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "asinh")]
+        [RuntimeImport(RuntimeLibrary, AsinhImport)]
         internal static extern double asinh(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "asinhf")]
+        [RuntimeImport(RuntimeLibrary, AsinhfImport)]
         internal static extern float asinhf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "atan")]
+        [RuntimeImport(RuntimeLibrary, AtanImport)]
         internal static extern double atan(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "atanf")]
+        [RuntimeImport(RuntimeLibrary, AtanfImport)]
         internal static extern float atanf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "atan2")]
+        [RuntimeImport(RuntimeLibrary, Atan2Import)]
         internal static extern double atan2(double y, double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "atan2f")]
+        [RuntimeImport(RuntimeLibrary, Atan2fImport)]
         internal static extern float atan2f(float y, float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "atanh")]
+        [RuntimeImport(RuntimeLibrary, AtanhImport)]
         internal static extern double atanh(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "atanhf")]
+        [RuntimeImport(RuntimeLibrary, AtanhfImport)]
         internal static extern float atanhf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "cbrt")]
+        [RuntimeImport(RuntimeLibrary, CbrtImport)]
         internal static extern double cbrt(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "cbrtf")]
+        [RuntimeImport(RuntimeLibrary, CbrtfImport)]
         internal static extern float cbrtf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "ceil")]
+        [RuntimeImport(RuntimeLibrary, CeilImport)]
         internal static extern double ceil(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "ceilf")]
+        [RuntimeImport(RuntimeLibrary, CeilfImport)]
         internal static extern float ceilf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "cos")]
+        [RuntimeImport(RuntimeLibrary, CosImport)]
         internal static extern double cos(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "cosf")]
+        [RuntimeImport(RuntimeLibrary, CosfImport)]
         internal static extern float cosf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "cosh")]
+        [RuntimeImport(RuntimeLibrary, CoshImport)]
         internal static extern double cosh(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "coshf")]
+        [RuntimeImport(RuntimeLibrary, CoshfImport)]
         internal static extern float coshf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "exp")]
+        [RuntimeImport(RuntimeLibrary, ExpImport)]
         internal static extern double exp(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "expf")]
+        [RuntimeImport(RuntimeLibrary, ExpfImport)]
         internal static extern float expf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "floor")]
+        [RuntimeImport(RuntimeLibrary, FloorImport)]
         internal static extern double floor(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "floorf")]
+        [RuntimeImport(RuntimeLibrary, FloorfImport)]
         internal static extern float floorf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "log")]
+        [RuntimeImport(RuntimeLibrary, LogImport)]
         internal static extern double log(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "logf")]
+        [RuntimeImport(RuntimeLibrary, LogfImport)]
         internal static extern float logf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "log2")]
+        [RuntimeImport(RuntimeLibrary, Log2Import)]
         internal static extern double log2(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "log2f")]
+        [RuntimeImport(RuntimeLibrary, Log2fImport)]
         internal static extern float log2f(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "log10")]
+        [RuntimeImport(RuntimeLibrary, Log10Import)]
         internal static extern double log10(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "log10f")]
+        [RuntimeImport(RuntimeLibrary, Log10fImport)]
         internal static extern float log10f(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "pow")]
+        [RuntimeImport(RuntimeLibrary, PowImport)]
         internal static extern double pow(double x, double y);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "powf")]
+        [RuntimeImport(RuntimeLibrary, PowfImport)]
         internal static extern float powf(float x, float y);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "sin")]
+        [RuntimeImport(RuntimeLibrary, SinImport)]
         internal static extern double sin(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "sinf")]
+        [RuntimeImport(RuntimeLibrary, SinfImport)]
         internal static extern float sinf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "sinh")]
+        [RuntimeImport(RuntimeLibrary, SinhImport)]
         internal static extern double sinh(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "sinhf")]
+        [RuntimeImport(RuntimeLibrary, SinhfImport)]
         internal static extern float sinhf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "sqrt")]
+        [RuntimeImport(RuntimeLibrary, SqrtImport)]
         internal static extern double sqrt(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "sqrtf")]
+        [RuntimeImport(RuntimeLibrary, SqrtfImport)]
         internal static extern float sqrtf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "tan")]
+        [RuntimeImport(RuntimeLibrary, TanImport)]
         internal static extern double tan(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "tanf")]
+        [RuntimeImport(RuntimeLibrary, TanfImport)]
         internal static extern float tanf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "tanh")]
+        [RuntimeImport(RuntimeLibrary, TanhImport)]
         internal static extern double tanh(double x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "tanhf")]
+        [RuntimeImport(RuntimeLibrary, TanhfImport)]
         internal static extern float tanhf(float x);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "fmod")]
+        [RuntimeImport(RuntimeLibrary, FmodImport)]
         internal static extern double fmod(double x, double y);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "fmodf")]
+        [RuntimeImport(RuntimeLibrary, FmodfImport)]
         internal static extern float fmodf(float x, float y);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "fma")]
+        [RuntimeImport(RuntimeLibrary, FmaImport)]
         internal static extern double fma(double x, double y, double z);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "fmaf")]
+        [RuntimeImport(RuntimeLibrary, FmafImport)]
         internal static extern float fmaf(float x, float y, float z);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "modf")]
+        [RuntimeImport(RuntimeLibrary, ModfImport)]
         internal static extern unsafe double modf(double x, double* intptr);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "modff")]
+        [RuntimeImport(RuntimeLibrary, ModffImport)]
         internal static extern unsafe float modff(float x, float* intptr);
 
 #if TARGET_UNIX

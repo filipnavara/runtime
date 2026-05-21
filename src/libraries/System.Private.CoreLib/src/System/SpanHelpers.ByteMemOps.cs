@@ -260,7 +260,11 @@ namespace System
         private static extern unsafe void memmove(void* dest, void* src, nuint len);
 #else
 #pragma warning disable CS3016 // Arrays as attribute arguments is not CLS-compliant
+#if NATIVEAOT && TARGET_POWERPC64
+        [LibraryImport(RuntimeHelpers.QCall, EntryPoint = "RhpPpc64leMemmove")]
+#else
         [LibraryImport(RuntimeHelpers.QCall, EntryPoint = "memmove")]
+#endif
         [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
         private static unsafe partial void* memmove(void* dest, void* src, nuint len);
 #pragma warning restore CS3016
@@ -483,7 +487,11 @@ namespace System
         private static extern unsafe void memset(void* dest, int value, nuint len);
 #else
 #pragma warning disable CS3016 // Arrays as attribute arguments is not CLS-compliant
+#if NATIVEAOT && TARGET_POWERPC64
+        [LibraryImport(RuntimeHelpers.QCall, EntryPoint = "RhpPpc64leMemset")]
+#else
         [LibraryImport(RuntimeHelpers.QCall, EntryPoint = "memset")]
+#endif
         [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
         private static unsafe partial void* memset(void* dest, int value, nuint len);
 #pragma warning restore CS3016

@@ -651,7 +651,6 @@
     <Compile Include="Compiler\DependencyAnalysis\Target_Ppc64le\Ppc64leJumpStubNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\Target_Ppc64le\Ppc64leReadyToRunHelperNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\Target_Ppc64le\Ppc64leReadyToRunGenericHelperNode.cs" />
-    <Compile Include="Compiler\DependencyAnalysis\Target_Ppc64le\Ppc64leRuntimeImportMethodNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\Target_Ppc64le\Ppc64leTentativeMethodNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\Target_Ppc64le\Ppc64leUnboxingStubNode.cs" />
     <Compile Include="Compiler\ReadOnlyFieldPolicy.cs" />

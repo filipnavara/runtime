@@ -1444,9 +1444,12 @@ ssize_t emitter::emitOutputInstrJumpDistance(const BYTE* src, const insGroup* ig
 
 void emitter::emitIns_Call(const EmitCallParams& params)
 {
-    assert((params.callType == EC_INDIR_R) || (params.callType == EC_FUNC_TOKEN));
+    assert((params.callType == EC_INDIR_R) || (params.callType == EC_FUNC_TOKEN) ||
+           (params.callType == EC_FUNC_TOKEN_GOT));
     assert((params.callType != EC_INDIR_R) || (isGeneralRegister(params.ireg) && (params.addr == nullptr)));
+    assert((params.callType < EC_INDIR_R) || (params.addr == nullptr));
     assert((params.callType != EC_FUNC_TOKEN) || ((params.addr != nullptr) && (params.ireg == REG_NA)));
+    assert((params.callType != EC_FUNC_TOKEN_GOT) || ((params.addr != nullptr) && (params.ireg == REG_NA)));
 
     regMaskTP savedSet  = emitGetGCRegsSavedOrModified(params.methHnd);
     regMaskTP gcrefRegs = params.gcrefRegs & savedSet;
@@ -1500,6 +1503,13 @@ void emitter::emitIns_Call(const EmitCallParams& params)
         id->idAddr()->iiaAddr = static_cast<BYTE*>(params.addr);
         id->idCodeSize(2 * sizeof(code_t));
         id->idSetIsDspReloc();
+    }
+    else if (params.callType == EC_FUNC_TOKEN_GOT)
+    {
+        assert(m_compiler->opts.compReloc);
+        id->idAddr()->iiaAddr = static_cast<BYTE*>(params.addr);
+        id->idCodeSize(4 * sizeof(code_t));
+        id->idSetIsCnsReloc();
     }
     else
     {
@@ -1555,6 +1565,15 @@ unsigned emitter::emitOutputCall(BYTE* dst, instrDesc* id)
         emitOutput_Instr(dst, emitInsCode(INS_bl));
         emitRecordRelocation(dst, id->idAddr()->iiaAddr, CorInfoReloc::PPC64_REL24);
         emitOutput_Instr(dst + sizeof(code_t), emitInsCode(INS_nop));
+    }
+    else if (id->idIsCnsReloc())
+    {
+        assert(id->idIns() == INS_bctrl);
+        emitOutput_Instr(dst, ppcEncodeDForm(emitInsCode(INS_addis), REG_R12, REG_R2, 0));
+        emitOutput_Instr(dst + sizeof(code_t), ppcEncodeDForm(emitInsCode(INS_ld), REG_R12, REG_R12, 0));
+        emitRecordRelocation(dst, id->idAddr()->iiaAddr, CorInfoReloc::PPC64_GOT16);
+        emitOutput_Instr(dst + (2 * sizeof(code_t)), ppcEncodeMtspr(emitInsCode(INS_mtctr), REG_R12, 9));
+        emitOutput_Instr(dst + (3 * sizeof(code_t)), emitInsCode(INS_bctrl));
     }
     else
     {

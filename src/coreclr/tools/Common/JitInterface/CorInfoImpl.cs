@@ -4265,6 +4265,7 @@ namespace Internal.JitInterface
                 CorInfoReloc.PPC64_TOC16 => RelocType.IMAGE_REL_BASED_PPC64_TOC16,
                 CorInfoReloc.PPC64_TPREL16 => RelocType.IMAGE_REL_BASED_PPC64_TPREL16,
                 CorInfoReloc.PPC64_GOT_TPREL16 => RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16,
+                CorInfoReloc.PPC64_GOT16 => RelocType.IMAGE_REL_BASED_PPC64_GOT16,
                 CorInfoReloc.WASM_FUNCTION_INDEX_LEB => RelocType.WASM_FUNCTION_INDEX_LEB,
                 CorInfoReloc.WASM_TABLE_INDEX_SLEB => RelocType.WASM_TABLE_INDEX_SLEB,
                 CorInfoReloc.WASM_MEMORY_ADDR_LEB => RelocType.WASM_MEMORY_ADDR_LEB,

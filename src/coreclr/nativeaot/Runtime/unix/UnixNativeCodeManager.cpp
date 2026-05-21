@@ -5,12 +5,14 @@
 #include "CommonTypes.h"
 #include "CommonMacros.h"
 #include "daccess.h"
+#include "Pal.h"
 #include "PalLimitedContext.h"
 #include "regdisplay.h"
 #include "ICodeManager.h"
 #include "UnixNativeCodeManager.h"
 #include "NativePrimitiveDecoder.h"
 #include "holder.h"
+#include "stressLog.h"
 
 #include "CommonMacros.inl"
 

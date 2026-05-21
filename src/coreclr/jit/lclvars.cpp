@@ -4515,6 +4515,12 @@ void Compiler::lvaFixVirtualFrameOffsets()
             continue;
         }
 
+#if defined(TARGET_POWERPC64)
+        const bool isCallerStackParam =
+            varDsc->lvIsParam &&
+            ((lclNum < info.compArgsCount) ? lvaGetParameterABIInfo(lclNum).HasAnyStackSegment() : !varDsc->lvIsRegArg);
+#endif
+
         // Is this a non-param promoted struct field?
         //   if so then set doAssignStkOffs to false.
         //
@@ -4537,7 +4543,11 @@ void Compiler::lvaFixVirtualFrameOffsets()
 
         if (!varDsc->lvOnFrame)
         {
+#if defined(TARGET_POWERPC64)
+            if (!varDsc->lvIsParam || (lvaParamHasLocalStackSpace(lclNum) && !isCallerStackParam))
+#else
             if (!varDsc->lvIsParam || lvaParamHasLocalStackSpace(lclNum))
+#endif
             {
                 doAssignStkOffs = false; // Not on frame or an incoming stack arg
             }
@@ -4548,10 +4558,11 @@ void Compiler::lvaFixVirtualFrameOffsets()
             int localDelta = delta;
 
 #if defined(TARGET_POWERPC64)
-            if (varDsc->lvIsParam && !varDsc->lvIsRegArg)
+            if (isCallerStackParam)
             {
-                assert(codeGen->isFramePointerUsed());
-                localDelta = FIRST_ARG_STACK_OFFS - codeGen->genCallerSPtoFPdelta();
+                localDelta = FIRST_ARG_STACK_OFFS -
+                             (codeGen->isFramePointerUsed() ? codeGen->genCallerSPtoFPdelta()
+                                                            : codeGen->genCallerSPtoInitialSPdelta());
             }
 #endif
 

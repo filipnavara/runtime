@@ -3662,7 +3662,11 @@ emitter::instrDesc* emitter::emitNewInstrCallInd(int              argCnt,
 {
     emitAttr retSize = (retSizeIn != EA_UNKNOWN) ? retSizeIn : EA_PTRSIZE;
 
-    bool gcRefRegsInScratch = ((gcrefRegs & RBM_CALLEE_TRASH) != 0);
+#ifdef TARGET_POWERPC64
+    bool gcRefRegsNeedLargeCall = (gcrefRegs != 0);
+#else
+    bool gcRefRegsNeedLargeCall = ((gcrefRegs & RBM_CALLEE_TRASH) != 0);
+#endif
 
     // Allocate a larger descriptor if any GC values need to be saved
     // or if we have an absurd number of arguments or a large address
@@ -3673,7 +3677,7 @@ emitter::instrDesc* emitter::emitNewInstrCallInd(int              argCnt,
     // register (RDX) is a GCRef or ByRef pointer.
 
     if (!VarSetOps::IsEmpty(m_compiler, GCvars) || // any frame GCvars live
-        (gcRefRegsInScratch) ||                    // any register gc refs live in scratch regs
+        gcRefRegsNeedLargeCall ||                  // any register gc refs that need the large call descriptor
         (byrefRegs != 0) ||                        // any register byrefs live
 #ifdef TARGET_XARCH
         (disp < AM_DISP_MIN) ||        // displacement too negative
@@ -3757,10 +3761,14 @@ emitter::instrDesc* emitter::emitNewInstrCallDir(int              argCnt,
     // call returns a two-register-returned struct and the second
     // register (RDX) is a GCRef or ByRef pointer.
 
-    bool gcRefRegsInScratch = ((gcrefRegs & RBM_CALLEE_TRASH) != 0);
+#ifdef TARGET_POWERPC64
+    bool gcRefRegsNeedLargeCall = (gcrefRegs != 0);
+#else
+    bool gcRefRegsNeedLargeCall = ((gcrefRegs & RBM_CALLEE_TRASH) != 0);
+#endif
 
     if (!VarSetOps::IsEmpty(m_compiler, GCvars) || // any frame GCvars live
-        gcRefRegsInScratch ||                      // any register gc refs live in scratch regs
+        gcRefRegsNeedLargeCall ||                  // any register gc refs that need the large call descriptor
         (byrefRegs != 0) ||                        // any register byrefs live
         (argCnt > ID_MAX_SMALL_CNS) ||             // too many args
         (argCnt < 0)                               // caller pops arguments

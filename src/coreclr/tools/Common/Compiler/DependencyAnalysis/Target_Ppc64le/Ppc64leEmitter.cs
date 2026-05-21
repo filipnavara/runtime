@@ -84,6 +84,36 @@ namespace ILCompiler.DependencyAnalysis.Ppc64le
             EmitLD(regDst, regDst, 0);
         }
 
+        public void EmitLDFromGot(Register regDst, ISymbolNode symbol)
+        {
+            Debug.Assert(regDst != Register.R0);
+
+            Builder.EmitReloc(symbol, RelocType.IMAGE_REL_BASED_PPC64_GOT16);
+            EmitADDIS(regDst, Register.R2, 0);
+
+            EmitLD(regDst, regDst, 0);
+        }
+
+        public void EmitSTD(Register regSrc, Register regDst, int offset)
+        {
+            Debug.Assert((uint)regSrc <= 0x1f);
+            Debug.Assert((uint)regDst <= 0x1f);
+            Debug.Assert((offset >= short.MinValue) && (offset <= short.MaxValue));
+            Debug.Assert((offset & 0x3) == 0);
+
+            Builder.EmitUInt(0xf8000000u | ((uint)regSrc << 21) | ((uint)regDst << 16) | ((uint)offset & 0xfffc));
+        }
+
+        public void EmitSTDU(Register regSrc, Register regDst, int offset)
+        {
+            Debug.Assert((uint)regSrc <= 0x1f);
+            Debug.Assert((uint)regDst <= 0x1f);
+            Debug.Assert((offset >= short.MinValue) && (offset <= short.MaxValue));
+            Debug.Assert((offset & 0x3) == 0);
+
+            Builder.EmitUInt(0xf8000001u | ((uint)regSrc << 21) | ((uint)regDst << 16) | ((uint)offset & 0xfffc));
+        }
+
         public void EmitRET()
         {
             // blr
@@ -109,6 +139,23 @@ namespace ILCompiler.DependencyAnalysis.Ppc64le
             Builder.EmitReloc(symbol, RelocType.IMAGE_REL_BASED_PPC64_REL24);
             // b symbol
             Builder.EmitUInt(0x48000000);
+        }
+
+        public void EmitCALL(ISymbolNode symbol)
+        {
+            Builder.EmitReloc(symbol, RelocType.IMAGE_REL_BASED_PPC64_REL24);
+            // bl symbol
+            Builder.EmitUInt(0x48000001);
+            // Reserved for the linker to rewrite into a TOC restore if the target needs a PLT stub.
+            EmitNOP();
+        }
+
+        public void EmitCALLViaGot(ISymbolNode symbol)
+        {
+            EmitLDFromGot(Register.R12, symbol);
+            Builder.EmitUInt(0x7c0903a6u | ((uint)Register.R12 << 21));
+            // bctrl
+            Builder.EmitUInt(0x4e800421);
         }
 
         public void EmitCMPDI(Register regSrc, int value)
@@ -171,13 +218,13 @@ namespace ILCompiler.DependencyAnalysis.Ppc64le
             EmitADDI(Register.R2, Register.R2, -pcAnchorOffset);
         }
 
-        private void EmitMFLR(Register regDst)
+        public void EmitMFLR(Register regDst)
         {
             Debug.Assert((uint)regDst <= 0x1f);
             Builder.EmitUInt(0x7c0802a6u | ((uint)regDst << 21));
         }
 
-        private void EmitMTLR(Register regSrc)
+        public void EmitMTLR(Register regSrc)
         {
             Debug.Assert((uint)regSrc <= 0x1f);
             Builder.EmitUInt(0x7c0803a6u | ((uint)regSrc << 21));

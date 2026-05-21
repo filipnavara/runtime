@@ -415,6 +415,7 @@ inline ssize_t emitter::emitGetInsAmdAny(const instrDesc* id) const
 
 #elif defined(TARGET_POWERPC64)
     (void)encodeMask;
+    assert(regmask == RBM_NONE);
     id->idReg1(REG_R0);
     id->idReg2(REG_R0);
 

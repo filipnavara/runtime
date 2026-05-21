@@ -13,6 +13,15 @@
 #include "HardwareExceptions.h"
 #include "UnixSignals.h"
 #include "PalCreateDump.h"
+#include "RhConfig.h"
+#include "stressLog.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <fcntl.h>
+#include <pthread.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #if defined(HOST_APPLE)
 #include <mach/mach.h>
@@ -57,6 +66,304 @@ struct sigaction g_previousSIGFPE;
 
 // Exception handler for hardware exceptions
 static PHARDWARE_EXCEPTION_HANDLER g_hardwareExceptionHandler = NULL;
+
+#if defined(STRESS_LOG) && defined(TARGET_POWERPC64) && defined(TARGET_UNIX)
+static thread_local uint8_t t_ppc64leHardwareExceptionStack[64 * 1024];
+
+void InitializeCurrentThreadHardwareExceptionHandling()
+{
+    stack_t signalStack;
+    signalStack.ss_sp = t_ppc64leHardwareExceptionStack;
+    signalStack.ss_size = sizeof(t_ppc64leHardwareExceptionStack);
+    signalStack.ss_flags = 0;
+    sigaltstack(&signalStack, nullptr);
+}
+
+static void WritePpc64leFatalSignalMarker(const char* stressLogPath)
+{
+    const char suffix[] = "/fatal-entered.txt";
+    size_t pathLength = strlen(stressLogPath);
+    if (pathLength + sizeof(suffix) > 1024)
+    {
+        return;
+    }
+
+    char fatalPath[1024];
+    memcpy(fatalPath, stressLogPath, pathLength);
+    memcpy(fatalPath + pathLength, suffix, sizeof(suffix));
+
+    mkdir(stressLogPath, 0777);
+    int fd = open(fatalPath, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd != -1)
+    {
+        const char message[] = "entered\n";
+        write(fd, message, sizeof(message) - 1);
+        close(fd);
+    }
+}
+
+static void DumpPpc64leStackCodePointers(
+    const char* stressLogPath,
+    int traceIndex,
+    void* stackAddress,
+    size_t stackSize,
+    const PAL_LIMITED_CONTEXT& palContext)
+{
+    if ((stressLogPath == nullptr) || (*stressLogPath == '\0') || (stackAddress == nullptr) || (stackSize == 0))
+    {
+        return;
+    }
+
+    char stackPath[1024];
+    int written = snprintf(stackPath, sizeof(stackPath), "%s/stack-scan-%02d.txt", stressLogPath, traceIndex);
+    if ((written < 0) || ((size_t)written >= sizeof(stackPath)))
+    {
+        return;
+    }
+
+    FILE* stackFile = fopen(stackPath, "w");
+    if (stackFile == nullptr)
+    {
+        return;
+    }
+
+    uintptr_t stackLow = (uintptr_t)stackAddress;
+    uintptr_t stackHigh = stackLow + stackSize;
+    uintptr_t moduleBase = StressLog::theLog.moduleOffset;
+    uintptr_t moduleEnd = moduleBase + 0x10000000;
+    size_t scanSize = stackSize < (2 * 1024 * 1024) ? stackSize : (2 * 1024 * 1024);
+
+    fprintf(stackFile, "ip=%p sp=%p lr=%p stack=%p stackSize=%zu moduleBase=%p\n",
+        (void*)palContext.GetIp(),
+        (void*)palContext.GetSp(),
+        (void*)palContext.GetLr(),
+        stackAddress,
+        stackSize,
+        (void*)moduleBase);
+    fprintf(stackFile,
+        "r3=%p r4=%p r5=%p r6=%p r7=%p r8=%p r9=%p r10=%p r11=%p r12=%p\n",
+        (void*)palContext.R3,
+        (void*)palContext.R4,
+        (void*)palContext.R5,
+        (void*)palContext.R6,
+        (void*)palContext.R7,
+        (void*)palContext.R8,
+        (void*)palContext.R9,
+        (void*)palContext.R10,
+        (void*)palContext.R11,
+        (void*)palContext.R12);
+    fprintf(stackFile, "scanStart=%p scanEnd=%p\n", (void*)stackLow, (void*)(stackLow + scanSize));
+
+    for (uintptr_t slot = stackLow; (slot + sizeof(uintptr_t)) <= (stackLow + scanSize); slot += sizeof(uintptr_t))
+    {
+        uintptr_t value = *(uintptr_t*)slot;
+        if ((value >= moduleBase) && (value < moduleEnd))
+        {
+            fprintf(stackFile, "slot=%p value=%p offset=%p\n",
+                (void*)slot,
+                (void*)value,
+                (void*)(value - moduleBase));
+        }
+    }
+
+    if (palContext.GetSp() >= stackLow && palContext.GetSp() < stackHigh)
+    {
+        uintptr_t contextSp = palContext.GetSp();
+        uintptr_t start = contextSp > 256 ? contextSp - 256 : contextSp;
+        uintptr_t end = contextSp + 2048;
+        if (start < stackLow)
+        {
+            start = stackLow;
+        }
+        if (end > stackHigh)
+        {
+            end = stackHigh;
+        }
+
+        fprintf(stackFile, "near-sp-start=%p near-sp-end=%p\n", (void*)start, (void*)end);
+        for (uintptr_t slot = start; (slot + sizeof(uintptr_t)) <= end; slot += sizeof(uintptr_t))
+        {
+            fprintf(stackFile, "raw slot=%p value=%p\n", (void*)slot, (void*)*(uintptr_t*)slot);
+        }
+    }
+
+    fclose(stackFile);
+}
+
+static void DumpPpc64leStressLogOnFatalSignal(int code, siginfo_t* siginfo, void* context)
+{
+    static int dumped;
+    if (__sync_lock_test_and_set(&dumped, 1) != 0)
+    {
+        return;
+    }
+
+    const char* stressLogPath = getenv("DOTNET_Ppc64leStressLogPath");
+    if ((stressLogPath == nullptr) || (*stressLogPath == '\0'))
+    {
+        stressLogPath = getenv("COMPlus_Ppc64leStressLogPath");
+    }
+
+    if ((stressLogPath == nullptr) || (*stressLogPath == '\0'))
+    {
+        return;
+    }
+
+    WritePpc64leFatalSignalMarker(stressLogPath);
+    StressLog::DumpToDirectory(stressLogPath);
+
+    PAL_LIMITED_CONTEXT palContext;
+    NativeContextToPalContext(context, &palContext);
+
+    mkdir(stressLogPath, 0777);
+    char fatalPath[1024];
+    int written = snprintf(fatalPath, sizeof(fatalPath), "%s/fatal-signal.txt", stressLogPath);
+    if ((written >= 0) && ((size_t)written < sizeof(fatalPath)))
+    {
+        FILE* fatalFile = fopen(fatalPath, "w");
+        if (fatalFile != nullptr)
+        {
+            fprintf(fatalFile, "code=%d\n", code);
+            fprintf(fatalFile, "fault=%p\n", siginfo != nullptr ? siginfo->si_addr : nullptr);
+            fprintf(fatalFile, "ip=%p\n", (void*)palContext.GetIp());
+            fprintf(fatalFile, "sp=%p\n", (void*)palContext.GetSp());
+            fprintf(fatalFile, "lr=%p\n", (void*)palContext.GetLr());
+            fprintf(fatalFile,
+                "r3=%p r4=%p r5=%p r6=%p r7=%p r8=%p r9=%p r10=%p r11=%p r12=%p\n",
+                (void*)palContext.R3,
+                (void*)palContext.R4,
+                (void*)palContext.R5,
+                (void*)palContext.R6,
+                (void*)palContext.R7,
+                (void*)palContext.R8,
+                (void*)palContext.R9,
+                (void*)palContext.R10,
+                (void*)palContext.R11,
+                (void*)palContext.R12);
+            fclose(fatalFile);
+        }
+    }
+
+    STRESS_LOG5(LF_ALWAYS, LL_ALWAYS,
+        "PPC64LE fatal signal code=%d fault=%p IP=%pK SP=%p LR=%p\n",
+        code,
+        siginfo != nullptr ? siginfo->si_addr : nullptr,
+        (void*)palContext.GetIp(),
+        (void*)palContext.GetSp(),
+        (void*)palContext.GetLr());
+}
+
+static void MarkPpc64leSIGSEGVHandlerEntry()
+{
+    static int marked;
+    if (__sync_lock_test_and_set(&marked, 1) != 0)
+    {
+        return;
+    }
+
+    const char* stressLogPath = getenv("DOTNET_Ppc64leStressLogPath");
+    if ((stressLogPath == nullptr) || (*stressLogPath == '\0'))
+    {
+        stressLogPath = getenv("COMPlus_Ppc64leStressLogPath");
+    }
+
+    if ((stressLogPath != nullptr) && (*stressLogPath != '\0'))
+    {
+        WritePpc64leFatalSignalMarker(stressLogPath);
+    }
+}
+
+static void TracePpc64leSIGSEGV(const char* phase, int code, siginfo_t* siginfo, void* context, int handled)
+{
+    static int traceCount;
+    int traceIndex = __sync_fetch_and_add(&traceCount, 1);
+    if (traceIndex >= 128)
+    {
+        return;
+    }
+
+    const char* stressLogPath = getenv("DOTNET_Ppc64leStressLogPath");
+    if ((stressLogPath == nullptr) || (*stressLogPath == '\0'))
+    {
+        stressLogPath = getenv("COMPlus_Ppc64leStressLogPath");
+    }
+
+    if ((stressLogPath == nullptr) || (*stressLogPath == '\0'))
+    {
+        return;
+    }
+
+    const char suffix[] = "/sigsegv-trace.txt";
+    size_t pathLength = strlen(stressLogPath);
+    if (pathLength + sizeof(suffix) > 1024)
+    {
+        return;
+    }
+
+    char tracePath[1024];
+    memcpy(tracePath, stressLogPath, pathLength);
+    memcpy(tracePath + pathLength, suffix, sizeof(suffix));
+
+    PAL_LIMITED_CONTEXT palContext;
+    NativeContextToPalContext(context, &palContext);
+
+    void* stackAddress = nullptr;
+    size_t stackSize = 0;
+    pthread_attr_t attr;
+    if (pthread_getattr_np(pthread_self(), &attr) == 0)
+    {
+        pthread_attr_getstack(&attr, &stackAddress, &stackSize);
+        pthread_attr_destroy(&attr);
+    }
+
+    if ((handled < 0) && (traceIndex < 8))
+    {
+        DumpPpc64leStackCodePointers(stressLogPath, traceIndex, stackAddress, stackSize, palContext);
+    }
+
+    char message[1024];
+    int length = snprintf(
+        message,
+        sizeof(message),
+        "index=%d phase=%s code=%d handled=%d fault=%p ip=%p sp=%p lr=%p r3=%p r4=%p r5=%p r6=%p r7=%p r8=%p r9=%p r10=%p r11=%p r12=%p stack=%p stackSize=%zu\n",
+        traceIndex,
+        phase,
+        code,
+        handled,
+        siginfo != nullptr ? siginfo->si_addr : nullptr,
+        (void*)palContext.GetIp(),
+        (void*)palContext.GetSp(),
+        (void*)palContext.GetLr(),
+        (void*)palContext.R3,
+        (void*)palContext.R4,
+        (void*)palContext.R5,
+        (void*)palContext.R6,
+        (void*)palContext.R7,
+        (void*)palContext.R8,
+        (void*)palContext.R9,
+        (void*)palContext.R10,
+        (void*)palContext.R11,
+        (void*)palContext.R12,
+        stackAddress,
+        stackSize);
+    if (length <= 0)
+    {
+        return;
+    }
+    if ((size_t)length > sizeof(message))
+    {
+        length = sizeof(message);
+    }
+
+    mkdir(stressLogPath, 0777);
+    int fd = open(tracePath, O_WRONLY | O_CREAT | O_APPEND, 0666);
+    if (fd != -1)
+    {
+        write(fd, message, (size_t)length);
+        close(fd);
+    }
+}
+#endif
 
 #ifdef HOST_AMD64
 
@@ -544,11 +851,23 @@ bool HardwareExceptionHandler(int code, siginfo_t *siginfo, void *context, void*
 // Handler for the SIGSEGV signal
 void SIGSEGVHandler(int code, siginfo_t *siginfo, void *context)
 {
+#if defined(STRESS_LOG) && defined(TARGET_POWERPC64) && defined(TARGET_UNIX)
+    MarkPpc64leSIGSEGVHandlerEntry();
+    TracePpc64leSIGSEGV("pre", code, siginfo, context, -1);
+#endif
+
     bool isHandled = HardwareExceptionHandler(code, siginfo, context, siginfo->si_addr);
+#if defined(STRESS_LOG) && defined(TARGET_POWERPC64) && defined(TARGET_UNIX)
+    TracePpc64leSIGSEGV("post", code, siginfo, context, isHandled ? 1 : 0);
+#endif
     if (isHandled)
     {
         return;
     }
+
+#if defined(STRESS_LOG) && defined(TARGET_POWERPC64) && defined(TARGET_UNIX)
+    DumpPpc64leStressLogOnFatalSignal(code, siginfo, context);
+#endif
 
     if (g_previousSIGSEGV.sa_sigaction != NULL)
     {
@@ -572,6 +891,10 @@ void SIGFPEHandler(int code, siginfo_t *siginfo, void *context)
         return;
     }
 
+#if defined(STRESS_LOG) && defined(TARGET_POWERPC64) && defined(TARGET_UNIX)
+    DumpPpc64leStressLogOnFatalSignal(code, siginfo, context);
+#endif
+
     if (g_previousSIGFPE.sa_sigaction != NULL)
     {
         g_previousSIGFPE.sa_sigaction(code, siginfo, context);
@@ -588,6 +911,10 @@ void SIGFPEHandler(int code, siginfo_t *siginfo, void *context)
 // Initialize hardware exception handling
 bool InitializeHardwareExceptionHandling()
 {
+#if defined(STRESS_LOG) && defined(TARGET_POWERPC64) && defined(TARGET_UNIX)
+    InitializeCurrentThreadHardwareExceptionHandling();
+#endif
+
     if (!AddSignalHandler(SIGSEGV, SIGSEGVHandler, &g_previousSIGSEGV))
     {
         return false;

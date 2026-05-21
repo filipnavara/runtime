@@ -690,6 +690,12 @@ void Thread::HijackCallback(NATIVE_CONTEXT* pThreadContext, Thread* pThreadToHij
     // we may be able to do GC stack walk right where the threads is now,
     // as long as the location is a GC safe point.
     ICodeManager* codeManager = runtime->GetCodeManagerForAddress(pvAddress);
+    MethodInfo methodInfo;
+    if ((codeManager == NULL) || !codeManager->FindMethodInfo(pvAddress, &methodInfo))
+    {
+        return;
+    }
+
     if (runtime->IsConservativeStackReportingEnabled() ||
         codeManager->IsSafePoint(pvAddress))
     {
@@ -740,6 +746,12 @@ void Thread::HijackForGcStress(PAL_LIMITED_CONTEXT * pSuspendCtx)
     RuntimeInstance * pInstance = GetRuntimeInstance();
 
     uintptr_t ip = pSuspendCtx->GetIp();
+    ICodeManager* codeManager = pInstance->GetCodeManagerForAddress((PTR_VOID)ip);
+    MethodInfo methodInfo;
+    if ((codeManager == NULL) || !codeManager->FindMethodInfo((PTR_VOID)ip, &methodInfo))
+    {
+        return;
+    }
 
     bool bForceGC = g_pRhConfig->GetGcStressThrottleMode() == 0;
     // we enable collecting statistics by callsite even for stochastic-only

@@ -1947,7 +1947,7 @@ namespace Internal.JitInterface
             Utf8String externName = new Utf8String(_compilation.PInvokeILProvider.GetDirectCallExternName(md));
             externName = _compilation.NodeFactory.NameMangler.NodeMangler.ExternMethod(externName, md);
 
-            pLookup = CreateConstLookupToSymbol(ExternFunctionSymbolForCall(externName));
+            pLookup = CreateConstLookupToSymbol(_compilation.NodeFactory.ExternFunctionSymbol(externName));
         }
 
         private void getGSCookie(IntPtr* pCookieVal, IntPtr** ppCookieVal)

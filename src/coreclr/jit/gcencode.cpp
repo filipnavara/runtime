@@ -4001,12 +4001,12 @@ void GCInfo::gcInfoBlockHdrSave(GcInfoEncoder* gcInfoEncoder, unsigned methodSiz
     }
 #endif // TARGET_AMD64
 
-#if defined(TARGET_ARMARCH) || defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#if defined(TARGET_ARMARCH) || defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
     if (m_compiler->codeGen->GetHasTailCalls())
     {
         gcInfoEncoderWithLog->SetHasTailCalls();
     }
-#endif // TARGET_ARMARCH || TARGET_RISCV64 || TARGET_LOONGARCH64
+#endif // TARGET_ARMARCH || TARGET_RISCV64 || TARGET_LOONGARCH64 || TARGET_POWERPC64
 
 #if FEATURE_FIXED_OUT_ARGS
     // outgoing stack area size

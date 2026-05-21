@@ -459,6 +459,9 @@ enum idAddrUnionTag
 enum EmitCallType
 {
     EC_FUNC_TOKEN, //   Direct call to a helper/static/nonvirtual/global method (call/bl addr with IP-relative encoding)
+#ifdef TARGET_POWERPC64
+    EC_FUNC_TOKEN_GOT, // Direct call via a GOT-loaded function address.
+#endif
 #ifdef TARGET_XARCH
     EC_FUNC_TOKEN_INDIR, // Indirect call to a helper/static/nonvirtual/global method (call [addr]/call [rip+addr])
 #endif

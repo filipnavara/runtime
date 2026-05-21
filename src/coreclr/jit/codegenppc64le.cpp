@@ -3448,8 +3448,17 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
         }
     }
 
-    bool restoreTocAfterIndirectUnmanagedCall = false;
-    if (params.callType != EC_FUNC_TOKEN)
+    bool restoreTocAfterUnmanagedCall = false;
+    if (call->IsUnmanaged() && (params.callType == EC_FUNC_TOKEN))
+    {
+        // ELFv2 global entry points derive the callee TOC from r12. Direct unmanaged
+        // calls load the external function address through the GOT and branch through
+        // r12, avoiding linker-inserted PLT entries in managed code.
+        GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R2, REG_SPBASE, PPC_TOC_SAVE_OFFSET);
+        params.callType = EC_FUNC_TOKEN_GOT;
+        restoreTocAfterUnmanagedCall = true;
+    }
+    else if (params.callType != EC_FUNC_TOKEN)
     {
         assert(genIsValidIntReg(params.ireg));
 
@@ -3465,7 +3474,7 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
                 params.ireg = REG_INDIRECT_CALL_TARGET_REG;
             }
 
-            restoreTocAfterIndirectUnmanagedCall = true;
+            restoreTocAfterUnmanagedCall = true;
         }
 
         regSet.verifyRegUsed(params.ireg);
@@ -3475,7 +3484,7 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
 
     genEmitCallWithCurrentGC(params);
 
-    if (restoreTocAfterIndirectUnmanagedCall)
+    if (restoreTocAfterUnmanagedCall)
     {
         GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_R2, REG_SPBASE, PPC_TOC_SAVE_OFFSET);
     }

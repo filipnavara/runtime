@@ -24,7 +24,7 @@ namespace ILCompiler.ObjectWriter
     public abstract partial class ObjectWriter
     {
         protected virtual CodeDataLayout LayoutMode => CodeDataLayout.Unified;
-        private protected sealed record SymbolDefinition(int SectionIndex, long Value, int Size = 0, bool Global = false);
+        private protected sealed record SymbolDefinition(int SectionIndex, long Value, int Size = 0, bool Global = false, byte Other = 0);
         protected sealed record SymbolicRelocation(long Offset, RelocType Type, Utf8String SymbolName, long Addend = 0);
         private sealed record BlockToRelocate(int SectionIndex, long Offset, byte[] Data, Relocation[] Relocations);
         private protected sealed record ChecksumsToCalculate(int SectionIndex, long Offset, Relocation[] ChecksumRelocations);
@@ -271,11 +271,63 @@ namespace ILCompiler.ObjectWriter
             Utf8String symbolName,
             long offset = 0,
             int size = 0,
-            bool global = false)
+            bool global = false,
+            byte other = 0)
         {
             _definedSymbols.Add(
                 symbolName,
-                new SymbolDefinition(sectionIndex, offset, size, global));
+                new SymbolDefinition(sectionIndex, offset, size, global, other));
+        }
+
+        private byte GetSymbolOther(ISymbolDefinitionNode symbol, byte[] data)
+        {
+            if (_nodeFactory.Target.Architecture != TargetArchitecture.Ppc64le)
+            {
+                return 0;
+            }
+
+            if (symbol is not IMethodNode { Method.IsUnmanagedCallersOnly: true })
+            {
+                return 0;
+            }
+
+            // PPC64 ELFv2 supports dual entry points. The global entry starts at
+            // the symbol value and establishes r2 from r12. Local same-module
+            // calls branch to symbol+localentry and keep the existing TOC.
+            if (!HasPpc64leGlobalEntryTocSetup(data, symbol.Offset))
+            {
+                return 0;
+            }
+
+            return EncodePpc64LocalEntryOffset(4 * sizeof(uint));
+        }
+
+        private static bool HasPpc64leGlobalEntryTocSetup(byte[] data, int offset)
+        {
+            const uint AddisR11R0 = 0x3D600000;
+            const uint AddiR11R11 = 0x396B0000;
+            const uint SubfR2R11R12 = 0x7C4B6050;
+
+            if (offset < 0 || offset + (3 * sizeof(uint)) > data.Length)
+            {
+                return false;
+            }
+
+            ReadOnlySpan<byte> code = data.AsSpan(offset);
+            return ((BinaryPrimitives.ReadUInt32LittleEndian(code) & 0xFFFF0000) == AddisR11R0) &&
+                   ((BinaryPrimitives.ReadUInt32LittleEndian(code.Slice(sizeof(uint))) & 0xFFFF0000) == AddiR11R11) &&
+                   (BinaryPrimitives.ReadUInt32LittleEndian(code.Slice(2 * sizeof(uint))) == SubfR2R11R12);
+        }
+
+        private static byte EncodePpc64LocalEntryOffset(int offset)
+        {
+            Debug.Assert(offset >= 0);
+
+            uint value = offset >= 4 * sizeof(uint)
+                ? (offset >= 8 * sizeof(uint) ? (uint)(offset >= 16 * sizeof(uint) ? 6 : 5) : 4)
+                : (offset >= 2 * sizeof(uint) ? 3u : (offset >= sizeof(uint) ? 2u : 0u));
+
+            return (byte)(value << 5);
         }
 
         /// <summary>
@@ -438,10 +490,12 @@ namespace ILCompiler.ObjectWriter
                 foreach (ISymbolDefinitionNode n in nodeContents.DefinedSymbols)
                 {
                     Utf8String mangledName = n == node ? currentSymbolName : GetMangledName(n);
+                    byte symbolOther = GetSymbolOther(n, nodeContents.Data);
                     sectionWriter.EmitSymbolDefinition(
                         mangledName,
                         n.Offset + thumbBit,
-                        n.Offset == 0 ? nodeContents.Data.Length : 0);
+                        n.Offset == 0 ? nodeContents.Data.Length : 0,
+                        other: symbolOther);
 
                     _outputInfoBuilder?.AddSymbol(new OutputSymbol(sectionWriter.SectionIndex, (ulong)(sectionWriter.Position + n.Offset), mangledName));
 
@@ -453,7 +507,8 @@ namespace ILCompiler.ObjectWriter
                             alternateCName,
                             n.Offset + thumbBit,
                             n.Offset == 0 ? nodeContents.Data.Length : 0,
-                            global: !isHidden);
+                            global: !isHidden,
+                            other: symbolOther);
 
                         if (n is IMethodNode)
                         {

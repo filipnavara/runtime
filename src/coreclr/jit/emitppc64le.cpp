@@ -549,6 +549,7 @@ void emitter::emitIns_R_L(instruction ins, emitAttr attr, BasicBlock* dst, regNu
     id->idAddr()->iiaBBlabel = dst;
     id->idCodeSize((m_compiler->opts.compReloc ? 2 : 5) * sizeof(code_t));
     id->idReg1(reg);
+    id->idReg2(REG_R2);
 
 #ifdef DEBUG
     if (m_compiler->compCurBB->KindIs(BBJ_EHCATCHRET))
@@ -563,8 +564,14 @@ void emitter::emitIns_R_L(instruction ins, emitAttr attr, BasicBlock* dst, regNu
 
 void emitter::emitIns_R_L(instruction ins, emitAttr attr, insGroup* dst, regNumber reg)
 {
+    emitIns_R_L(ins, attr, dst, reg, REG_R2);
+}
+
+void emitter::emitIns_R_L(instruction ins, emitAttr attr, insGroup* dst, regNumber reg, regNumber baseReg)
+{
     assert(dst != nullptr);
     assert(isGeneralRegister(reg));
+    assert((baseReg == REG_R0) || (baseReg == REG_R2));
 
     instrDesc* id = emitNewInstr(attr);
 
@@ -574,6 +581,7 @@ void emitter::emitIns_R_L(instruction ins, emitAttr attr, insGroup* dst, regNumb
     id->idSetIsBound();
     id->idCodeSize((m_compiler->opts.compReloc ? 2 : 5) * sizeof(code_t));
     id->idReg1(reg);
+    id->idReg2(baseReg);
 
     dispIns(id);
     appendToCurIG(id);
@@ -1150,7 +1158,7 @@ unsigned emitter::emitOutputLabelLoad(BYTE* dst, instrDesc* id)
     {
         assert(id->idCodeSize() == 2 * sizeof(code_t));
 
-        emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), reg, REG_R2, 0));
+        emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), reg, id->idReg2(), 0));
         cur += sizeof(code_t);
 
         emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addi), reg, reg, 0));

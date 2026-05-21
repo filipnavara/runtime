@@ -5831,6 +5831,9 @@ void CodeGen::genFnProlog()
 //
 void CodeGen::genBeginFnProlog()
 {
+#ifdef TARGET_POWERPC64
+    genEstablishPpc64leTocForReversePInvoke();
+#endif
 }
 
 //----------------------------------------------------------------------------------

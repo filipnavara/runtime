@@ -34,14 +34,7 @@ namespace ILCompiler
             {
                 exportName = _factory.NameMangler.NodeMangler.ExternMethod(exportName, method);
 
-                ISymbolNode exportedNode = methodEntryPoint;
-                if (method.IsUnmanagedCallersOnly && _factory.Target.Architecture == TargetArchitecture.Ppc64le)
-                {
-                    exportedNode = _factory.Ppc64leUnmanagedCallersOnlyExportThunk(canonMethod);
-                    _rootAdder(exportedNode, "PPC64LE native callable export thunk");
-                }
-
-                _factory.NodeAliases.Add(exportedNode, (exportName, exportHidden));
+                _factory.NodeAliases.Add(methodEntryPoint, (exportName, exportHidden));
             }
 
             if (canonMethod != method && method.HasInstantiation)

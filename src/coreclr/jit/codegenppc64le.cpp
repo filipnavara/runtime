@@ -426,6 +426,10 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genCodeForCompare(treeNode->AsOp());
             break;
 
+        case GT_INTRINSIC:
+            genIntrinsic(treeNode->AsIntrinsic());
+            break;
+
         case GT_CAST:
         {
             GenTreeCast* cast = treeNode->AsCast();
@@ -462,10 +466,27 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
 
                 regNumber sourceReg = genConsumeReg(op1);
                 regNumber targetReg = treeNode->GetRegNum();
-                GetEmitter()->emitIns_R_R(
-                    targetIsFloat ? ((targetSize == 8) ? INS_mtfprd : INS_mtfprwz)
-                                  : ((targetSize == 8) ? INS_mffprd : INS_mffprwz),
-                    EA_ATTR(targetSize), targetReg, sourceReg);
+                if (targetSize == 8)
+                {
+                    GetEmitter()->emitIns_R_R(targetIsFloat ? INS_mtfprd : INS_mffprd, EA_8BYTE, targetReg,
+                                              sourceReg);
+                }
+                else if (targetIsFloat)
+                {
+                    // Move the raw single bits into the high half of a doubleword, then convert
+                    // from single-precision VSX format to the scalar single value representation.
+                    regNumber tmpReg = internalRegisters.GetSingle(treeNode);
+                    GetEmitter()->emitIns_R_R_I(INS_sldi, EA_8BYTE, tmpReg, sourceReg, 32);
+                    GetEmitter()->emitIns_R_R(INS_mtfprd, EA_8BYTE, targetReg, tmpReg);
+                    GetEmitter()->emitIns_R_R(INS_xscvspdpn, EA_4BYTE, targetReg, targetReg);
+                }
+                else
+                {
+                    // Convert the scalar single value to single-precision VSX format before extracting its raw bits.
+                    regNumber tmpReg = internalRegisters.GetSingle(treeNode);
+                    GetEmitter()->emitIns_R_R(INS_xscvdpspn, EA_4BYTE, tmpReg, sourceReg);
+                    GetEmitter()->emitIns_R_R(INS_mffprwz, EA_4BYTE, targetReg, tmpReg);
+                }
                 genProduceReg(treeNode);
                 break;
             }
@@ -680,6 +701,31 @@ void CodeGen::genCodeForFloatingBinary(GenTreeOp* tree)
                                 op1->GetRegNum(), op2->GetRegNum());
 
     genProduceReg(tree);
+}
+
+void CodeGen::genIntrinsic(GenTreeIntrinsic* treeNode)
+{
+    GenTree* op1 = treeNode->gtGetOp1();
+
+    assert(varTypeIsFloating(treeNode));
+    assert(op1->TypeIs(treeNode->TypeGet()));
+
+    instruction ins = INS_invalid;
+    switch (treeNode->gtIntrinsicName)
+    {
+        case NI_System_Math_Abs:
+            ins = INS_fabs;
+            break;
+        case NI_System_Math_Sqrt:
+            ins = (treeNode->TypeGet() == TYP_FLOAT) ? INS_fsqrts : INS_fsqrt;
+            break;
+        default:
+            NO_WAY("Unknown intrinsic");
+    }
+
+    regNumber srcReg = genConsumeReg(op1);
+    GetEmitter()->emitIns_R_R(ins, emitActualTypeSize(treeNode), treeNode->GetRegNum(), srcReg);
+    genProduceReg(treeNode);
 }
 
 void CodeGen::genCodeForMul(GenTreeOp* tree)
@@ -2329,7 +2375,8 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* cpBlkNode)
             initialDstOffset  = ppcGetLclFrameOffset(m_compiler, dstLclNum, dstOffset, &baseReg);
         }
 
-        containedDstNeedsLargeOffsetTemp = !ppcOffsetRangeFitsSimm16(initialDstOffset, totalSize);
+        containedDstNeedsLargeOffsetTemp = !ppcOffsetRangeFitsSimm16(initialDstOffset, totalSize) ||
+                                           !ppcOffsetFitsInstruction(INS_std, initialDstOffset);
     }
 
     regNumber dstTmpReg = containedDstNeedsLargeOffsetTemp ? internalRegisters.Extract(cpBlkNode, RBM_ALLINT) : REG_NA;
@@ -3417,7 +3464,8 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
     {
         regNumber baseReg             = REG_NA;
         int       initialDstOffset    = ppcGetLclFrameOffset(m_compiler, varNumOut, argOffsetOut, &baseReg);
-        bool      dstOffsetRangeFits  = ppcOffsetRangeFitsSimm16(initialDstOffset, srcSize);
+        bool      dstOffsetRangeFits  = ppcOffsetRangeFitsSimm16(initialDstOffset, srcSize) &&
+                                        ppcOffsetFitsInstruction(INS_std, initialDstOffset);
         dstTmpReg = dstOffsetRangeFits ? REG_NA : internalRegisters.Extract(treeNode);
     }
 

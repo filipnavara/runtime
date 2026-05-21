@@ -73,7 +73,7 @@ static bool ppc64leContainedAddrNeedsLargeOffsetTemp(Compiler* compiler, GenTree
                  addr->AsLclVarCommon()->GetLclOffs();
     }
 
-    return !ppc64leOffsetRangeFitsSimm16(offset, size);
+    return !ppc64leOffsetRangeFitsSimm16(offset, size) || !ppc64leOffsetFitsInstruction(INS_std, offset);
 }
 
 int LinearScan::BuildNode(GenTree* tree)
@@ -199,6 +199,28 @@ int LinearScan::BuildNode(GenTree* tree)
             return 0;
         }
 
+        case GT_BITCAST:
+        {
+            GenTree* op1      = tree->gtGetOp1();
+            int      srcCount = BuildOperandUses(op1);
+
+            if ((genTypeSize(tree) == 4) && (varTypeUsesFloatReg(tree) != varTypeUsesFloatReg(op1)))
+            {
+                if (varTypeUsesFloatReg(tree))
+                {
+                    buildInternalIntRegisterDefForNode(tree);
+                }
+                else
+                {
+                    buildInternalFloatRegisterDefForNode(tree);
+                }
+                buildInternalRegisterUses();
+            }
+
+            BuildDef(tree);
+            return srcCount;
+        }
+
         case GT_CAST:
         {
             GenTreeCast* cast        = tree->AsCast();
@@ -278,6 +300,19 @@ int LinearScan::BuildNode(GenTree* tree)
             int srcCount = BuildBinaryUses(tree->AsOp());
             BuildDef(tree);
             return srcCount;
+        }
+
+        case GT_INTRINSIC:
+        {
+            GenTree* op1 = tree->gtGetOp1();
+            noway_assert((tree->AsIntrinsic()->gtIntrinsicName == NI_System_Math_Abs) ||
+                         (tree->AsIntrinsic()->gtIntrinsicName == NI_System_Math_Sqrt));
+            assert(varTypeIsFloating(tree));
+            assert(op1->TypeIs(tree->TypeGet()));
+
+            BuildUse(op1);
+            BuildDef(tree);
+            return 1;
         }
 
         case GT_INC_SATURATE:

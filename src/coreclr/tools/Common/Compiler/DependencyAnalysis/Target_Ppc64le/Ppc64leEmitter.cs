@@ -200,24 +200,6 @@ namespace ILCompiler.DependencyAnalysis.Ppc64le
             EmitADDI(regDst, regDst, 0);
         }
 
-        public void EmitEstablishTocFromEntryPoint(ISymbolNode entryPoint)
-        {
-            const int pcAnchorOffset = 8;
-
-            EmitMFLR(Register.R0);
-            EmitBLNextInstruction();
-            EmitMFLR(Register.R2);
-            EmitMTLR(Register.R0);
-
-            Builder.EmitReloc(entryPoint, RelocType.IMAGE_REL_BASED_PPC64_TOC16);
-            EmitADDIS(Register.R11, Register.R0, 0);
-
-            EmitADDI(Register.R11, Register.R11, 0);
-
-            EmitSUBF(Register.R2, Register.R11, Register.R2);
-            EmitADDI(Register.R2, Register.R2, -pcAnchorOffset);
-        }
-
         public void EmitMFLR(Register regDst)
         {
             Debug.Assert((uint)regDst <= 0x1f);
@@ -228,12 +210,6 @@ namespace ILCompiler.DependencyAnalysis.Ppc64le
         {
             Debug.Assert((uint)regSrc <= 0x1f);
             Builder.EmitUInt(0x7c0803a6u | ((uint)regSrc << 21));
-        }
-
-        private void EmitBLNextInstruction()
-        {
-            // bl .+4
-            Builder.EmitUInt(0x48000005);
         }
 
         private void EmitBNE(int offset)

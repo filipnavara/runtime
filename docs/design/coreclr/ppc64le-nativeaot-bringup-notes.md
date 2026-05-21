@@ -261,6 +261,14 @@ entry address. The method prolog can use this to establish the NativeAOT TOC in
 `r2` before any TOC-relative access. This avoids a separate export thunk and
 matches the intended external-entry shape for these methods.
 
+NativeAOT can still make same-module native calls to `[UnmanagedCallersOnly]`
+entrypoints such as startup helpers. PPC64 ELFv2 handles this with dual entry
+points: external callers enter at the symbol value, while local calls branch to
+`symbol+localentry` and preserve the current TOC. The PPC64LE UCO prolog uses
+`addis/addi/subf` to establish `r2`; because PPC64 `st_other` cannot encode a
+12-byte local entry offset, the JIT pads the global entry with a `nop` and the
+ELF writer annotates matching symbols with localentry 16.
+
 Indirect unmanaged calls already use the PPC64LE global-entry convention:
 save managed `r2`, move the target address into `r12`, branch through CTR, then
 restore `r2`. Direct unmanaged calls should eventually use the same structural

@@ -613,6 +613,9 @@ protected:
     void genReserveEpilog(BasicBlock* block);
     void genFnProlog();
     void genBeginFnProlog();
+#ifdef TARGET_POWERPC64
+    void genEstablishPpc64leTocForReversePInvoke();
+#endif
     void genFnEpilog(BasicBlock* block);
 
     void genReserveFuncletProlog(BasicBlock* block);

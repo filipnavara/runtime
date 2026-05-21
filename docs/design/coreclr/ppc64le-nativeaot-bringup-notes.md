@@ -74,6 +74,37 @@ reported correctly at one safe point but omitted at a neighboring interruptible
 point, or a slot being described relative to SP when the method's prolog/epilog
 and the code manager disagree about the current frame shape.
 
+Useful repro variants:
+
+```sh
+DOTNET_GCStress=0xC \
+DOTNET_StressLog=1 \
+DOTNET_TotalStressLogSize=67108864 \
+DOTNET_StressLogLevel=9 \
+./artifacts/tests/coreclr/linux.ppc64le.Release/nativeaot/SmokeTests/DynamicGenerics/DynamicGenerics/native/DynamicGenerics \
+    ThreadLocalStatics.TLSTesting.ThreadLocalStatics_Test
+
+DOTNET_PROCESSOR_COUNT=1 \
+DOTNET_GCStress=0xC \
+DOTNET_StressLog=1 \
+DOTNET_TotalStressLogSize=67108864 \
+DOTNET_StressLogLevel=9 \
+<same command>
+
+DOTNET_gcConservative=1 \
+DOTNET_GCStress=0xC \
+DOTNET_StressLog=1 \
+DOTNET_TotalStressLogSize=67108864 \
+DOTNET_StressLogLevel=9 \
+<same command>
+```
+
+`DOTNET_PROCESSOR_COUNT=1` is only a noise reducer. If the failure remains, do
+not label it a concurrency issue. `DOTNET_gcConservative=1` is the stronger
+split: if conservative reporting fixes the repro, look at precise stack GC
+info; if it does not, inspect hijacking, transition frames, statics/TLS, helper
+ABIs, and unmanaged boundaries.
+
 Capturing the stress log through a debugger can be fragile under qemu-user.
 GDB and LLDB may stop on SIG34, which NativeAOT uses for thread hijacking during
 stop-the-world. In LLDB, issue this as early as possible:
@@ -112,6 +143,23 @@ Recent qemu-user builds commonly write files named like
 reliable than live debugger sessions for SIGSEGV/SIGABRT triage. Still, SIG34
 stops are usually hijacking noise, not the failing condition.
 
+Core dumps are most useful when every run writes into its own directory with the
+command line and environment saved beside the core. For qemu-user NativeAOT
+smokes, save at least:
+
+- The executable and any `.so` files from the test's `native` directory.
+- The exact runtime libraries used by the multi-arch system or sysroot.
+- The main binary with `StripSymbols=false`, or the matching `.dbg` files.
+- `llvm-readelf -n <core>` output, so the core flavor and captured notes are
+  visible even if a later debugger cannot load it.
+- `llvm-nm -an <binary>` output for quick IP-to-symbol lookup.
+
+When a core contains a bad object reference, first identify whether the bad
+value is an object pointer, an interior pointer, a stack address, a code
+address, or a fill pattern such as `0xcdcdcdcdcdcdcdcd`. Fill patterns usually
+mean an uninitialized local or a poisoned debug allocation reached a reporting
+path; they are not automatically proof that the GC moved an object incorrectly.
+
 Use `DOTNET_gcConservative=1` to separate precise GC reporting holes from other
 state corruption. If conservative GC makes the failure disappear, inspect stack
 root reporting. If it still fails, look harder at hijacking, transition frames,
@@ -131,6 +179,36 @@ trace. Look for repeated class constructors, helper paths that should not
 re-enter managed code, and frames whose SP changes unexpectedly across a
 stop-the-world hijack. PPC64LE hijacking bugs can masquerade as recursion if the
 restored return address or saved SP is taken from the wrong stack slot.
+
+Do not patch GC info based on one suspicious method name alone. Previous
+investigations produced plausible methods such as
+`Interop.Sys.GetLowResolutionTimestamp` and `Environment.TickCount64`, but the
+right question is always more concrete: at the stopped IP, which exact stack
+slots and registers did the runtime report, which references were live in the
+JIT dump, and which of those locations later contained the corrupted value?
+
+Good artifacts to keep for a GC-hole bug report:
+
+- A minimized command that fails within a few runs.
+- The binary, symbols, and `llvm-nm -an` output.
+- The last several GC stress-log chunks, preferably raw plus decoded text.
+- The top managed frames and stopped IPs for each thread in the last GC.
+- JIT dumps for methods on those top frames, with `JitGCDump=1`.
+- A short table of suspect stack slots: address, frame, method, variable or
+  temp name, GC type, and whether it was tracked or untracked.
+
+For NativeAOT JIT dumps from an ILC build, pass focused codegen options rather
+than dumping the whole image:
+
+```text
+--codegenopt "JitDump=<method-pattern>" --codegenopt JitGCDump=1
+```
+
+When using the test build scripts, keep `-p:StripSymbols=false` in the MSBuild
+arguments and record any non-default `IlcExtraArgs`, linker, sysroot, or
+runtime-pack overrides. Stale ILC layouts can make an investigation look
+impossible; verify the `ilc` executable or wrapper being used by the test tree
+matches the compiler binaries just rebuilt.
 
 ## PPC64LE JIT Decisions
 
@@ -160,6 +238,22 @@ whether the current IP is before LR restore, after LR restore but before SP
 restore, or after SP restore, because the return address location moves between
 the current frame and the caller linkage area.
 
+Frame-related PPC64LE invariants worth checking after every prolog/epilog
+change:
+
+- SP must always point at the active linkage area whenever unmanaged ABI code
+  can observe the frame.
+- Saved LR, saved `r2`, callee-saved registers, outgoing argument space, and
+  local slots must agree between codegen, unwind info, and the NativeAOT code
+  manager.
+- If a large frame forces split SP adjustment, all callee-save offsets must
+  still be encodable at the instruction that saves or restores them.
+- Epilog recognition must cover both normal methods and funclets. A missing
+  epilog shape can make hijacking overwrite or read the return address from the
+  wrong frame.
+- A debug-only frame-shape workaround should not survive cleanup unless it is
+  described as an ABI requirement.
+
 `[UnmanagedCallersOnly]` methods are reverse P/Invoke methods. They get the JIT
 reverse-P/Invoke enter/exit helpers and must be entered using the unmanaged ABI.
 For PPC64LE ELFv2, that means unmanaged callers arrive with `r12` containing the
@@ -179,6 +273,21 @@ helper ABI. For write barriers and assignment helpers, labels ending in
 `AVLocation` must remain immediately attached to the dereferencing instruction
 used for null-reference fault recognition. Do not insert barriers or probes
 between an `AVLocation` label and the faulting access.
+
+No-GC decisions that are easy to get wrong:
+
+- A no-GC helper call is not a no-clobber call. Volatile registers holding GC
+  refs must be dead, spilled to reported locations, or preserved by a documented
+  helper-specific ABI.
+- If codegen disables GC around a helper transition, the transition point still
+  needs accurate state on both sides. Check the instruction immediately before
+  `GT_START_NONGC` and immediately after `GT_START_PREEMPTGC`.
+- Assignment helpers and write barriers often rely on exact register contracts.
+  PPC64LE helper assembly should state which argument, scratch, return, and
+  thread registers it uses, and JIT lowering should match that contract.
+- Do not infer that a helper is safe to call from a hijack or probe path just
+  because it is no-GC. Hijack paths also have return-value and stack-layout
+  preservation constraints.
 
 `GT_START_NONGC`/`GT_START_PREEMPTGC`, helper kill sets, and call-site GC labels
 are not independent details. A register or stack slot that contains a GC
@@ -213,6 +322,21 @@ whether the type classification or address-mode lowering is wrong. Several
 early workarounds around struct returns and large local offsets turned out to be
 symptoms of incorrect enregistration decisions rather than real PPC ABI needs.
 
+Struct-return and copy checklist:
+
+- Confirm the ABI classification first: integer registers, floating registers,
+  mixed aggregate, vector, or hidden return buffer.
+- Compare the PPC64LE path with ARM64 and x64 before adding a PPC-only local
+  bounce. The generic multi-reg return machinery is usually the right owner.
+- If a return buffer is used, verify the hidden argument is not confused with
+  the normal first user argument and that reverse P/Invoke/PInvoke transitions
+  preserve it.
+- If a struct contains GC references, every intermediate location used by a copy
+  must either be non-GC by construction or be reported for the full live range.
+- Large-offset address materialization should be solved in address lowering or
+  frame layout, not hidden inside return-copy code unless the ABI specifically
+  requires it.
+
 `RhpGcProbeHijack` is entered by overwriting a return address during thread
 hijacking. It must preserve any valid return values and avoid clobbering
 registers or stack locations that may hold the interrupted method's return
@@ -240,6 +364,12 @@ and object-writer boundary when the pair is logically one address materializatio
 operation. PPC64LE HA/LO pairs should follow the same style as ARM and RISC-V
 compound relocations instead of threading ad hoc addends through generic
 relocation records.
+
+When an address sequence needs PPC64 relocations, prefer a human-readable
+assembler-shaped sequence in comments and one logical relocation in the JIT or
+object writer. The native file may expand that logical relocation into `_HA`
+and `_LO` records, but the importer, JIT, and dependency node should not pass
+around unrelated integer addends that only make sense for one half of the pair.
 
 When debugging generated code, build tests with `StripSymbols=false` so symbols
 stay in the primary binary instead of separate `.dbg` files. NativeAOT smoke

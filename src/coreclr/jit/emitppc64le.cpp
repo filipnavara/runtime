@@ -581,6 +581,11 @@ void emitter::emitIns_R_L(instruction ins, emitAttr attr, insGroup* dst, regNumb
 
 void emitter::emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int varx, int offs)
 {
+    emitIns_R_S(ins, attr, ireg, varx, offs, REG_NA);
+}
+
+void emitter::emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int varx, int offs, regNumber tmpReg)
+{
     ssize_t imm = offs;
     bool    FPbased = false;
 
@@ -592,7 +597,36 @@ void emitter::emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int va
 
     if (!isValidSimm16(imm))
     {
-        NYI_POWERPC64("large stack local offset");
+        const bool isLea   = (ins == INS_lea);
+        regNumber  addrReg = tmpReg;
+
+        if (addrReg == REG_NA)
+        {
+            addrReg = (isLea || isGeneralRegister(ireg)) ? ireg : REG_NA;
+        }
+
+        if (addrReg == REG_NA)
+        {
+            NYI_POWERPC64("large stack local offset");
+        }
+
+        assert(isGeneralRegister(addrReg));
+        assert(addrReg != (FPbased ? REG_FPBASE : REG_SPBASE));
+
+        codeGen->instGen_Set_Reg_To_Imm(EA_PTRSIZE, addrReg, imm);
+        codeGen->regSet.verifyRegUsed(addrReg);
+
+        if (isLea)
+        {
+            emitIns_R_R_R(INS_add, EA_PTRSIZE, ireg, FPbased ? REG_FPBASE : REG_SPBASE, addrReg);
+        }
+        else
+        {
+            emitIns_R_R_R(INS_add, EA_PTRSIZE, addrReg, FPbased ? REG_FPBASE : REG_SPBASE, addrReg);
+            emitIns_R_R_I(ins, attr, ireg, addrReg, 0);
+        }
+
+        return;
     }
 
     if (ins == INS_lea)

@@ -62,6 +62,7 @@ void emitIns_R_R_R_I_I(
     instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, regNumber reg3, unsigned imm1, unsigned imm2);
 void emitIns_R_L(instruction ins, emitAttr attr, BasicBlock* dst, regNumber reg);
 void emitIns_R_L(instruction ins, emitAttr attr, insGroup* dst, regNumber reg);
+void emitIns_R_L(instruction ins, emitAttr attr, insGroup* dst, regNumber reg, regNumber baseReg);
 void emitIns_R_C(instruction ins, emitAttr attr, regNumber targetReg, regNumber addrReg, CORINFO_FIELD_HANDLE fldHnd);
 void emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int varx, int offs);
 void emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int varx, int offs, regNumber tmpReg);

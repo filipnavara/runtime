@@ -288,7 +288,7 @@ namespace ILCompiler.ObjectWriter
                     Size = (ulong)definition.Size,
                     Section = _sections[definition.SectionIndex],
                     Info = (byte)(type | (STB_GLOBAL << 4)),
-                    Other = definition.Global ? STV_DEFAULT : STV_HIDDEN,
+                    Other = (byte)((definition.Global ? STV_DEFAULT : STV_HIDDEN) | definition.Other),
                 });
             }
 

@@ -3599,6 +3599,29 @@ void CodeGen::genOSRHandleTier0CalleeSavedRegistersAndFrame()
 {
 }
 
+void CodeGen::genEstablishPpc64leTocForReversePInvoke()
+{
+    if (!m_compiler->opts.IsReversePInvoke())
+    {
+        return;
+    }
+
+    if (!m_compiler->opts.compReloc)
+    {
+        NYI_POWERPC64("reverse P/Invoke TOC establishment without relocatable code");
+    }
+
+    // PPC64 ELFv2 global entry points are entered with r12 holding the callee
+    // entry address. Use it to establish this method's TOC before the normal
+    // prolog can emit any TOC-relative references.
+    emitter* emit = GetEmitter();
+    emit->emitIns_R_L(INS_lea, EA_PTRSIZE, emit->emitPrologIG, REG_R11, REG_R0);
+    emit->emitIns_R_R_R(INS_subf, EA_PTRSIZE, REG_R2, REG_R11, REG_R12);
+    instGen(INS_nop);
+
+    m_compiler->unwindPadding();
+}
+
 void CodeGen::genAllocLclFrame(unsigned frameSize, regNumber initReg, bool* pInitRegZeroed, regMaskTP maskArgRegsLiveIn)
 {
     frameSize = ppcGetLocalFrameSize(m_compiler, frameSize);

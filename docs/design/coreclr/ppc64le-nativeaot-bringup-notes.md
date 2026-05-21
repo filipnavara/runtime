@@ -375,3 +375,9 @@ When debugging generated code, build tests with `StripSymbols=false` so symbols
 stay in the primary binary instead of separate `.dbg` files. NativeAOT smoke
 tests commonly report success with exit code `100`; do not treat exit code `0`
 as the only successful result.
+
+Prefer `powerpc64le-linux-gnu-objdump` over `llvm-objdump` for PPC64LE
+disassembly during bring-up. `llvm-objdump` has repeatedly timed out on the
+large NativeAOT shared libraries and executables, while GNU objdump has produced
+the targeted section/address disassembly immediately. Use `-j __managedcode`
+when inspecting managed method bodies.

@@ -298,10 +298,7 @@ namespace ILCompiler.ObjectWriter
                 return 0;
             }
 
-            // The JIT emits a 16-byte global entry sequence. ELFv2 encodes
-            // localentry 16 as 4 << STO_PPC64_LOCAL_BIT, where the bit is 5.
-            const byte Ppc64LocalEntryOffset16 = 4 << 5;
-            return Ppc64LocalEntryOffset16;
+            return EncodePpc64LocalEntryOffset(4 * sizeof(uint));
         }
 
         private static bool HasPpc64leGlobalEntryTocSetup(byte[] data, int offset)
@@ -309,9 +306,8 @@ namespace ILCompiler.ObjectWriter
             const uint AddisR11R0 = 0x3D600000;
             const uint AddiR11R11 = 0x396B0000;
             const uint SubfR2R11R12 = 0x7C4B6050;
-            const uint Nop = 0x60000000;
 
-            if (offset < 0 || offset + (4 * sizeof(uint)) > data.Length)
+            if (offset < 0 || offset + (3 * sizeof(uint)) > data.Length)
             {
                 return false;
             }
@@ -319,8 +315,18 @@ namespace ILCompiler.ObjectWriter
             ReadOnlySpan<byte> code = data.AsSpan(offset);
             return ((BinaryPrimitives.ReadUInt32LittleEndian(code) & 0xFFFF0000) == AddisR11R0) &&
                    ((BinaryPrimitives.ReadUInt32LittleEndian(code.Slice(sizeof(uint))) & 0xFFFF0000) == AddiR11R11) &&
-                   (BinaryPrimitives.ReadUInt32LittleEndian(code.Slice(2 * sizeof(uint))) == SubfR2R11R12) &&
-                   (BinaryPrimitives.ReadUInt32LittleEndian(code.Slice(3 * sizeof(uint))) == Nop);
+                   (BinaryPrimitives.ReadUInt32LittleEndian(code.Slice(2 * sizeof(uint))) == SubfR2R11R12);
+        }
+
+        private static byte EncodePpc64LocalEntryOffset(int offset)
+        {
+            Debug.Assert(offset >= 0);
+
+            uint value = offset >= 4 * sizeof(uint)
+                ? (offset >= 8 * sizeof(uint) ? (uint)(offset >= 16 * sizeof(uint) ? 6 : 5) : 4)
+                : (offset >= 2 * sizeof(uint) ? 3u : (offset >= sizeof(uint) ? 2u : 0u));
+
+            return (byte)(value << 5);
         }
 
         /// <summary>

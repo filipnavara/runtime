@@ -342,6 +342,14 @@ the target address in `r12`, branch through CTR, then restore `r2`. Direct
 P/Invoke calls load the target from the GOT; indirect unmanaged calls move the
 already-computed target into `r12`.
 
+Small call descriptors store the live callee-saved GC register mask in
+`idReg1`/`idReg2`, not just physical register numbers. PPC64LE has 17 integer
+callee-saved registers (`r14`-`r30`), so `REGNUM_BITS` is sized to 9 and the PPC
+`instrDesc` layout puts those fields before `_idGCref` to avoid bitfield padding
+at the 32-bit storage-unit boundary. Keep this paired with
+`emitEncodeCallGCregs`/`emitDecodeCallGCregs`; do not paper over encoding gaps
+by forcing every call with a live GC register into the large descriptor path.
+
 No-GC regions and GC reporting must be audited together. Helper calls marked as
 no-GC can still trash volatile registers; the kill set must match the assembly
 helper ABI. For write barriers and assignment helpers, labels ending in

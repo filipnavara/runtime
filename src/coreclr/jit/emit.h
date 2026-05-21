@@ -818,18 +818,25 @@ protected:
         // space to add members for keeping GC-ness of the second return registers. It will also bloat the base struct
         // unnecessarily since the GC-ness of the second register is only needed for call instructions.
         // The instrDescCGCA struct's member keeping the GC-ness of the first return register is _idcSecondRetRegGCType.
-        GCtype _idGCref : 2; // GCref operand? (value is a "GCtype")
-
         // The idReg1 and idReg2 fields hold the first and second register
         // operand(s), whenever these are present. Note that currently the
-        // size of these fields is 6 bits on most targets, but 7 on others,
+        // size of these fields is 6 bits on most targets, but larger on others,
         // and care needs to be taken to make sure all of these fields stay
         // reasonably packed.
 
         // Note that we use the _idReg1 and _idReg2 fields to hold
-        // the live gcrefReg mask for the call instructions on x86/x64
+        // the live gcrefReg mask for call instructions.
         //
-#if !defined(TARGET_XARCH)
+#if defined(TARGET_POWERPC64)
+        // Put the 9-bit PPC64LE fields before _idGCref so the pair starts at
+        // bit 14 and fits exactly in the first bitfield storage unit.
+        regNumber _idReg1 : REGNUM_BITS; // register num
+        regNumber _idReg2 : REGNUM_BITS;
+#endif
+
+        GCtype _idGCref : 2; // GCref operand? (value is a "GCtype")
+
+#if !defined(TARGET_XARCH) && !defined(TARGET_POWERPC64)
         regNumber _idReg1 : REGNUM_BITS; // register num
         regNumber _idReg2 : REGNUM_BITS;
 #endif
@@ -842,6 +849,7 @@ protected:
         // arm64:       46 bits
         // loongarch64: 28 bits
         // risc-v:      28 bits
+        // powerpc64:   34 bits
         // wasm:        20 bits (TODO-WASM-TP: remove the reg fields)
 
         unsigned _idSmallDsc : 1; // is this a "small" descriptor?
@@ -940,6 +948,7 @@ protected:
         // arm64:       55 bits
         // loongarch64: 46 bits
         // risc-v:      46 bits
+        // powerpc64:   52 bits
         // wasm:        28 bits
 
         //
@@ -951,8 +960,10 @@ protected:
 #define ID_EXTRA_BITFIELD_BITS (16)
 #elif defined(TARGET_ARM64)
 #define ID_EXTRA_BITFIELD_BITS (23)
-#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
 #define ID_EXTRA_BITFIELD_BITS (14)
+#elif defined(TARGET_POWERPC64)
+#define ID_EXTRA_BITFIELD_BITS (20)
 #elif defined(TARGET_X86)
 #define ID_EXTRA_BITFIELD_BITS (18)
 #elif defined(TARGET_AMD64)
@@ -998,6 +1009,7 @@ protected:
         // arm64:       62/57 bits
         // loongarch64: 53/48 bits
         // risc-v:      53/48 bits
+        // powerpc64:   59/54 bits
         // wasm:        35/30 bits
 
 #define ID_EXTRA_BITS (ID_EXTRA_RELOC_BITS + ID_EXTRA_BITFIELD_BITS + ID_EXTRA_PREV_OFFSET_BITS)
@@ -1018,6 +1030,7 @@ protected:
         // arm64:        2/7 bits
         // loongarch64: 11/16 bits
         // risc-v:      11/16 bits
+        // powerpc64:    5/10 bits
         // wasm:        32 bits
 
 #define ID_ADJ_SMALL_CNS (int)(1 << (ID_BIT_SMALL_CNS - 1))

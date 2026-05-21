@@ -36,12 +36,31 @@
 #include <minipal/cpuid.h>
 #include <minipal/debugger.h>
 #include <minipal/time.h>
+#ifdef HOST_POWERPC64
+#include <cstring>
+#endif
 
 FCIMPL0(void, RhDebugBreak)
 {
     PalDebugBreak();
 }
 FCIMPLEND
+
+#ifdef HOST_POWERPC64
+
+FCIMPL3(void *, RhpPpc64leMemmove, void * dest, void * src, size_t len)
+{
+    return std::memmove(dest, src, len);
+}
+FCIMPLEND
+
+FCIMPL3(void *, RhpPpc64leMemset, void * dest, int value, size_t len)
+{
+    return std::memset(dest, value, len);
+}
+FCIMPLEND
+
+#endif
 
 // Busy spin for the given number of iterations.
 EXTERN_C void QCALLTYPE RhSpinWait(int32_t iterations)

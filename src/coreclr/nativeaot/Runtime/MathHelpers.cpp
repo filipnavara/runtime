@@ -140,11 +140,15 @@ EXTERN_C int64_t F_CALL_CONV RhpLLsh(int64_t i, int32_t j)
 
 #endif // HOST_ARM
 
-#ifdef HOST_X86
+#if defined(HOST_X86) || defined(HOST_POWERPC64)
 
 #undef min
 #undef max
 #include <cmath>
+
+#endif
+
+#ifdef HOST_X86
 
 FCIMPL1_D(double, acos, double x)
     return std::acos(x);
@@ -345,5 +349,109 @@ FCIMPLEND
 FCIMPL2_FI(float, modff, float x, float* intptr)
     return std::modff(x, intptr);
 FCIMPLEND
+
+#endif
+
+#ifdef HOST_POWERPC64
+
+#define PPC64LE_MATH1_D(_export, _func) \
+FCIMPL1_D(double, _export, double x) \
+    return ::_func(x); \
+FCIMPLEND
+
+#define PPC64LE_MATH1_F(_export, _func) \
+FCIMPL1_F(float, _export, float x) \
+    return ::_func(x); \
+FCIMPLEND
+
+#define PPC64LE_MATH2_DD(_export, _func) \
+FCIMPL2_DD(double, _export, double x, double y) \
+    return ::_func(x, y); \
+FCIMPLEND
+
+#define PPC64LE_MATH2_FF(_export, _func) \
+FCIMPL2_FF(float, _export, float x, float y) \
+    return ::_func(x, y); \
+FCIMPLEND
+
+#define PPC64LE_MATH3_DDD(_export, _func) \
+FCIMPL3_DDD(double, _export, double x, double y, double z) \
+    return ::_func(x, y, z); \
+FCIMPLEND
+
+#define PPC64LE_MATH3_FFF(_export, _func) \
+FCIMPL3_FFF(float, _export, float x, float y, float z) \
+    return ::_func(x, y, z); \
+FCIMPLEND
+
+#define PPC64LE_MATH2_DI(_export, _func) \
+FCIMPL2_DI(double, _export, double x, double* intptr) \
+    return ::_func(x, intptr); \
+FCIMPLEND
+
+#define PPC64LE_MATH2_FI(_export, _func) \
+FCIMPL2_FI(float, _export, float x, float* intptr) \
+    return ::_func(x, intptr); \
+FCIMPLEND
+
+PPC64LE_MATH1_D(RhpPpc64leMathAcos, acos)
+PPC64LE_MATH1_F(RhpPpc64leMathAcosF, acosf)
+PPC64LE_MATH1_D(RhpPpc64leMathAcosh, acosh)
+PPC64LE_MATH1_F(RhpPpc64leMathAcoshF, acoshf)
+PPC64LE_MATH1_D(RhpPpc64leMathAsin, asin)
+PPC64LE_MATH1_F(RhpPpc64leMathAsinF, asinf)
+PPC64LE_MATH1_D(RhpPpc64leMathAsinh, asinh)
+PPC64LE_MATH1_F(RhpPpc64leMathAsinhF, asinhf)
+PPC64LE_MATH1_D(RhpPpc64leMathAtan, atan)
+PPC64LE_MATH1_F(RhpPpc64leMathAtanF, atanf)
+PPC64LE_MATH2_DD(RhpPpc64leMathAtan2, atan2)
+PPC64LE_MATH2_FF(RhpPpc64leMathAtan2F, atan2f)
+PPC64LE_MATH1_D(RhpPpc64leMathAtanh, atanh)
+PPC64LE_MATH1_F(RhpPpc64leMathAtanhF, atanhf)
+PPC64LE_MATH1_D(RhpPpc64leMathCbrt, cbrt)
+PPC64LE_MATH1_F(RhpPpc64leMathCbrtF, cbrtf)
+PPC64LE_MATH1_D(RhpPpc64leMathCeil, ceil)
+PPC64LE_MATH1_F(RhpPpc64leMathCeilF, ceilf)
+PPC64LE_MATH1_D(RhpPpc64leMathCos, cos)
+PPC64LE_MATH1_F(RhpPpc64leMathCosF, cosf)
+PPC64LE_MATH1_D(RhpPpc64leMathCosh, cosh)
+PPC64LE_MATH1_F(RhpPpc64leMathCoshF, coshf)
+PPC64LE_MATH1_D(RhpPpc64leMathExp, exp)
+PPC64LE_MATH1_F(RhpPpc64leMathExpF, expf)
+PPC64LE_MATH1_D(RhpPpc64leMathFloor, floor)
+PPC64LE_MATH1_F(RhpPpc64leMathFloorF, floorf)
+PPC64LE_MATH1_D(RhpPpc64leMathLog, log)
+PPC64LE_MATH1_F(RhpPpc64leMathLogF, logf)
+PPC64LE_MATH1_D(RhpPpc64leMathLog2, log2)
+PPC64LE_MATH1_F(RhpPpc64leMathLog2F, log2f)
+PPC64LE_MATH1_D(RhpPpc64leMathLog10, log10)
+PPC64LE_MATH1_F(RhpPpc64leMathLog10F, log10f)
+PPC64LE_MATH2_DD(RhpPpc64leMathPow, pow)
+PPC64LE_MATH2_FF(RhpPpc64leMathPowF, powf)
+PPC64LE_MATH1_D(RhpPpc64leMathSin, sin)
+PPC64LE_MATH1_F(RhpPpc64leMathSinF, sinf)
+PPC64LE_MATH1_D(RhpPpc64leMathSinh, sinh)
+PPC64LE_MATH1_F(RhpPpc64leMathSinhF, sinhf)
+PPC64LE_MATH1_D(RhpPpc64leMathSqrt, sqrt)
+PPC64LE_MATH1_F(RhpPpc64leMathSqrtF, sqrtf)
+PPC64LE_MATH1_D(RhpPpc64leMathTan, tan)
+PPC64LE_MATH1_F(RhpPpc64leMathTanF, tanf)
+PPC64LE_MATH1_D(RhpPpc64leMathTanh, tanh)
+PPC64LE_MATH1_F(RhpPpc64leMathTanhF, tanhf)
+PPC64LE_MATH2_DD(RhpPpc64leMathFMod, fmod)
+PPC64LE_MATH2_FF(RhpPpc64leMathFModF, fmodf)
+PPC64LE_MATH3_DDD(RhpPpc64leMathFma, fma)
+PPC64LE_MATH3_FFF(RhpPpc64leMathFmaF, fmaf)
+PPC64LE_MATH2_DI(RhpPpc64leMathModF, modf)
+PPC64LE_MATH2_FI(RhpPpc64leMathModFF, modff)
+
+#undef PPC64LE_MATH1_D
+#undef PPC64LE_MATH1_F
+#undef PPC64LE_MATH2_DD
+#undef PPC64LE_MATH2_FF
+#undef PPC64LE_MATH3_DDD
+#undef PPC64LE_MATH3_FFF
+#undef PPC64LE_MATH2_DI
+#undef PPC64LE_MATH2_FI
 
 #endif

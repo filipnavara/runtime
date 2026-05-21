@@ -164,7 +164,9 @@ namespace ILCompiler
                     methodDesc = context.GetCoreLibEntryPoint("System"u8, "SpanHelpers"u8, "ClearWithoutReferences"u8, null);
                     break;
                 case ReadyToRunHelper.NativeMemSet:
-                    mangledName = "memset";
+                    mangledName = context.Target.Architecture == TargetArchitecture.Ppc64le ?
+                        "RhpPpc64leMemset" :
+                        "memset";
                     break;
 
                 case ReadyToRunHelper.GetRuntimeTypeHandle:
@@ -214,10 +216,14 @@ namespace ILCompiler
                     break;
 
                 case ReadyToRunHelper.DblRem:
-                    mangledName = "fmod";
+                    mangledName = context.Target.Architecture == TargetArchitecture.Ppc64le ?
+                        "RhpPpc64leMathFMod" :
+                        "fmod";
                     break;
                 case ReadyToRunHelper.FltRem:
-                    mangledName = "fmodf";
+                    mangledName = context.Target.Architecture == TargetArchitecture.Ppc64le ?
+                        "RhpPpc64leMathFModF" :
+                        "fmodf";
                     break;
 
                 case ReadyToRunHelper.LMul:

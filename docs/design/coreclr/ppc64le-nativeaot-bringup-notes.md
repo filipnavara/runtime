@@ -27,9 +27,17 @@ function symbols. Runtime helpers are expected to be in the current module; if a
 helper maps to a true external dependency, the call site needs an explicit
 ABI-correct sequence instead of a generated text-section thunk.
 
-`Ppc64leRuntimeImportMethodNode` is an outbound ABI shim used as the method
-entrypoint for selected `[RuntimeImport]` methods such as math and memory
-helpers. The current implementation uses an explicit import-symbol allowlist.
+PPC64LE math `[RuntimeImport]` entries resolve to local `RhpPpc64leMath*`
+runtime wrappers. The wrappers live in `MathHelpers.cpp` and make the external
+libm calls from native runtime code, keeping the managed call sites in-module.
+JIT floating-point remainder helpers use the same wrappers for `fmod`/`fmodf`
+because `%` on `float`/`double` is emitted through helper calls rather than the
+CoreLib `RuntimeImport` declarations.
+
+PPC64LE memory helpers that would otherwise bind to libc `memmove`/`memset`
+resolve to local `RhpPpc64leMem*` runtime wrappers in `MiscHelpers.cpp`. This
+keeps managed and JIT-helper call sites in-module while leaving the native
+runtime object code responsible for any external libc call sequence.
 
 ## GC Hole Debugging
 

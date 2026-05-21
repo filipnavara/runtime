@@ -3642,6 +3642,10 @@ emitter::instrDesc* emitter::emitNewInstrCallInd(int              argCnt,
     emitAttr retSize = (retSizeIn != EA_UNKNOWN) ? retSizeIn : EA_PTRSIZE;
 
 #ifdef TARGET_POWERPC64
+    // The small call descriptor stores live GC registers in idReg1/idReg2.
+    // PPC64LE has 17 integer callee-saved registers, which do not fit in
+    // those two fixed-width fields, so use the large descriptor whenever a
+    // register GC ref is live at the call.
     bool gcRefRegsNeedLargeCall = (gcrefRegs != 0);
 #else
     bool gcRefRegsNeedLargeCall = ((gcrefRegs & RBM_CALLEE_TRASH) != 0);
@@ -3741,6 +3745,8 @@ emitter::instrDesc* emitter::emitNewInstrCallDir(int              argCnt,
     // register (RDX) is a GCRef or ByRef pointer.
 
 #ifdef TARGET_POWERPC64
+    // See the indirect-call case above for why PPC64LE does not use the small
+    // call descriptor when any register GC ref is live.
     bool gcRefRegsNeedLargeCall = (gcrefRegs != 0);
 #else
     bool gcRefRegsNeedLargeCall = ((gcrefRegs & RBM_CALLEE_TRASH) != 0);

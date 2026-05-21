@@ -298,15 +298,6 @@ bool g_safeToShutdownTracing;
 
 static void __cdecl OnProcessExit()
 {
-#if defined(STRESS_LOG) && defined(TARGET_POWERPC64) && defined(TARGET_UNIX)
-    char* stressLogPath = nullptr;
-    if (RhConfig::Environment::TryGetStringValue("Ppc64leStressLogPath", &stressLogPath))
-    {
-        StressLog::DumpToDirectory(stressLogPath);
-        delete[] stressLogPath;
-    }
-#endif
-
 #ifdef HOST_WINDOWS
     // The process is exiting and the current thread is performing the shutdown.
     // When this thread exits some threads may be already rudely terminated.
@@ -370,7 +361,7 @@ extern "C" bool RhInitialize(bool isDll)
         g_pfnRtlDllShutdownInProgress = pfn;
 #endif
 
-#if defined(HOST_WINDOWS) || defined(FEATURE_PERFTRACING) || (defined(STRESS_LOG) && defined(TARGET_POWERPC64) && defined(TARGET_UNIX))
+#if defined(HOST_WINDOWS) || defined(FEATURE_PERFTRACING)
     atexit(&OnProcessExit);
 #endif
 

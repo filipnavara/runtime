@@ -4340,6 +4340,12 @@ int LinearScan::BuildReturn(GenTree* tree)
                 if (op1->OperIs(GT_LCL_VAR) && !op1->IsMultiRegLclVar())
                 {
 #ifdef TARGET_POWERPC64
+                    // This is a single stack local returned as multiple ABI
+                    // registers, not a multi-reg local. PPC64LE can use the
+                    // integer return register as an address temporary, but
+                    // floating-point return registers need a separate integer
+                    // temporary when the stack offset does not fit a D-form
+                    // immediate.
                     bool           hasInternal    = false;
                     GenTreeLclVar* lclNode        = op1->AsLclVar();
                     ReturnTypeDesc retTypeDesc    = m_compiler->compRetTypeDesc;

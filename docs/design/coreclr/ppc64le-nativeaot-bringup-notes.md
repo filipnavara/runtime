@@ -3,6 +3,33 @@
 This note tracks the current PPC64LE NativeAOT implementation state and the
 debugging workflows that are useful when changing it.
 
+## Build And Smoke Flow
+
+Do not build a PPC64LE host runtime for the bring-up flow. Build x64 host tools
+and cross-compile the PPC64LE NativeAOT runtime pack and tests. The SDK pack
+selection should use the normal local-pack switches rather than appending
+`linux-ppc64le` to existing `Known*Pack` items in `eng/targetingpacks.targets`.
+
+The baseline WSL flow is:
+
+```sh
+./build.sh clr -c Release -arch x64
+./build.sh clr.tools+clr.nativeaotlibs -c Release -arch x64 /p:StripSymbols=false
+
+./src/tests/build.sh -release -nativeaot -os linux -arch ppc64le \
+    -tree nativeaot/SmokeTests \
+    /p:BuildNativeAOTRuntimePack=true \
+    /p:UseLocalTargetingRuntimePack=true \
+    /p:UseLocalILCompilerPack=true \
+    /p:UseLocalAppHostPack=true \
+    /p:StripSymbols=false
+```
+
+When the build is only compiling an individual smoke test, pass the same
+`BuildNativeAOTRuntimePack` and local-pack properties through MSBuild. The local
+PPC64LE pack must be built because there are no upstream PPC64LE NativeAOT
+runtime packs to restore.
+
 ## PPC64LE ABI Entry Points And Thunks
 
 PPC64LE ELFv2 uses `r2` as the TOC pointer. Cross-module calls enter global
@@ -404,6 +431,13 @@ list current as the bring-up matures:
   tail call stack argument placement and call emission.
 - SIMD/VSX and hardware intrinsics are not implemented. `FEATURE_SIMD` is
   intentionally blocked for PPC64LE.
+- PPC64LE `genCodeForTreeNode` does not implement the RISC-V-specific Zba/Zbs
+  fused ops (`GT_SH*ADD*`, `GT_ADD_UW`, `GT_SLLI_UW`, `GT_BIT_*`) because the
+  PPC64LE lowerer does not introduce those IR nodes. It also lacks general
+  `GT_INTRINSIC`, `GT_CKFINITE`, `GT_SWAP`, and patchpoint handling; add these
+  when the corresponding importer/lowerer paths are enabled for PPC64LE.
+- `GT_FIELD_LIST` should remain contained by lowering. If it reaches codegen,
+  treat it as a lowering bug rather than adding real code emission.
 - Floating-point callee-saved registers F14-F31 are not available to LSRA until
   prolog/epilog save and restore support is implemented.
 - Large stack-frame and large local-offset cases still have NYI paths. Prefer

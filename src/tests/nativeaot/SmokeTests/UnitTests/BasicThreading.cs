@@ -32,7 +32,7 @@ class BasicThreading
 
         if (TimerTest.Run() != Pass)
             return Fail;
-
+        
         if (FinalizeTest.Run() != Pass)
             return Fail;
 

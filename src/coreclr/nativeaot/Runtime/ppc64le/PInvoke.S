@@ -32,7 +32,7 @@ DEFINE_FUNC RhpPInvoke
     std 31, 0(14)       // PInvokeTransitionFrame::m_FramePointer
     std 0, 8(14)        // PInvokeTransitionFrame::m_RIP
     std 12, 32(14)      // PInvokeTransitionFrame::m_PreservedRegs[0]
-    lis 12, 0x2         // PTFF_SAVE_SP
+    lis 12, (PTFF_SAVE_SP >> 16)
     std 12, 24(14)      // PInvokeTransitionFrame::m_Flags
 
     INLINE_GETTHREAD 11

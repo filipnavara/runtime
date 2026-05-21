@@ -22,15 +22,14 @@ by an `r2` restore. Indirect unmanaged calls use the same convention after
 moving the target address into `r12`. This keeps linker-inserted PLT entries out
 of managed-generated call sites.
 
-`Ppc64leExternFunctionThunkNode` is an outbound managed-to-native shim for
-external helper symbols used by the JIT helper path. It saves LR and the managed
-TOC, calls the real external function through the GOT, restores `r2`, restores
-LR, and returns. P/Invoke targets do not use this node.
+Extern symbols used by the JIT helper path are emitted as normal extern
+function symbols. Runtime helpers are expected to be in the current module; if a
+helper maps to a true external dependency, the call site needs an explicit
+ABI-correct sequence instead of a generated text-section thunk.
 
-`Ppc64leRuntimeImportMethodNode` is the same outbound ABI shim shape, but used
-as the method entrypoint for selected `[RuntimeImport]` methods such as math
-and memory helpers. The current implementation uses an explicit import-symbol
-allowlist.
+`Ppc64leRuntimeImportMethodNode` is an outbound ABI shim used as the method
+entrypoint for selected `[RuntimeImport]` methods such as math and memory
+helpers. The current implementation uses an explicit import-symbol allowlist.
 
 ## GC Hole Debugging
 

@@ -781,10 +781,17 @@ void emitter::emitIns_Mov(
         return;
     }
 
-    if (isFloatReg(dstReg) || isFloatReg(srcReg))
+    const bool dstIsFloatReg = isFloatReg(dstReg);
+    const bool srcIsFloatReg = isFloatReg(srcReg);
+    if (dstIsFloatReg || srcIsFloatReg)
     {
-        assert(isFloatReg(dstReg));
-        assert(isFloatReg(srcReg));
+        if (dstIsFloatReg != srcIsFloatReg)
+        {
+            assert(EA_SIZE(attr) == EA_8BYTE);
+            emitIns_R_R(dstIsFloatReg ? INS_mtfprd : INS_mffprd, EA_8BYTE, dstReg, srcReg, opt);
+            return;
+        }
+
         ins = INS_fmr;
     }
 
@@ -810,7 +817,7 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
     BYTE*  dstAfterOne   = dst + sizeof(code_t);
     size_t codeSize      = id->idCodeSize();
     size_t instrDescSize = emitSizeOfInsDsc(id);
-    code_t code          = emitInsCode(id->idIns());
+    code_t code;
 
     if (id->idInsOpt() == INS_OPTS_C)
     {
@@ -837,6 +844,8 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         codeSize = emitOutputLabelLoad(dst, id);
         goto UPDATE_GC_INFO;
     }
+
+    code = emitInsCode(id->idIns());
 
     switch (id->idIns())
     {
@@ -945,8 +954,11 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
             break;
 
         case INS_fmr:
+        case INS_fabs:
         case INS_fneg:
         case INS_frsp:
+        case INS_fsqrt:
+        case INS_fsqrts:
         case INS_fctiwz:
         case INS_fctidz:
         case INS_fctiduz:
@@ -954,6 +966,8 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_fcfids:
         case INS_fcfidu:
         case INS_fcfidus:
+        case INS_xscvdpspn:
+        case INS_xscvspdpn:
             code = code | (ppcFReg(id->idReg1()) << 21) | (ppcFReg(id->idReg2()) << 11);
             break;
 

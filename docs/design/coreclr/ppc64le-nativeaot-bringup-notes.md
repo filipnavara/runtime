@@ -16,20 +16,21 @@ method prolog, and the ELF writer annotates matching symbols with localentry 16
 so same-module calls can skip that setup while external callers enter through
 the global entry.
 
+P/Invoke calls use an outbound managed-to-native sequence in the JIT. Direct
+targets are loaded through the GOT into `r12`, called through CTR, and followed
+by an `r2` restore. Indirect unmanaged calls use the same convention after
+moving the target address into `r12`. This keeps linker-inserted PLT entries out
+of managed-generated call sites.
+
 `Ppc64leExternFunctionThunkNode` is an outbound managed-to-native shim for
-external helper symbols used by the JIT. It saves LR and the managed TOC,
-calls the real external function through the GOT, restores `r2`, restores LR,
-and returns. This lets managed code call a local thunk while the thunk performs
-the ELFv2 call ceremony.
+external helper symbols used by the JIT helper path. It saves LR and the managed
+TOC, calls the real external function through the GOT, restores `r2`, restores
+LR, and returns. P/Invoke targets do not use this node.
 
 `Ppc64leRuntimeImportMethodNode` is the same outbound ABI shim shape, but used
 as the method entrypoint for selected `[RuntimeImport]` methods such as math
 and memory helpers. The current implementation uses an explicit import-symbol
-allowlist. The preferred structural fix is to teach PPC64LE direct unmanaged
-calls in the JIT/object writer to load the external function address through the
-GOT into `r12`, branch through CTR, and restore `r2` at each call site. That
-shape removes the need for outbound thunk nodes for managed-generated calls and
-avoids linker-inserted PLT entries in managed code.
+allowlist.
 
 ## GC Hole Debugging
 
@@ -302,11 +303,10 @@ because the JIT interface always sets `CORJIT_FLAG_REVERSE_PINVOKE` for these
 methods, and the PPC64LE prolog hook emits the global-entry sequence for every
 reverse P/Invoke body.
 
-Indirect unmanaged calls already use the PPC64LE global-entry convention:
-save managed `r2`, move the target address into `r12`, branch through CTR, then
-restore `r2`. Direct unmanaged calls should eventually use the same structural
-shape with a GOT-loaded target in `r12` instead of relying on per-symbol thunk
-nodes or linker-inserted PLT entries in managed code.
+Unmanaged calls use the PPC64LE global-entry convention: save managed `r2`, put
+the target address in `r12`, branch through CTR, then restore `r2`. Direct
+P/Invoke calls load the target from the GOT; indirect unmanaged calls move the
+already-computed target into `r12`.
 
 No-GC regions and GC reporting must be audited together. Helper calls marked as
 no-GC can still trash volatile registers; the kill set must match the assembly

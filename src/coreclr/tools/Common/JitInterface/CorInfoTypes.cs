@@ -511,6 +511,7 @@ namespace Internal.JitInterface
         PPC64_TOC16,                           // PowerPC64: addis+addi TOC-relative address
         PPC64_TPREL16,                         // PowerPC64: addis+addi thread-pointer-relative address
         PPC64_GOT_TPREL16,                     // PowerPC64: addis+ld+add GOT thread-pointer-relative access
+        PPC64_GOT16,                           // PowerPC64: addis+ld GOT function address access
 
         // Wasm relocs
         WASM_FUNCTION_INDEX_LEB,             // Wasm: a function index encoded as a 5-byte varuint32. Used for the immediate argument of a call instruction.

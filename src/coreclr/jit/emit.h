@@ -825,16 +825,9 @@ protected:
         // Note that we use the _idReg1 and _idReg2 fields to hold
         // the live gcrefReg mask for call instructions.
         //
-#if defined(TARGET_POWERPC64)
-        // Put the 9-bit PPC64LE fields before _idGCref so the pair starts at
-        // bit 14 and fits exactly in the first bitfield storage unit.
-        regNumber _idReg1 : REGNUM_BITS; // register num
-        regNumber _idReg2 : REGNUM_BITS;
-#endif
-
         GCtype _idGCref : 2; // GCref operand? (value is a "GCtype")
 
-#if !defined(TARGET_XARCH) && !defined(TARGET_POWERPC64)
+#if !defined(TARGET_XARCH)
         regNumber _idReg1 : REGNUM_BITS; // register num
         regNumber _idReg2 : REGNUM_BITS;
 #endif

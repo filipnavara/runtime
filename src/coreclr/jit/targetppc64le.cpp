@@ -198,13 +198,4 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
     return ABIPassingInformation::FromSegment(comp, passedByRef, passOnStack(0, passedSize));
 }
 
-bool Compiler::VarTypeIsMultiByteAndCanEnreg(var_types                type,
-                                             CORINFO_CLASS_HANDLE     typeClass,
-                                             unsigned*                typeSize,
-                                             bool                     isVarArg,
-                                             CorInfoCallConvExtension callConv)
-{
-    return false;
-}
-
 #endif // TARGET_POWERPC64

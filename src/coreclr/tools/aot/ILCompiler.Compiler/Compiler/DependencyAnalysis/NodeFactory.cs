@@ -278,6 +278,10 @@ namespace ILCompiler.DependencyAnalysis
             {
                 return new ExternFunctionSymbolNode(name, isIndirection: true);
             });
+            _ppc64leExternFunctionThunks = new NodeCache<Utf8String, Ppc64leExternFunctionThunkNode>((Utf8String name) =>
+            {
+                return new Ppc64leExternFunctionThunkNode(name);
+            });
             _externDataSymbols = new NodeCache<Utf8String, ExternDataSymbolNode>((Utf8String name) =>
             {
                 return new ExternDataSymbolNode(name);
@@ -997,6 +1001,15 @@ namespace ILCompiler.DependencyAnalysis
         public ISortableSymbolNode ExternIndirectFunctionSymbol(Utf8String name)
         {
             return _externIndirectFunctionSymbols.GetOrAdd(name);
+        }
+
+        private NodeCache<Utf8String, Ppc64leExternFunctionThunkNode> _ppc64leExternFunctionThunks;
+
+        public ISymbolNode Ppc64leExternFunctionThunk(Utf8String name)
+        {
+            Debug.Assert(Target.Architecture == TargetArchitecture.Ppc64le);
+
+            return _ppc64leExternFunctionThunks.GetOrAdd(name);
         }
 
         private NodeCache<Utf8String, ExternDataSymbolNode> _externDataSymbols;

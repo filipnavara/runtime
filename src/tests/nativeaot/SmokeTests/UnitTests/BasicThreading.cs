@@ -15,26 +15,38 @@ class BasicThreading
 
     internal static int Run()
     {
+        Console.WriteLine("BasicThreading: SimpleReadWriteThreadStaticTest start");
         SimpleReadWriteThreadStaticTest.Run(42, "SimpleReadWriteThreadStatic");
+        Console.WriteLine("BasicThreading: SimpleReadWriteThreadStaticTest end");
 
+        Console.WriteLine("BasicThreading: ThreadStaticsTestWithTasks start");
         ThreadStaticsTestWithTasks.Run();
+        Console.WriteLine("BasicThreading: ThreadStaticsTestWithTasks end");
 
+        Console.WriteLine("BasicThreading: ThreadStaticAlignmentTest start");
         if (ThreadStaticAlignmentTest.Run() != Pass)
             return Fail;
+        Console.WriteLine("BasicThreading: ThreadStaticAlignmentTest end");
 
         if (!OperatingSystem.IsAndroid())
         {
             // Disabled on Android: https://github.com/dotnet/runtime/issues/121451
 
+            Console.WriteLine("BasicThreading: ThreadTest start");
             if (ThreadTest.Run() != Pass)
                 return Fail;
+            Console.WriteLine("BasicThreading: ThreadTest end");
         }
 
+        Console.WriteLine("BasicThreading: TimerTest start");
         if (TimerTest.Run() != Pass)
             return Fail;
-        
+        Console.WriteLine("BasicThreading: TimerTest end");
+
+        Console.WriteLine("BasicThreading: FinalizeTest start");
         if (FinalizeTest.Run() != Pass)
             return Fail;
+        Console.WriteLine("BasicThreading: FinalizeTest end");
 
         return Pass;
     }
@@ -169,29 +181,39 @@ class ThreadStaticsTestWithTasks
         Task[] tasks = new Task[TotalTaskCount];
         for (int i = 0; i < tasks.Length; ++i)
         {
+            Console.WriteLine($"BasicThreading: creating task {i}");
             tasks[i] = Task.Factory.StartNew((param) =>
             {
                 int index = (int)param;
                 int intTestValue = index * 10;
                 string stringTestValue = "ThreadStaticsTestWithTasks" + index;
+                Console.WriteLine($"BasicThreading: task {index} start");
 
                 // Try to run the on every other task
                 if ((index % 2) == 0)
                 {
                     lock (lockObject)
                     {
+                        Console.WriteLine($"BasicThreading: task {index} locked static write start");
                         SimpleReadWriteThreadStaticTest.Run(intTestValue, stringTestValue);
+                        Console.WriteLine($"BasicThreading: task {index} locked static write end");
                     }
                 }
                 else
                 {
+                    Console.WriteLine($"BasicThreading: task {index} static write start");
                     SimpleReadWriteThreadStaticTest.Run(intTestValue, stringTestValue);
+                    Console.WriteLine($"BasicThreading: task {index} static write end");
                 }
+                Console.WriteLine($"BasicThreading: task {index} end");
             }, i);
+            Console.WriteLine($"BasicThreading: created task {i}");
         }
         for (int i = 0; i < tasks.Length; ++i)
         {
+            Console.WriteLine($"BasicThreading: waiting task {i}");
             tasks[i].Wait();
+            Console.WriteLine($"BasicThreading: waited task {i}");
         }
     }
 }

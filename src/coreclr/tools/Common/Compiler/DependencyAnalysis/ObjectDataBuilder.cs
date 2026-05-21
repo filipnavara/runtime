@@ -309,6 +309,7 @@ namespace ILCompiler.DependencyAnalysis
                 case RelocType.IMAGE_REL_BASED_PPC64_TOC16:
                 case RelocType.IMAGE_REL_BASED_PPC64_TPREL16:
                 case RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16:
+                case RelocType.IMAGE_REL_BASED_PPC64_GOT16:
                     Debug.Assert(delta == 0);
                     // Do not vacate space for this kind of relocation, because
                     // the space is embedded in the instruction.

@@ -7,4 +7,8 @@
 // Initialize hardware exception handling
 bool InitializeHardwareExceptionHandling();
 
+#if defined(STRESS_LOG) && defined(TARGET_POWERPC64) && defined(TARGET_UNIX)
+void InitializeCurrentThreadHardwareExceptionHandling();
+#endif
+
 #endif // __HARDWARE_EXCEPTIONS_H__

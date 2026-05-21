@@ -315,6 +315,14 @@ int LinearScan::BuildNode(GenTree* tree)
             return srcCount;
         }
 
+        case GT_RETURN:
+        {
+            int       srcCount = BuildReturn(tree);
+            regMaskTP killMask = getKillSetForReturn(tree);
+            BuildKills(tree, killMask);
+            return srcCount;
+        }
+
         case GT_RETURNTRAP:
         {
             BuildUse(tree->gtGetOp1());

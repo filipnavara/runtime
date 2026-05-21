@@ -186,6 +186,7 @@ bool emitter::emitInsMayWriteToGCReg(instruction ins)
         case INS_extsh:
         case INS_extsw:
         case INS_mffprd:
+        case INS_mffprwz:
         case INS_clrldi:
         case INS_addi:
         case INS_addis:
@@ -888,10 +889,12 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
             break;
 
         case INS_mtfprd:
+        case INS_mtfprwz:
             code = code | (ppcFReg(id->idReg1()) << 21) | (ppcReg(id->idReg2()) << 16);
             break;
 
         case INS_mffprd:
+        case INS_mffprwz:
             code = code | (ppcFReg(id->idReg2()) << 21) | (ppcReg(id->idReg1()) << 16);
             break;
 

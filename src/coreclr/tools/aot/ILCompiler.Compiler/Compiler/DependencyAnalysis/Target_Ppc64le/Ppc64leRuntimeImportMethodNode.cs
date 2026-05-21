@@ -12,65 +12,6 @@ using Debug = System.Diagnostics.Debug;
 
 namespace ILCompiler.DependencyAnalysis
 {
-    internal sealed class Ppc64leExternFunctionThunkNode : ObjectNode, ISymbolDefinitionNode
-    {
-        private const int StackFrameSize = 32;
-        private const int LinkRegisterSaveOffset = 16;
-        private const int TocSaveOffset = 24;
-
-        private readonly Utf8String _symbolName;
-
-        public Ppc64leExternFunctionThunkNode(Utf8String symbolName)
-        {
-            _symbolName = symbolName;
-        }
-
-        public override ObjectNodeSection GetSection(NodeFactory factory) => ObjectNodeSection.TextSection;
-
-        public override bool StaticDependenciesAreComputed => true;
-
-        public override bool IsShareable => false;
-
-        public int Offset => 0;
-
-        public void AppendMangledName(NameMangler nameMangler, Utf8StringBuilder sb)
-        {
-            sb.Append("__ppc64le_extern_function_thunk_"u8);
-            sb.Append(_symbolName);
-        }
-
-        public override ObjectData GetData(NodeFactory factory, bool relocsOnly = false)
-        {
-            Debug.Assert(factory.Target.Architecture == TargetArchitecture.Ppc64le);
-
-            Ppc64leEmitter emitter = new Ppc64leEmitter(factory, relocsOnly);
-            emitter.Builder.RequireInitialAlignment(factory.Target.MinimumFunctionAlignment);
-            emitter.Builder.AddSymbol(this);
-
-            emitter.EmitMFLR(Register.R0);
-            emitter.EmitSTD(Register.R0, Register.R1, LinkRegisterSaveOffset);
-            emitter.EmitSTDU(Register.R1, Register.R1, -StackFrameSize);
-            emitter.EmitSTD(Register.R2, Register.R1, TocSaveOffset);
-            emitter.EmitCALLViaGot(factory.ExternFunctionSymbol(_symbolName));
-            emitter.EmitLD(Register.R2, Register.R1, TocSaveOffset);
-            emitter.EmitLD(Register.R1, Register.R1, 0);
-            emitter.EmitLD(Register.R0, Register.R1, LinkRegisterSaveOffset);
-            emitter.EmitMTLR(Register.R0);
-            emitter.EmitRET();
-
-            return emitter.Builder.ToObjectData();
-        }
-
-        protected override string GetName(NodeFactory factory) => this.GetMangledName(factory.NameMangler);
-
-        public override int ClassCode => 1747585017;
-
-        public override int CompareToImpl(ISortableNode other, CompilerComparer comparer)
-        {
-            return _symbolName.CompareTo(((Ppc64leExternFunctionThunkNode)other)._symbolName);
-        }
-    }
-
     public sealed class Ppc64leRuntimeImportMethodNode : ObjectNode, IMethodNode, ISymbolDefinitionNode
     {
         private const int StackFrameSize = 32;
@@ -83,15 +24,10 @@ namespace ILCompiler.DependencyAnalysis
         public static bool ShouldUseThunk(MethodDesc method)
         {
             string importName = ((EcmaMethod)method).GetRuntimeImportName();
-            return ShouldUseExternFunctionThunk(importName);
+            return ShouldUseRuntimeImportThunk(importName);
         }
 
-        public static bool ShouldUseExternFunctionThunk(Utf8String symbolName)
-        {
-            return ShouldUseExternFunctionThunk(symbolName.ToString());
-        }
-
-        private static bool ShouldUseExternFunctionThunk(string symbolName)
+        private static bool ShouldUseRuntimeImportThunk(string symbolName)
         {
             return symbolName
                 is "acos"

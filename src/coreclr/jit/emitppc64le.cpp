@@ -1541,7 +1541,8 @@ void emitter::emitIns_Call(const EmitCallParams& params)
     }
     else
     {
-        id->idReg1(params.ireg);
+        id->idSetIsCallRegPtr();
+        id->idReg3(params.ireg);
         id->idCodeSize(2 * sizeof(code_t));
     }
 
@@ -1605,7 +1606,7 @@ unsigned emitter::emitOutputCall(BYTE* dst, instrDesc* id)
     }
     else
     {
-        emitOutput_Instr(dst, ppcEncodeMtspr(emitInsCode(INS_mtctr), id->idReg1(), 9));
+        emitOutput_Instr(dst, ppcEncodeMtspr(emitInsCode(INS_mtctr), id->idReg3(), 9));
         emitOutput_Instr(dst + sizeof(code_t), emitInsCode(INS_bctrl));
     }
 

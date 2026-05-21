@@ -1,7 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#include "AsmOffsets.inc"
+#include "AsmMacros_Shared.h"
 
 .abiversion 2
 .text
@@ -404,8 +404,7 @@ DEFINE_FUNC RhpThrowHwEx
     li 16, ExKind_HardwareFault
     INIT_EXINFO 14, 15, 16
 
-    bl RhpGetThread
-    nop
+    INLINE_GETTHREAD 3
 
     LINK_EXINFO 3, 14
 
@@ -442,9 +441,7 @@ DEFINE_FUNC RhpThrowImpl
     addi 15, 1, rsp_offsetof_Context
     INIT_EXINFO 14, 15, 11
 
-    bl RhpGetThread
-    nop
-    mr 16, 3
+    INLINE_GETTHREAD 16
 
     ld 10, OFFSETOF__Thread__m_pvHijackedReturnAddress(16)
     cmpdi 10, 0
@@ -495,9 +492,7 @@ DEFINE_FUNC RhpRethrow
     li 16, 0
     INIT_EXINFO 14, 15, 16
 
-    bl RhpGetThread
-    nop
-    mr 16, 3
+    INLINE_GETTHREAD 16
 
     ld 3, OFFSETOF__Thread__m_pExInfoStackHead(16)
     std 3, OFFSETOF__ExInfo__m_pPrevExInfo(14)
@@ -529,14 +524,13 @@ DEFINE_FUNC RhpCallCatchFunclet
     std 6, CATCH_OFFSET_EXINFO(1)
     SAVE_CATCH_FRAME_GPRS
 
-    bl RhpGetThread
-    nop
-    std 3, CATCH_OFFSET_THREAD(1)
+    INLINE_GETTHREAD 7
+    std 7, CATCH_OFFSET_THREAD(1)
 
-    lwz 10, OFFSETOF__Thread__m_ThreadStateFlags(3)
+    lwz 10, OFFSETOF__Thread__m_ThreadStateFlags(7)
     li 11, -17
     and 10, 10, 11
-    stw 10, OFFSETOF__Thread__m_ThreadStateFlags(3)
+    stw 10, OFFSETOF__Thread__m_ThreadStateFlags(7)
 
     ld 3, CATCH_OFFSET_EXCEPTION(1)
     ld 4, CATCH_OFFSET_HANDLER(1)
@@ -587,14 +581,13 @@ DEFINE_FUNC RhpCallFinallyFunclet
     std 3, FUNCLET_OFFSET_HANDLER(1)
     std 4, FUNCLET_OFFSET_REGDISPLAY(1)
 
-    bl RhpGetThread
-    nop
-    std 3, FUNCLET_OFFSET_THREAD(1)
+    INLINE_GETTHREAD 5
+    std 5, FUNCLET_OFFSET_THREAD(1)
 
-    lwz 10, OFFSETOF__Thread__m_ThreadStateFlags(3)
+    lwz 10, OFFSETOF__Thread__m_ThreadStateFlags(5)
     li 11, -17
     and 10, 10, 11
-    stw 10, OFFSETOF__Thread__m_ThreadStateFlags(3)
+    stw 10, OFFSETOF__Thread__m_ThreadStateFlags(5)
 
     ld 3, FUNCLET_OFFSET_HANDLER(1)
     ld 4, FUNCLET_OFFSET_REGDISPLAY(1)

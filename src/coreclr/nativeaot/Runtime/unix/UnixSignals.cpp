@@ -18,9 +18,6 @@ bool AddSignalHandler(int signal, SignalHandler handler, struct sigaction* previ
     newAction.sa_handler = NULL;
     newAction.sa_sigaction = handler;
     newAction.sa_flags |= SA_SIGINFO;
-#if defined(TARGET_POWERPC64)
-    newAction.sa_flags |= SA_ONSTACK;
-#endif
 
     sigemptyset(&newAction.sa_mask);
 

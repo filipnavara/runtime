@@ -1,6 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+#include <unixasmmacros.inc>
+
 .abiversion 2
 .text
 
@@ -20,7 +22,7 @@ RhCommonStub:
     // Custom calling convention:
     //     r11 = address of this thunk's data block.
     // The incoming caller may have arbitrary arguments, so preserve the ABI argument registers
-    // while calling RhpGetThunkData to get the TLS slot used by RhGetCurrentThunkContext.
+    // while getting the TLS slot used by RhGetCurrentThunkContext.
     mflr 0
     stdu 1, -COMMON_STUB_FRAME_SIZE(1)
     std 2, 24(1)
@@ -50,10 +52,7 @@ RhCommonStub:
     stfd 12, 192(1)
     stfd 13, 200(1)
 
-    bl RhpGetThunkData
-    nop
-
-    mr 12, 3
+    INLINE_GET_TLS_VAR 12, C_FUNC(tls_thunkData)
     ld 11, 96(1)
 
     lfd 1, 104(1)

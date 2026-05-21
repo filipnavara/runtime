@@ -1,7 +1,7 @@
 # PPC64LE NativeAOT Bring-up Notes
 
-This note tracks PPC64LE NativeAOT bring-up decisions that are easy to lose in
-local debugging history.
+This note tracks the current PPC64LE NativeAOT implementation state and the
+debugging workflows that are useful when changing it.
 
 ## PPC64LE ABI Entry Points And Thunks
 
@@ -10,12 +10,11 @@ entry points with `r12` holding the callee entry address, allowing the callee to
 derive its own TOC. Calls that may cross TOC domains must assume `r2` can be
 clobbered and restore the caller TOC after returning.
 
-PPC64LE no longer uses a separate export thunk for
-`[UnmanagedCallersOnly(EntryPoint = ...)]` methods. The export alias points
-directly at the managed method body. The JIT emits the PPC64LE global-entry TOC
-setup in the method prolog, and the ELF writer annotates matching symbols with
-localentry 16 so same-module calls can skip that setup while external callers
-enter through the global entry.
+`[UnmanagedCallersOnly(EntryPoint = ...)]` exports point directly at the
+managed method body. The JIT emits the PPC64LE global-entry TOC setup in the
+method prolog, and the ELF writer annotates matching symbols with localentry 16
+so same-module calls can skip that setup while external callers enter through
+the global entry.
 
 `Ppc64leExternFunctionThunkNode` is an outbound managed-to-native shim for
 external helper symbols used by the JIT. It saves LR and the managed TOC,
@@ -25,12 +24,12 @@ the ELFv2 call ceremony.
 
 `Ppc64leRuntimeImportMethodNode` is the same outbound ABI shim shape, but used
 as the method entrypoint for selected `[RuntimeImport]` methods such as math
-and memory helpers. Its hardcoded import-symbol allowlist is a bring-up
-artifact. The preferred structural fix is to teach PPC64LE direct unmanaged
+and memory helpers. The current implementation uses an explicit import-symbol
+allowlist. The preferred structural fix is to teach PPC64LE direct unmanaged
 calls in the JIT/object writer to load the external function address through the
 GOT into `r12`, branch through CTR, and restore `r2` at each call site. That
-should remove the need for these outbound thunk nodes for managed-generated
-calls and avoid linker-inserted PLT entries in managed code.
+shape removes the need for outbound thunk nodes for managed-generated calls and
+avoids linker-inserted PLT entries in managed code.
 
 ## GC Hole Debugging
 
@@ -50,8 +49,8 @@ The recurring workflow is:
 3. Capture the stress log, find the object or stack location that was corrupted
    or overwritten, then walk backward in the log to the frame/static/TLS report
    that last described it.
-4. Map the suspicious IP to a method with `llvm-nm -n`, `llvm-objdump -d`, or
-   the NativeAOT code manager ranges.
+4. Map the suspicious IP to a method with `powerpc64le-linux-gnu-nm -an`,
+   `powerpc64le-linux-gnu-objdump -d`, or the NativeAOT code manager ranges.
 5. Generate a focused JIT dump with
    `--codegenopt "JitDump=<method-pattern>" --codegenopt JitGCDump=1`, then
    compare the reported stack slots, interruptible regions, and no-GC windows
@@ -104,32 +103,62 @@ split: if conservative reporting fixes the repro, look at precise stack GC
 info; if it does not, inspect hijacking, transition frames, statics/TLS, helper
 ABIs, and unmanaged boundaries.
 
-Capturing the stress log through a debugger can be fragile under qemu-user.
-GDB and LLDB may stop on SIG34, which NativeAOT uses for thread hijacking during
-stop-the-world. In LLDB, issue this as early as possible:
+Capturing the stress log through a debugger can be fragile under qemu-user, so
+prefer raw chunk dumps over interactive formatted output. The raw files can be
+decoded repeatedly while changing the analysis script, and they keep evidence
+stable even if qemu, GDB, or LLDB lose the original process state. SIG34 is used
+by NativeAOT thread hijacking during stop-the-world and is usually noise.
 
-```text
-process handle -p true -n false -s false SIG34
+The checked-in debugger capture helpers dump `StressLog::theLog` metadata and
+all reachable `StressLogChunk` instances to a directory. The decoder reconstructs
+the readable log by resolving format strings from the NativeAOT ELF image:
+
+```sh
+python3 src/tools/StressLogAnalyzer/scripts/decode_nativeaot_stresslog.py \
+    /tmp/stresslog-capture \
+    --module ./artifacts/tests/coreclr/linux.ppc64le.Release/nativeaot/SmokeTests/DynamicGenerics/DynamicGenerics/native/DynamicGenerics \
+    --output /tmp/stresslog.txt
 ```
 
-If debugger capture is unreliable, temporarily adding an in-process stress-log
-dumper is acceptable for narrowing a bug, but keep that code out of cleanup
-commits. A reusable GDB capture script is preferable: dump the in-memory
-`StressLog::theLog` chunks to files, then decode the binary chunks offline using
-the structure layout in `stresslog.h` or `stressLog.h` that matches the binary.
-The format pointer in a stress-log record is an offset from the module base
-recorded in the log.
+GDB capture from a stopped process or core:
 
-When debugger capture does work, prefer dumping the raw chunks over relying on
-interactive formatted output. The raw files can be decoded repeatedly while
-changing the analysis script, and they keep evidence stable even if qemu, GDB,
-or LLDB lose the original process state. Useful debugger probes are:
+```text
+(gdb) set pagination off
+(gdb) handle SIG34 nostop noprint pass
+(gdb) source src/tools/StressLogAnalyzer/scripts/dump_nativeaot_stresslog_gdb.py
+(gdb) dump_nativeaot_stresslog /tmp/stresslog-capture
+```
 
-- `info variables StressLog` and `info variables theLog` to find the globals.
-- `ptype StressLog`, `ptype ThreadStressLog`, and `ptype StressLogChunk` to
-  confirm the layout used by the binary being debugged.
-- `dump binary memory <file> <start> <end>` for each chunk when helper scripts
-  cannot resolve debug type names automatically.
+For qemu-user with a GDB stub, start the test with a debug port and attach:
+
+```sh
+qemu-ppc64le -g 1234 ./DynamicGenerics ThreadLocalStatics.TLSTesting.ThreadLocalStatics_Test
+gdb-multiarch ./DynamicGenerics
+```
+
+```text
+(gdb) target remote :1234
+(gdb) handle SIG34 nostop noprint pass
+(gdb) continue
+```
+
+LLDB capture from a stopped process or core:
+
+```text
+(lldb) process handle -p true -n false -s false SIG34
+(lldb) command script import src/tools/StressLogAnalyzer/scripts/dump_nativeaot_stresslog_lldb.py
+(lldb) dump_nativeaot_stresslog /tmp/stresslog-capture
+```
+
+When helper scripts cannot resolve debug type names automatically, the manual
+fallback is to inspect `StressLog::theLog` and dump each chunk:
+
+- `info variables StressLog`, `info variables theLog`, or LLDB `image lookup -rn
+  StressLog` to find the globals.
+- `ptype StressLog`, `ptype ThreadStressLog`, and `ptype StressLogChunk`, or
+  LLDB `image lookup -type StressLog`, to confirm the layout used by the binary.
+- GDB `dump binary memory <file> <start> <end>` or LLDB
+  `memory read --binary --outfile <file> <start> <end>` for each chunk.
 
 For qemu-user native crashes, enable core dumps before running the repro:
 

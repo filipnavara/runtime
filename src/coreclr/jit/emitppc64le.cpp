@@ -198,6 +198,8 @@ bool emitter::emitInsMayWriteToGCReg(instruction ins)
         case INS_ld:
         case INS_lwa:
         case INS_lwz:
+        case INS_ldarx:
+        case INS_lwarx:
         case INS_lhz:
         case INS_lbz:
             return true;
@@ -850,6 +852,10 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_divd:
         case INS_divwu:
         case INS_divdu:
+        case INS_ldarx:
+        case INS_lwarx:
+        case INS_stdcx:
+        case INS_stwcx:
             code = ppcEncodeXForm(code, id->idReg1(), id->idReg2(), id->idReg3());
             break;
 

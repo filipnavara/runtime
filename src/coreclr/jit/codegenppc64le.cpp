@@ -32,6 +32,16 @@ static emitAttr ppcNormalizeCompareSize(emitAttr cmpSize)
     return (cmpSize == EA_8BYTE) ? EA_8BYTE : EA_4BYTE;
 }
 
+static instruction ppcLoadReserveIns(emitAttr attr)
+{
+    return (EA_SIZE(attr) == EA_4BYTE) ? INS_lwarx : INS_ldarx;
+}
+
+static instruction ppcStoreConditionalIns(emitAttr attr)
+{
+    return (EA_SIZE(attr) == EA_4BYTE) ? INS_stwcx : INS_stdcx;
+}
+
 static instruction ppcBranchInsForCondition(GenCondition cond)
 {
     switch (cond.GetCode())
@@ -483,6 +493,17 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
 
         case GT_STOREIND:
             genCodeForStoreInd(treeNode->AsStoreInd());
+            break;
+
+        case GT_XCHG:
+        case GT_XADD:
+        case GT_XORR:
+        case GT_XAND:
+            genLockedInstructions(treeNode->AsOp());
+            break;
+
+        case GT_CMPXCHG:
+            genCodeForCmpXchg(treeNode->AsCmpXchg());
             break;
 
         case GT_JMP:
@@ -969,6 +990,151 @@ void CodeGen::genCodeForDivMod(GenTreeOp* tree)
     }
 
     genProduceReg(tree);
+}
+
+//------------------------------------------------------------------------
+// genLockedInstructions: Generate code for a GT_XADD, GT_XAND, GT_XORR, or GT_XCHG node.
+//
+// Arguments:
+//    treeNode - the GT_XADD/XAND/XORR/XCHG node
+//
+void CodeGen::genLockedInstructions(GenTreeOp* treeNode)
+{
+    assert(treeNode->OperIs(GT_XADD, GT_XAND, GT_XORR, GT_XCHG));
+    assert(!varTypeIsSmall(treeNode->TypeGet()));
+
+    GenTree*  addr      = treeNode->gtGetOp1();
+    GenTree*  data      = treeNode->gtGetOp2();
+    regNumber addrReg   = addr->GetRegNum();
+    regNumber dataReg   = data->GetRegNum();
+    regNumber targetReg = treeNode->GetRegNum();
+
+    regNumber loadReg = targetReg;
+    if (loadReg == REG_NA)
+    {
+        loadReg = internalRegisters.Extract(treeNode);
+    }
+
+    regNumber storeDataReg = dataReg;
+    if (!treeNode->OperIs(GT_XCHG))
+    {
+        storeDataReg = internalRegisters.Extract(treeNode);
+    }
+
+    noway_assert(addrReg != REG_NA);
+    noway_assert(dataReg != REG_NA);
+    noway_assert(loadReg != REG_NA);
+    noway_assert(storeDataReg != REG_NA);
+    noway_assert(loadReg != addrReg);
+    noway_assert(loadReg != dataReg);
+    noway_assert(treeNode->OperIs(GT_XCHG) || (storeDataReg != addrReg));
+    noway_assert(treeNode->OperIs(GT_XCHG) || (storeDataReg != dataReg));
+    noway_assert(treeNode->OperIs(GT_XCHG) || (storeDataReg != loadReg));
+
+    genConsumeAddress(addr);
+    genConsumeRegs(data);
+
+    emitAttr attr = emitActualTypeSize(treeNode);
+    attr          = (EA_SIZE(attr) == EA_4BYTE) ? EA_4BYTE : EA_8BYTE;
+
+    // genConsumeAddress assumes the address dies at the first instruction. The
+    // reservation loop reuses it until the conditional store succeeds.
+    gcInfo.gcMarkRegPtrVal(addrReg, addr->TypeGet());
+
+    instGen_MemoryBarrier(BARRIER_FULL);
+
+    BasicBlock* retryLabel = genCreateTempLabel();
+    genDefineTempLabel(retryLabel);
+
+    GetEmitter()->emitIns_R_R_R(ppcLoadReserveIns(attr), attr, loadReg, REG_R0, addrReg);
+
+    switch (treeNode->OperGet())
+    {
+        case GT_XADD:
+            GetEmitter()->emitIns_R_R_R(INS_add, attr, storeDataReg, loadReg, dataReg);
+            break;
+        case GT_XAND:
+            GetEmitter()->emitIns_R_R_R(INS_and, attr, storeDataReg, loadReg, dataReg);
+            break;
+        case GT_XORR:
+            GetEmitter()->emitIns_R_R_R(INS_or, attr, storeDataReg, loadReg, dataReg);
+            break;
+        case GT_XCHG:
+            assert(storeDataReg == dataReg);
+            break;
+        default:
+            unreached();
+    }
+
+    GetEmitter()->emitIns_R_R_R(ppcStoreConditionalIns(attr), attr, storeDataReg, REG_R0, addrReg);
+    GetEmitter()->emitIns_J(INS_bne, retryLabel);
+
+    instGen_MemoryBarrier(BARRIER_FULL);
+
+    gcInfo.gcMarkRegSetNpt(addr->gtGetRegMask());
+
+    if (targetReg != REG_NA)
+    {
+        genProduceReg(treeNode);
+    }
+}
+
+//------------------------------------------------------------------------
+// genCodeForCmpXchg: Produce code for a GT_CMPXCHG node.
+//
+// Arguments:
+//    treeNode - the GT_CMPXCHG node
+//
+void CodeGen::genCodeForCmpXchg(GenTreeCmpXchg* treeNode)
+{
+    assert(treeNode->OperIs(GT_CMPXCHG));
+    assert(!varTypeIsSmall(treeNode->TypeGet()));
+
+    GenTree* addr      = treeNode->Addr();
+    GenTree* data      = treeNode->Data();
+    GenTree* comparand = treeNode->Comparand();
+
+    regNumber addrReg      = addr->GetRegNum();
+    regNumber dataReg      = data->GetRegNum();
+    regNumber comparandReg = comparand->GetRegNum();
+    regNumber targetReg    = treeNode->GetRegNum();
+
+    noway_assert(addrReg != REG_NA);
+    noway_assert(dataReg != REG_NA);
+    noway_assert(comparandReg != REG_NA);
+    noway_assert(targetReg != REG_NA);
+    noway_assert(targetReg != addrReg);
+    noway_assert(targetReg != dataReg);
+    noway_assert(targetReg != comparandReg);
+
+    genConsumeAddress(addr);
+    genConsumeRegs(data);
+    genConsumeRegs(comparand);
+
+    emitAttr attr = emitActualTypeSize(treeNode);
+    attr          = (EA_SIZE(attr) == EA_4BYTE) ? EA_4BYTE : EA_8BYTE;
+
+    gcInfo.gcMarkRegPtrVal(addrReg, addr->TypeGet());
+
+    instGen_MemoryBarrier(BARRIER_FULL);
+
+    BasicBlock* retryLabel = genCreateTempLabel();
+    BasicBlock* doneLabel  = genCreateTempLabel();
+
+    genDefineTempLabel(retryLabel);
+
+    GetEmitter()->emitIns_R_R_R(ppcLoadReserveIns(attr), attr, targetReg, REG_R0, addrReg);
+    GetEmitter()->emitIns_R_R((EA_SIZE(attr) == EA_4BYTE) ? INS_cmpw : INS_cmpd, attr, targetReg, comparandReg);
+    GetEmitter()->emitIns_J(INS_bne, doneLabel);
+    GetEmitter()->emitIns_R_R_R(ppcStoreConditionalIns(attr), attr, dataReg, REG_R0, addrReg);
+    GetEmitter()->emitIns_J(INS_bne, retryLabel);
+
+    genDefineTempLabel(doneLabel);
+
+    instGen_MemoryBarrier(BARRIER_FULL);
+
+    gcInfo.gcMarkRegSetNpt(addr->gtGetRegMask());
+    genProduceReg(treeNode);
 }
 
 //------------------------------------------------------------------------

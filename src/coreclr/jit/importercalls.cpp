@@ -8635,6 +8635,13 @@ bool Compiler::IsTargetIntrinsic(NamedIntrinsic intrinsicName)
 #elif defined(TARGET_POWERPC64)
     switch (intrinsicName)
     {
+        case NI_System_Math_Abs:
+        case NI_System_Math_MultiplyAddEstimate:
+        case NI_System_Math_ReciprocalEstimate:
+        case NI_System_Math_ReciprocalSqrtEstimate:
+        case NI_System_Math_Sqrt:
+            return true;
+
         default:
             return false;
     }

@@ -1791,9 +1791,9 @@ private:
     uintptr_t m_pushedFP;                  // ChildSP+000     CallerSP-0D0 (0x08 bytes)    (r31)
     uintptr_t m_pushedLR;                  // ChildSP+008     CallerSP-0C8 (0x08 bytes)    (lr)
     uint64_t  m_fpArgRegs[13];             // ChildSP+010     CallerSP-0C0 (0x68 bytes)    (f1-f13)
-    uintptr_t m_alignmentPad;              // ChildSP+078     CallerSP-058 (0x08 bytes)
-    uintptr_t m_returnBlock[2];            // ChildSP+080     CallerSP-050 (0x10 bytes)
-    uintptr_t m_intArgRegs[8];             // ChildSP+090     CallerSP-040 (0x40 bytes)    (r3-r10)
+    uintptr_t m_returnBlock[2];            // ChildSP+078     CallerSP-058 (0x10 bytes)
+    uintptr_t m_intArgRegs[8];             // ChildSP+088     CallerSP-048 (0x40 bytes)    (r3-r10)
+    uintptr_t m_alignmentPad;              // ChildSP+0C8     CallerSP-008 (0x08 bytes)
     uintptr_t m_stackPassedArgs[1];        // ChildSP+0D0     CallerSP+000 (unknown size)
 
 public:

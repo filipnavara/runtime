@@ -1962,13 +1962,13 @@ bool Compiler::StructPromotionHelper::ShouldPromoteStructVar(unsigned lclNum)
                         lclNum);
                 shouldPromote = false;
             }
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
             else if (m_compiler->lvaGetParameterABIInfo(lclNum).IsSplitAcrossRegistersAndStack())
             {
                 JITDUMP("Not promoting multireg struct local V%02u, because it is splitted.\n", lclNum);
                 shouldPromote = false;
             }
-#endif // TARGET_LOONGARCH64 || TARGET_RISCV64
+#endif // TARGET_LOONGARCH64 || TARGET_RISCV64 || TARGET_POWERPC64
         }
         else
 #endif // !FEATURE_MULTIREG_STRUCT_PROMOTE
@@ -4516,9 +4516,11 @@ void Compiler::lvaFixVirtualFrameOffsets()
         }
 
 #if defined(TARGET_POWERPC64)
-        const bool isCallerStackParam =
-            varDsc->lvIsParam &&
-            ((lclNum < info.compArgsCount) ? lvaGetParameterABIInfo(lclNum).HasAnyStackSegment() : !varDsc->lvIsRegArg);
+        const bool isCallerStackParam = varDsc->lvIsParam &&
+                                        ((lclNum < info.compArgsCount)
+                                             ? (lvaGetParameterABIInfo(lclNum).HasAnyStackSegment() &&
+                                                !lvaGetParameterABIInfo(lclNum).IsSplitAcrossRegistersAndStack())
+                                             : !varDsc->lvIsRegArg);
 #endif
 
         // Is this a non-param promoted struct field?
@@ -4563,6 +4565,17 @@ void Compiler::lvaFixVirtualFrameOffsets()
                 localDelta = FIRST_ARG_STACK_OFFS -
                              (codeGen->isFramePointerUsed() ? codeGen->genCallerSPtoFPdelta()
                                                             : codeGen->genCallerSPtoInitialSPdelta());
+            }
+#endif
+
+#if defined(TARGET_POWERPC64)
+            if (varDsc->lvIsParam && (lclNum < info.compArgsCount) &&
+                lvaGetParameterABIInfo(lclNum).IsSplitAcrossRegistersAndStack())
+            {
+                // PPC64 split parameters are reassembled in a local stack home.
+                // The virtual offset is already FP-relative; applying the fixed save-area
+                // delta moves the home into the callee-saved register save slots.
+                localDelta = 0;
             }
 #endif
 
@@ -4830,10 +4843,10 @@ bool Compiler::lvaGetRelativeOffsetToCallerAllocatedSpaceForParameter(unsigned l
             //
             // - On Windows, the Arm64 varargs ABI can split a 16 byte struct across x7 and stack
             // - Arm32 generally allows structs to be split
-            // - LA64/RISCV64 both allow splitting of 16-byte structs across 1 register and stack
+            // - LA64/RISCV64/PPC64 both allow splitting of 16-byte structs across 1 register and stack
             // - The Swift ABI can split parameters across multiple register and multiple stack segments
             //
-            // Of these, Swift and RISCV64/LA64 are handled separately, by
+            // Of these, Swift and RISCV64/LA64/PPC64 are handled separately, by
             // reassembling the split structs entirely on the local stack
             // frame. Thus the offsets returned here and assigned inside
             // lvaAssignVirtualFrameOffsetsToArgs are overwritten later.

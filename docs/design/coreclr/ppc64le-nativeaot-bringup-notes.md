@@ -76,6 +76,85 @@ When the build is only compiling an individual smoke test, pass the same
 PPC64LE pack must be built because there are no upstream PPC64LE NativeAOT
 runtime packs to restore.
 
+## Current System.Runtime Investigation
+
+System.Runtime NativeAOT Release tests can be built through the library project
+with the same local-pack switches used for smokes:
+
+```sh
+./dotnet.sh build src/libraries/System.Runtime/tests/System.Runtime.Tests/System.Runtime.Tests.csproj \
+  -f net11.0-unix -c Release --no-restore \
+  /p:TestNativeAot=true \
+  /p:TargetArchitecture=ppc64le \
+  /p:TargetOS=linux \
+  /p:RuntimeFlavor=coreclr \
+  /p:CrossBuild=true \
+  /p:BuildNativeAOTRuntimePack=true \
+  /p:UseLocalTargetingRuntimePack=true \
+  /p:UseLocalILCompilerPack=true \
+  /p:UseLocalCrossgen2Pack=true \
+  /p:StripSymbols=false \
+  /p:LibrariesConfiguration=Release
+```
+
+Run individual methods from the publish directory with the glibc static-TLS
+workaround while the PPC64LE TLS model is still being hardened:
+
+```sh
+cd artifacts/bin/System.Runtime.Tests/Release/net11.0-unix/publish
+GLIBC_TUNABLES=glibc.rtld.optional_static_tls=128000 \
+DOTNET_PROCESSOR_COUNT=1 \
+./System.Runtime.Tests -method System.Tests.SingleTests.NegativeZero
+```
+
+At this checkpoint, a no-argument `Fact` such as
+`System.Tests.SingleTests.NegativeZero` passes, and the parameterized
+`System.Tests.SingleTests.IsSubnormal` theory passes all rows.
+
+One misleading clue came from disassembling a generated `DynamicInvoke` thunk
+that appeared to load the argument storage from `r4` instead of the expected
+fourth PPC64LE argument register `r6`. A temporary codegen probe later showed
+that several dynamic-invoke thunks do map `ldarg.3` to `r6`, so do not assume
+that raw symbol-name matching has found the exact thunk used by the failing
+xUnit path. Use a checked PPC64LE cross-JIT and a focused `JitDump`/`JitDisasm`
+before changing ABI or local-variable handling here.
+
+Checked PPC64LE cross-JIT builds are useful for this because Release ILC does
+not reliably emit JIT dumps from environment variables. Build the checked JIT
+and point ILC at it with `--jitpath`; pass JIT config through repeated
+`--codegenopt Name=Value` arguments. Keep temporary runtime or JIT print probes
+out of commits.
+
+Checked JIT bring-up notes from this investigation:
+
+- PPC64LE must route INS_OPTS_RL pseudo label loads before looking up a real instruction encoding. INS_lea is a pseudo instruction used for prolog label materialization and is not present in the PPC instruction encoding table.
+- Standard estimate intrinsics that lower to ordinary arithmetic still need to be marked target-supported when compiling their recursive managed bodies. PPC64LE currently expands Abs, Sqrt, MultiplyAddEstimate, ReciprocalEstimate, and ReciprocalSqrtEstimate in the JIT.
+- PPC DS-form load/store instructions have stricter displacement requirements than signed-16 range. Stack struct-copy code must allocate address temporaries when std/ld offsets are unaligned even if the offset numerically fits.
+- PPC FP/int register-class moves used for ABI shuffles are bit-preserving moves; use mffprd/mtfprd for 8-byte transfers instead of treating them as regular integer or FP register copies.
+
+Split-parameter frame-layout investigation notes:
+
+- The failing xUnit theory made `InvokeTestAsync` iterate a
+  `NativeReader` object as if it were the constructor-argument `object[]`.
+  A live debugger run showed `AfterTestCaseStartingAsync` loaded the correct
+  array into callee-saved `r22`, then `r22` became the `NativeReader` after the
+  call path through `GetBeforeAfterTestAttributes`.
+- The first bad callee was
+  `System.Reflection.Runtime.General.MetadataReaderExtensions.CreateRuntimeAssemblyNameFromMetadata`.
+  Its broken prolog saved `r22` at `400(r1)`. Since the method established
+  `r31 = r1 + 320`, that save slot was also `80(r31)`. The method then
+  reassembled a split argument with `std r10,80(r31)`, overwriting the saved
+  `r22` with the `NativeReader`.
+- PPC64LE split parameters are now treated like RISC-V and LoongArch: do not
+  promote split multireg struct parameters, and do not apply the fixed
+  save-area delta when finalizing their local stack homes. Their virtual
+  offsets are already frame-pointer-relative local homes. Applying the extra
+  delta moves them into the callee-saved save area.
+- The fixed image still saves `r22` at `400(r1)`, but the split argument homes
+  in `CreateRuntimeAssemblyNameFromMetadata` are at negative FP-relative
+  offsets such as `-128(r31)` and `-120(r31)`, so they no longer overlap the
+  callee-saved register save slots.
+
 ## PPC64LE ABI Entry Points And Thunks
 
 PPC64LE ELFv2 uses `r2` as the TOC pointer. Cross-module calls enter global

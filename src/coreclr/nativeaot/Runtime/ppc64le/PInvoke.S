@@ -1,6 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+#include "AsmMacros_Shared.h"
+
 .abiversion 2
 .text
 
@@ -33,12 +35,11 @@ DEFINE_FUNC RhpPInvoke
     lis 12, 0x2         // PTFF_SAVE_SP
     std 12, 24(14)      // PInvokeTransitionFrame::m_Flags
 
-    bl RhpGetThread
-    nop
+    INLINE_GETTHREAD 11
 
     ld 14, 144(1)
-    std 3, 16(14)       // PInvokeTransitionFrame::m_pThread
-    std 14, 72(3)       // Thread::m_pTransitionFrame
+    std 11, 16(14)      // PInvokeTransitionFrame::m_pThread
+    std 14, 72(11)      // Thread::m_pTransitionFrame
 
     ld 14, 136(1)
     ld 0, 128(1)

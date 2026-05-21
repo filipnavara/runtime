@@ -3956,6 +3956,7 @@ void CodeGen::genZeroInitFltRegs(const regMaskTP& initFltRegs, const regMaskTP& 
 #elif defined(TARGET_RISCV64)
                 GetEmitter()->emitIns_R_R(INS_fmv_w_x, EA_4BYTE, reg, REG_R0);
 #elif defined(TARGET_POWERPC64)
+                // PPC64LE has no zero FPR. Move the zeroed integer initReg into the FPR.
                 inst_Mov(TYP_FLOAT, reg, initReg, /* canSkip */ false);
 #else // TARGET*
 #error Unsupported or unset target architecture
@@ -3997,6 +3998,7 @@ void CodeGen::genZeroInitFltRegs(const regMaskTP& initFltRegs, const regMaskTP& 
 #elif defined(TARGET_RISCV64)
                 GetEmitter()->emitIns_R_R(INS_fmv_d_x, EA_8BYTE, reg, REG_R0);
 #elif defined(TARGET_POWERPC64)
+                // PPC64LE has no zero FPR. Move the zeroed integer initReg into the FPR.
                 inst_Mov(TYP_DOUBLE, reg, initReg, /* canSkip */ false);
 #else // TARGET*
 #error Unsupported or unset target architecture
@@ -7511,6 +7513,9 @@ void CodeGen::genStructReturn(GenTree* treeNode)
 
 #if FEATURE_MULTIREG_RET
 #ifdef TARGET_POWERPC64
+    // Loading a floating-point return register from a stack local with a large
+    // frame offset needs an integer address temporary. LSRA allocates it in
+    // BuildReturn when it detects this shape.
     regNumber ppc64leLargeOffsetLoadTmpReg = REG_NA;
     auto ppc64leGetLargeOffsetLoadTmpReg =
         [this, treeNode, &ppc64leLargeOffsetLoadTmpReg](var_types type, unsigned lclNum, unsigned lclOffs) {

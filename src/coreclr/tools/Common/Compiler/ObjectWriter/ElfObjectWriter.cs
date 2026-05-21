@@ -74,6 +74,23 @@ namespace ILCompiler.ObjectWriter
             _symbols.Add(new ElfSymbol {});
         }
 
+        private protected override byte GetSymbolOther(ISymbolDefinitionNode symbol)
+        {
+            if ((_machine != EM_PPC64) || (symbol is not IMethodBodyNode { Method.IsUnmanagedCallersOnly: true }))
+            {
+                return 0;
+            }
+
+            // PPC64 ELFv2 supports dual entry points. The JIT compiles
+            // UnmanagedCallersOnly method bodies as reverse P/Invokes and emits
+            // a 16-byte global-entry TOC setup in the prolog. Local same-module
+            // calls branch to symbol+localentry and keep the existing TOC.
+            // ELFv2 encodes localentry 16 as 4 << STO_PPC64_LOCAL_BIT, where
+            // the bit is 5.
+            const byte Ppc64LocalEntryOffset16 = 4 << 5;
+            return Ppc64LocalEntryOffset16;
+        }
+
         private protected override void CreateSection(ObjectNodeSection section, Utf8String comdatName, Utf8String symbolName, int sectionIndex, Stream sectionStream)
         {
             string sectionName =

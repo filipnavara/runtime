@@ -3892,6 +3892,14 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
         params.callType = EC_INDIR_R;
     }
 
+    if (call->IsHelperCall(CORINFO_HELP_PINVOKE_CALLI))
+    {
+        // ELFv2 requires r12 to contain the helper entry point when the helper is
+        // entered. The P/Invoke calli helper also needs the unmanaged target that
+        // morph placed in r12, so preserve it in r0 across the helper target load.
+        GetEmitter()->emitIns_R_R(INS_mr, EA_PTRSIZE, REG_R0, REG_PINVOKE_TARGET_PARAM);
+    }
+
     genEmitCallWithCurrentGC(params);
 
     if (restoreTocAfterExternalCall)

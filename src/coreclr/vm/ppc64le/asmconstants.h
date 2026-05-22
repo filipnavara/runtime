@@ -123,6 +123,9 @@ ASMCONSTANTS_C_ASSERT(InlinedCallFrame__m_pCalleeSavedFP == offsetof(InlinedCall
 #define InlinedCallFrame__m_pThread 0x30
 ASMCONSTANTS_C_ASSERT(InlinedCallFrame__m_pThread == offsetof(InlinedCallFrame, m_pThread))
 
+#define VASigCookie__pPInvokeILStub 0x8
+ASMCONSTANTS_C_ASSERT(VASigCookie__pPInvokeILStub == offsetof(VASigCookie, pPInvokeILStub))
+
 #define HijackArgs__R31 0x00
 #define HijackArgs__Link 0x08
 #define HijackArgs__R14 0x10

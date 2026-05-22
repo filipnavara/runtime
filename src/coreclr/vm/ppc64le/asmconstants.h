@@ -89,6 +89,43 @@ ASMCONSTANTS_C_ASSERT(InlinedCallFrame__m_pCalleeSavedFP == offsetof(InlinedCall
 #define InlinedCallFrame__m_pThread 0x30
 ASMCONSTANTS_C_ASSERT(InlinedCallFrame__m_pThread == offsetof(InlinedCallFrame, m_pThread))
 
+#define HijackArgs__R31 0x00
+#define HijackArgs__Link 0x08
+#define HijackArgs__R14 0x10
+#define HijackArgs__R15 0x18
+#define HijackArgs__R16 0x20
+#define HijackArgs__R17 0x28
+#define HijackArgs__R18 0x30
+#define HijackArgs__R19 0x38
+#define HijackArgs__R20 0x40
+#define HijackArgs__R21 0x48
+#define HijackArgs__R22 0x50
+#define HijackArgs__R23 0x58
+#define HijackArgs__R24 0x60
+#define HijackArgs__R25 0x68
+#define HijackArgs__R26 0x70
+#define HijackArgs__R27 0x78
+#define HijackArgs__R28 0x80
+#define HijackArgs__R29 0x88
+#define HijackArgs__R30 0x90
+#define HijackArgs__R3  0x98
+#define HijackArgs__R4  0xA0
+#define HijackArgs__R5  0xA8
+#define HijackArgs__F1  0xB0
+#define HijackArgs__F2  0xB8
+#define SIZEOF__HijackArgs 0xC0
+
+ASMCONSTANTS_C_ASSERT(HijackArgs__R31 == offsetof(HijackArgs, R31))
+ASMCONSTANTS_C_ASSERT(HijackArgs__Link == offsetof(HijackArgs, Link))
+ASMCONSTANTS_C_ASSERT(HijackArgs__R14 == offsetof(HijackArgs, R14))
+ASMCONSTANTS_C_ASSERT(HijackArgs__R30 == offsetof(HijackArgs, R30))
+ASMCONSTANTS_C_ASSERT(HijackArgs__R3 == offsetof(HijackArgs, R3))
+ASMCONSTANTS_C_ASSERT(HijackArgs__R4 == offsetof(HijackArgs, R4))
+ASMCONSTANTS_C_ASSERT(HijackArgs__R5 == offsetof(HijackArgs, R5))
+ASMCONSTANTS_C_ASSERT(HijackArgs__F1 == offsetof(HijackArgs, F1))
+ASMCONSTANTS_C_ASSERT(HijackArgs__F2 == offsetof(HijackArgs, F2))
+ASMCONSTANTS_C_ASSERT(SIZEOF__HijackArgs == sizeof(HijackArgs))
+
 #define SIZEOF__CONTEXT 0x240
 ASMCONSTANTS_C_ASSERT(SIZEOF__CONTEXT == sizeof(T_CONTEXT));
 

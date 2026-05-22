@@ -217,6 +217,13 @@ void Compiler::unwindSaveLinkRegister(int offset)
         return;
     }
 #endif // FEATURE_CFI_SUPPORT
+
+    // save_lr: 11100110 | zzzzzzzz: save LR at [sp + #Z * 8], offset <= 2047.
+    int z = offset / REGSIZE_BYTES;
+    assert(0 <= z && z <= 0xFF);
+
+    UnwindInfo* pu = &funCurrentFunc()->uwi;
+    pu->AddCode(0xE6, (BYTE)z);
 }
 
 void Compiler::unwindSaveRegPair(regNumber reg1, regNumber reg2, int offset)
@@ -687,9 +694,14 @@ void DumpUnwindInfo(Compiler*         comp,
         }
         else if (b1 == 0xE6)
         {
-            // save_next: 11100110 : save next non - volatile Int or FP register pair.
+            // save_lr: 11100110 | zzzzzzzz : save LR at [sp + #Z * 8], offset <= 2047.
+            assert(i + 1 < countOfUnwindCodes);
+            b2 = *pUnwindCode++;
+            i++;
 
-            printf("    %02X          save_next\n", b1);
+            z = (DWORD)b2;
+
+            printf("    %02X %02X       save_lr Z#%u (0x%02X); std lr, [sp, #%u]\n", b1, b2, z, z, z * 8);
         }
         else
         {

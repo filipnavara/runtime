@@ -3799,8 +3799,7 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
         callThroughIndirReg = getCallIndirectionCellReg(call);
     }
 
-    bool     isCallIndirectionCell = (callThroughIndirReg != REG_NA);
-    GenTree* target                = getCallTarget(call, &params.methHnd);
+    GenTree* target = getCallTarget(call, &params.methHnd);
     if (target != nullptr)
     {
         if (!target->isContainedIntOrIImmed())
@@ -3824,11 +3823,6 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
         if (callThroughIndirReg != REG_NA)
         {
             params.ireg = internalRegisters.GetSingle(call);
-            noway_assert(params.ireg != REG_INDIRECT_CALL_TARGET_REG);
-            if (callThroughIndirReg != REG_INDIRECT_CALL_TARGET_REG)
-            {
-                inst_Mov(TYP_I_IMPL, REG_INDIRECT_CALL_TARGET_REG, callThroughIndirReg, /* canSkip */ false);
-            }
             GetEmitter()->emitIns_R_R_I(ins_Load(TYP_I_IMPL), emitActualTypeSize(TYP_I_IMPL), params.ireg,
                                         callThroughIndirReg, 0);
         }
@@ -3875,15 +3869,13 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
     {
         assert(genIsValidIntReg(params.ireg));
 
-        if (!isCallIndirectionCell)
+        // ELFv2 global entry points derive the callee TOC from r12. Keep
+        // indirect calls ABI-shaped by branching through r12. R2R and VSD calls
+        // keep their indirection cell in REG_R2R_INDIRECT_PARAM/r11.
+        if (params.ireg != REG_INDIRECT_CALL_TARGET_REG)
         {
-            // ELFv2 global entry points derive the callee TOC from r12. Keep
-            // ordinary indirect calls ABI-shaped by branching through r12.
-            if (params.ireg != REG_INDIRECT_CALL_TARGET_REG)
-            {
-                inst_Mov(TYP_I_IMPL, REG_INDIRECT_CALL_TARGET_REG, params.ireg, /* canSkip */ false);
-                params.ireg = REG_INDIRECT_CALL_TARGET_REG;
-            }
+            inst_Mov(TYP_I_IMPL, REG_INDIRECT_CALL_TARGET_REG, params.ireg, /* canSkip */ false);
+            params.ireg = REG_INDIRECT_CALL_TARGET_REG;
         }
 
         if (call->IsUnmanaged() || helperUsesExternalToc)

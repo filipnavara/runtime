@@ -149,6 +149,12 @@ Two additional CoreCLR bring-up fixes were needed after the morph cleanup:
   instead of `Link`. This fixed caught-exception crashes in
   `__tls_get_addr_opt` and the `ArrayExc` case where a throwing range-check
   helper resumed after the helper call instead of at the caller's catch handler.
+- Reflection invocation now copies PPC64LE structs passed in mixed floating
+  point/integer registers through the same `ArgDestination::CopyStructToRegisters`
+  path used by LoongArch64/RISC-V. This fixed
+  `JIT/Intrinsics/Interlocked`'s `TestCompareExchangeUnextended`, where the
+  integer half of a `{ float, uint }` argument arrived in `r3` as stale pointer
+  data instead of the struct field value.
 
 The CodeGen BringUpTests wrappers currently pass with ReadyToRun and tiering
 disabled:
@@ -162,6 +168,21 @@ for t in r d do ro; do
         -coreroot $PWD/artifacts/tests/coreclr/linux.ppc64le.Release/Tests/Core_Root
 done
 ```
+
+The current non-ilasm CoreCLR wrapper status with ReadyToRun and tiering
+disabled:
+
+- `JIT/JIT_r/JIT_r.sh` passes, including the Interlocked mixed-struct
+  reflection repro.
+- `JIT/JIT_d/JIT_d.sh` and `JIT/JIT_do/JIT_do.sh` pass after excluding
+  `JIT/Stress/ABI` on PPC64LE. The ABI stress harness has architecture-specific
+  ABI models and does not have PPC64LE coverage yet; forcing it forward reaches
+  untriaged dynamic-code/native ABI stress failures.
+- `JIT/JIT_ro/JIT_ro.sh`, `managed/Managed/Managed.sh`, and
+  `CoreMangLib/CoreMangLib/CoreMangLib.sh` pass.
+- Skip `ilasm/ilasm_tests/ilasm_tests.sh` for now. These tests depend on
+  launching `ilasm`/`ildasm` from inside the emulated PPC64LE CoreCLR process,
+  which is not a useful runtime signal in the current QEMU-user setup.
 
 ## Current System.Runtime Investigation
 

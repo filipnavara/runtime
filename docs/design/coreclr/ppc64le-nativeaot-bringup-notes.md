@@ -181,6 +181,28 @@ entry points with `r12` holding the callee entry address, allowing the callee to
 derive its own TOC. Calls that may cross TOC domains must assume `r2` can be
 clobbered and restore the caller TOC after returning.
 
+The current port uses these TOC entry rules:
+
+- A PPC64LE ELFv2 global entry may establish `r2` from `r12`. The caller must
+  set `r12` to the global entry address before branching through CTR.
+- A local entry assumes the caller already has the callee's TOC in `r2`.
+  Same-module calls may branch to the local entry and avoid the TOC setup.
+- Assembly helpers declared with the shared `LEAF_ENTRY`/`NESTED_ENTRY` macros
+  are local-entry-only unless the source explicitly emits a TOC setup. They
+  must not be used as cross-TOC targets directly.
+- Compiler-generated C++ functions in `libcoreclr.so` have normal ELFv2 global
+  entries. They can be used as cross-TOC targets as long as the call sequence
+  puts their global entry address in `r12`.
+- VM assembly stubs that call C++ while entered from managed/R2R code save the
+  caller `r2`, run `ESTABLISH_TOC_FROM_PC`, call the VM worker, then restore the
+  caller `r2` before returning or tailcalling. `ESTABLISH_TOC_FROM_PC` uses a
+  local `bl`/`mflr` and `.TOC.-label@ha/@l`, so it must only be used where the
+  current LR has already been saved or is intentionally disposable.
+- R2R delay-load helpers tailcall the helper returned by the VM worker. Dynamic
+  helper stubs are therefore tailcall trampolines, not normal call wrappers.
+  If the final helper target needs the `libcoreclr.so` TOC, the target must be a
+  global-entry wrapper, not a raw local-entry assembly label.
+
 `[UnmanagedCallersOnly(EntryPoint = ...)]` exports point directly at the
 managed method body. The JIT emits the PPC64LE global-entry TOC setup in the
 method prolog, and the ELF writer annotates matching symbols with localentry 16
@@ -197,6 +219,16 @@ Extern symbols used by the JIT helper path are emitted as normal extern
 function symbols. Runtime helpers are expected to be in the current module; if a
 helper maps to a true external dependency, the call site needs an explicit
 ABI-correct sequence instead of a generated text-section thunk.
+
+In CoreCLR, fast allocation helpers such as `RhpNewFast`, `RhpNewArrayFast`,
+`RhpNewPtrArrayFast`, and `RhNewString` are assembly fast paths. Their
+`LEAF_ENTRY` symbols assume the `libcoreclr.so` TOC is already in `r2` because
+the first instructions use TOC-relative inline TLS loads. The helper table must
+not expose these raw local-entry labels to R2R or generated managed call sites
+that may currently hold a CoreLib TOC. `jitinterfacegen.cpp` exposes
+compiler-generated PPC64LE wrapper functions (`*_Ppc64leGlobalEntry`) for these
+helpers instead; the wrappers have normal ELFv2 global-entry TOC prologs, then
+call the local assembly fast path with the correct `r2`.
 
 PPC64LE math `[RuntimeImport]` entries resolve to local `RhpPpc64leMath*`
 runtime wrappers. The wrappers live in `MathHelpers.cpp` and make the external

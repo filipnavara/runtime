@@ -132,6 +132,14 @@
     mtlr 0
 .endm
 
+.macro ESTABLISH_TOC_FROM_PC label
+    bl \label
+\label:
+    mflr 2
+    addis 2, 2, .TOC.-\label@ha
+    addi 2, 2, .TOC.-\label@l
+.endm
+
 LEAF_ENTRY GetCurrentIP, _TEXT
     mflr 3
     blr
@@ -646,12 +654,14 @@ NESTED_ENTRY JIT_Patchpoint, _TEXT, NoHandler
     .cfi_adjust_cfa_offset PPC64_PRESTUB_STACK_FRAME_SIZE
     std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
     SAVE_TRANSITION_BLOCK 1
+    ESTABLISH_TOC_FROM_PC LOCAL_LABEL(JIT_PatchpointGetPc)
 
     addi 3, 1, PPC64_PRESTUB_TRANSITION_BLOCK
     bl C_FUNC(JIT_PatchpointWorkerWorkerWithPolicy)
     nop
 
     mr 12, 3
+    ld 2, PPC64_CALL_FRAME_TOC_SAVE(1)
     RESTORE_TRANSITION_BLOCK_FOR_TAILCALL 1
     addi 1, 1, PPC64_PRESTUB_STACK_FRAME_SIZE
     .cfi_adjust_cfa_offset -PPC64_PRESTUB_STACK_FRAME_SIZE

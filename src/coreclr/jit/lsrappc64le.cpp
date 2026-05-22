@@ -683,11 +683,10 @@ int LinearScan::BuildCall(GenTreeCall* call)
 
         if (call->GetIndirectionCellArgKind() != WellKnownArg::None)
         {
-            // The indirection cell is passed in REG_R2R_INDIRECT_PARAM. On
-            // PPC64LE this is also the ELFv2 indirect-call target register, but
-            // delay-load helpers consume it as the cell address. Keep the
-            // control expression in a different register so codegen can branch
-            // through the target without overwriting the cell argument.
+            // The indirection cell is passed in REG_R2R_INDIRECT_PARAM and must
+            // remain live until the call. Keep the control expression in a
+            // different register so codegen can also branch through r12 per
+            // ELFv2.
             SingleTypeRegSet r2rIndirectParamReg = RBM_R2R_INDIRECT_PARAM.GetIntRegSet();
             ctrlExprCandidates =
                 (ctrlExprCandidates == RBM_NONE ? allRegs(TYP_INT) : ctrlExprCandidates) & ~r2rIndirectParamReg;
@@ -701,12 +700,19 @@ int LinearScan::BuildCall(GenTreeCall* call)
     }
     else if (call->IsR2ROrVirtualStubRelativeIndir())
     {
-        SingleTypeRegSet candidates = RBM_NONE;
+        SingleTypeRegSet candidates = allRegs(TYP_INT);
         if (call->IsFastTailCall())
         {
-            candidates = allRegs(TYP_INT) & RBM_INT_CALLEE_TRASH.GetIntRegSet();
+            candidates &= RBM_INT_CALLEE_TRASH.GetIntRegSet();
             assert(candidates != RBM_NONE);
         }
+
+        SingleTypeRegSet indirectionCellReg =
+            (call->GetIndirectionCellArgKind() == WellKnownArg::VirtualStubCell)
+                ? m_compiler->virtualStubParamInfo->GetRegMask().GetIntRegSet()
+                : RBM_R2R_INDIRECT_PARAM.GetIntRegSet();
+        candidates &= ~indirectionCellReg;
+        assert(candidates != RBM_NONE);
 
         buildInternalIntRegisterDefForNode(call, candidates);
     }

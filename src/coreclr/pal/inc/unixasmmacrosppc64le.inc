@@ -9,8 +9,10 @@
 .endm
 
 .macro INLINE_GET_ALLOC_CONTEXT_BASE target
-        bl C_FUNC(GetThreadEEAllocContext)
-        nop
+        INLINE_GET_TLS_VAR \target, C_FUNC(t_runtime_thread_locals)
+        .if OFFSETOF__RuntimeThreadLocals__ee_alloc_context != 0
+                addi \target, \target, OFFSETOF__RuntimeThreadLocals__ee_alloc_context
+        .endif
 .endm
 
 .set PPC64_COOP_PINVOKE_TRANSITION_BLOCK, 32

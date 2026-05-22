@@ -537,18 +537,36 @@ NESTED_ENTRY JIT_ProfilerEnterLeaveTailcallStub, _TEXT, NoHandler
 NESTED_END JIT_ProfilerEnterLeaveTailcallStub, _TEXT
 
 NESTED_ENTRY IL_Throw, _TEXT, NoHandler
+    stdu 1, -PPC64_PRESTUB_STACK_FRAME_SIZE(1)
+    .cfi_adjust_cfa_offset PPC64_PRESTUB_STACK_FRAME_SIZE
+    std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    SAVE_TRANSITION_BLOCK 1
+
+    addi 4, 1, PPC64_PRESTUB_TRANSITION_BLOCK
+    bl C_FUNC(IL_Throw_Impl)
     trap
-    blr
 NESTED_END IL_Throw, _TEXT
 
 NESTED_ENTRY IL_Rethrow, _TEXT, NoHandler
+    stdu 1, -PPC64_PRESTUB_STACK_FRAME_SIZE(1)
+    .cfi_adjust_cfa_offset PPC64_PRESTUB_STACK_FRAME_SIZE
+    std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    SAVE_TRANSITION_BLOCK 1
+
+    addi 3, 1, PPC64_PRESTUB_TRANSITION_BLOCK
+    bl C_FUNC(IL_Rethrow_Impl)
     trap
-    blr
 NESTED_END IL_Rethrow, _TEXT
 
 NESTED_ENTRY IL_ThrowExact, _TEXT, NoHandler
+    stdu 1, -PPC64_PRESTUB_STACK_FRAME_SIZE(1)
+    .cfi_adjust_cfa_offset PPC64_PRESTUB_STACK_FRAME_SIZE
+    std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    SAVE_TRANSITION_BLOCK 1
+
+    addi 4, 1, PPC64_PRESTUB_TRANSITION_BLOCK
+    bl C_FUNC(IL_ThrowExact_Impl)
     trap
-    blr
 NESTED_END IL_ThrowExact, _TEXT
 
 LEAF_ENTRY JIT_PollGC, _TEXT

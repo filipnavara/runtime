@@ -278,6 +278,32 @@ int LinearScan::BuildNode(GenTree* tree)
             return srcCount;
         }
 
+        case GT_ADD:
+        case GT_SUB:
+        {
+            int srcCount = 0;
+            if (tree->gtOverflow())
+            {
+                setDelayFree(BuildUse(tree->gtGetOp1()));
+                setDelayFree(BuildUse(tree->gtGetOp2()));
+                srcCount = 2;
+            }
+            else
+            {
+                srcCount = BuildBinaryUses(tree->AsOp());
+            }
+
+            if (tree->gtOverflow() && !tree->IsUnsigned())
+            {
+                buildInternalIntRegisterDefForNode(tree);
+                buildInternalIntRegisterDefForNode(tree);
+                setInternalRegsDelayFree = true;
+                buildInternalRegisterUses();
+            }
+            BuildDef(tree);
+            return srcCount;
+        }
+
         case GT_MUL:
         {
             int srcCount = BuildBinaryUses(tree->AsOp());
@@ -727,10 +753,32 @@ int LinearScan::BuildPutArgStk(GenTreePutArgStk* argNode)
         if (src->OperIs(GT_FIELD_LIST))
         {
             assert(src->isContained());
+            const bool addPpc64leStackArgBias = !argNode->isSplitStackArg();
+            bool       needsOffsetTmp         = false;
+
             for (GenTreeFieldList::Use& use : src->AsFieldList()->Uses())
             {
                 BuildUse(use.GetNode());
                 srcCount++;
+
+                bool fpBased = false;
+                int  offset  = m_compiler->lvaFrameAddress(m_compiler->lvaOutgoingArgSpaceVar, &fpBased) +
+                              static_cast<int>(argNode->getArgOffset() + use.GetOffset());
+                if (addPpc64leStackArgBias)
+                {
+                    offset += FIRST_ARG_STACK_OFFS;
+                }
+
+                instruction storeIns = m_compiler->codeGen->ins_Store(use.GetType());
+                if (!ppc64leOffsetFitsInstruction(storeIns, offset))
+                {
+                    needsOffsetTmp = true;
+                }
+            }
+
+            if (needsOffsetTmp)
+            {
+                buildInternalIntRegisterDefForNode(argNode);
             }
         }
         else
@@ -753,7 +801,11 @@ int LinearScan::BuildPutArgStk(GenTreePutArgStk* argNode)
     {
         bool fpBased = false;
         int  offset = m_compiler->lvaFrameAddress(m_compiler->lvaOutgoingArgSpaceVar, &fpBased) +
-                     static_cast<int>(argNode->getArgOffset()) + FIRST_ARG_STACK_OFFS;
+                     static_cast<int>(argNode->getArgOffset());
+        if (!argNode->isSplitStackArg())
+        {
+            offset += FIRST_ARG_STACK_OFFS;
+        }
         instruction storeIns = m_compiler->codeGen->ins_Store(genActualType(src));
         emitAttr    storeAttr = emitTypeSize(genActualType(src));
 

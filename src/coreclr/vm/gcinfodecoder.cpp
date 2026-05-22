@@ -2087,8 +2087,12 @@ template <typename GcInfoEncoding> OBJECTREF* TGcInfoDecoder<GcInfoEncoding>::Ge
     PREGDISPLAY     pRD
     )
 {
-    PORTABILITY_ASSERT("GcInfoDecoder::GetCapturedRegister for PPC64LE");
-    return NULL;
+    _ASSERTE((regNum >= 3 && regNum <= 12) || (regNum >= 14 && regNum <= 31));
+
+    // The fields of CONTEXT are in the same order as the processor encoding numbers.
+    DWORD64 *pR0 = &pRD->pCurrentContext->R0;
+
+    return (OBJECTREF*)(pR0 + regNum);
 }
 #endif // TARGET_UNIX && !FEATURE_NATIVEAOT
 
@@ -2104,8 +2108,12 @@ template <typename GcInfoEncoding> OBJECTREF* TGcInfoDecoder<GcInfoEncoding>::Ge
 
     return (OBJECTREF*)*(ppReg + regNum);
 #else
-    PORTABILITY_ASSERT("GcInfoDecoder::GetRegisterSlot for PPC64LE CoreCLR");
-    return NULL;
+    if (regNum < 13)
+    {
+        return (OBJECTREF*)*(DWORD64**)(&pRD->volatileCurrContextPointers.R3 + (regNum - 3));
+    }
+
+    return (OBJECTREF*)*(DWORD64**)(&pRD->pCurrentContextPointers->R14 + (regNum - 14));
 #endif
 }
 

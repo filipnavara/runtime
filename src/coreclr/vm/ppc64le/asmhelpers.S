@@ -508,12 +508,71 @@ LEAF_ENTRY JIT_PollGC, _TEXT
     blr
 LEAF_END JIT_PollGC, _TEXT
 
-LEAF_ENTRY JIT_PInvokeBegin, _TEXT
+NESTED_ENTRY JIT_PInvokeBegin, _TEXT, NoHandler
+    stdu 1, -64(1)
+    .cfi_adjust_cfa_offset 64
+    mflr 0
+    std 0, 48(1)
+    .cfi_offset lr, -16
+    std 31, 56(1)
+    .cfi_offset r31, -8
+    std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+
+    mr 31, 3
+
+    li 12, FRAMETYPE_InlinedCallFrame
+    std 12, 0(31)
+
+    li 12, 0
+    std 12, InlinedCallFrame__m_Datum(31)
+
+    addi 12, 1, 64
+    std 12, InlinedCallFrame__m_pCallSiteSP(31)
+    std 0, InlinedCallFrame__m_pCallerReturnAddress(31)
+
+    ld 12, 56(1)
+    std 12, InlinedCallFrame__m_pCalleeSavedFP(31)
+
+    bl C_FUNC(GetThreadHelper)
+    nop
+
+    std 3, InlinedCallFrame__m_pThread(31)
+
+    ld 12, Thread_m_pFrame(3)
+    std 12, Frame__m_Next(31)
+
+    std 31, Thread_m_pFrame(3)
+
+    li 12, 0
+    stw 12, Thread_m_fPreemptiveGCDisabled(3)
+
+    ld 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    ld 31, 56(1)
+    ld 0, 48(1)
+    mtlr 0
+    addi 1, 1, 64
+    .cfi_adjust_cfa_offset -64
     blr
-LEAF_END JIT_PInvokeBegin, _TEXT
+NESTED_END JIT_PInvokeBegin, _TEXT
 
 LEAF_ENTRY JIT_PInvokeEnd, _TEXT
+    ld 4, InlinedCallFrame__m_pThread(3)
+
+    li 12, 1
+    stw 12, Thread_m_fPreemptiveGCDisabled(4)
+
+    addis 12, 2, g_TrapReturningThreads@toc@ha
+    lwz 12, g_TrapReturningThreads@toc@l(12)
+    cmpwi 12, 0
+    bne LOCAL_LABEL(JIT_PInvokeEndRarePath)
+
+    ld 12, Frame__m_Next(3)
+    std 12, Thread_m_pFrame(4)
+
     blr
+
+LOCAL_LABEL(JIT_PInvokeEndRarePath):
+    b C_FUNC(JIT_PInvokeEndRarePath)
 LEAF_END JIT_PInvokeEnd, _TEXT
 
 #ifdef FEATURE_ON_STACK_REPLACEMENT

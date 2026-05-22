@@ -814,6 +814,12 @@ else()
             ${RUNTIME_DIR}/${ARCH_SOURCES_DIR}/AllocFast.S
             ${RUNTIME_DIR}/${ARCH_SOURCES_DIR}/WriteBarriers.S
         )
+    elseif(CLR_CMAKE_TARGET_ARCH_POWERPC64)
+        set(VM_SOURCES_WKS_ARCH_ASM
+            ${ARCH_SOURCES_DIR}/asmhelpers.S
+            ${ARCH_SOURCES_DIR}/thunktemplates.S
+            ${RUNTIME_DIR}/${ARCH_SOURCES_DIR}/WriteBarriers.S
+        )
     endif()
 
     set(ASM_SUFFIX S)
@@ -940,6 +946,22 @@ elseif(CLR_CMAKE_TARGET_ARCH_RISCV64)
     set(VM_SOURCES_WKS_ARCH
         ${ARCH_SOURCES_DIR}/profiler.cpp
         ${ARCH_SOURCES_DIR}/singlestepper.cpp
+        gcinfodecoder.cpp
+    )
+elseif(CLR_CMAKE_TARGET_ARCH_POWERPC64)
+    set(VM_SOURCES_DAC_AND_WKS_ARCH
+        ${ARCH_SOURCES_DIR}/stubs.cpp
+        exceptionhandling.cpp
+    )
+
+    set(VM_HEADERS_DAC_AND_WKS_ARCH
+        ${ARCH_SOURCES_DIR}/virtualcallstubcpu.hpp
+        exceptionhandling.h
+    )
+
+    set(VM_SOURCES_WKS_ARCH
+        ${RUNTIME_DIR}/portable/AllocFast.cpp
+        ./portable/AllocSlow.cpp
         gcinfodecoder.cpp
     )
 elseif(CLR_CMAKE_TARGET_ARCH_WASM)

@@ -46,6 +46,9 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                 case TargetArchitecture.LoongArch64:
                     return LoongArch64TransitionBlock.Instance;
 
+                case TargetArchitecture.Ppc64le:
+                    return Ppc64leTransitionBlock.Instance;
+
                 case TargetArchitecture.RiscV64:
                     return RiscV64TransitionBlock.Instance;
 
@@ -751,6 +754,44 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                 return ALIGN_UP(parmSize, stackSlotSize);
             }
             
+        }
+
+        private class Ppc64leTransitionBlock : TransitionBlock
+        {
+            public static TransitionBlock Instance = new Ppc64leTransitionBlock();
+            public override TargetArchitecture Architecture => TargetArchitecture.Ppc64le;
+            public override int PointerSize => 8;
+            public override int FloatRegisterSize => 8;
+            // r3 .. r10
+            public override int NumArgumentRegisters => 8;
+            // r31, lr, r14 .. r30
+            public override int NumCalleeSavedRegisters => 19;
+            // Callee-saves, padding, argument registers
+            public override int SizeOfTransitionBlock => SizeOfCalleeSavedRegisters + PointerSize + SizeOfArgumentRegisters;
+            public override int OffsetOfFirstGCRefMapSlot => SizeOfCalleeSavedRegisters + PointerSize;
+            public override int OffsetOfArgumentRegisters => OffsetOfFirstGCRefMapSlot;
+
+            // f1 .. f13
+            public override int OffsetOfFloatArgumentRegisters => 13 * sizeof(double);
+            public override int EnregisteredParamTypeMaxSize => 16;
+            public override int EnregisteredReturnTypeIntegerMaxSize => 16;
+
+            public override bool IsArgPassedByRef(TypeHandle th)
+            {
+                Debug.Assert(!th.IsNull());
+                Debug.Assert(th.IsValueType());
+
+                // Composites greater than 16 bytes are passed by reference.
+                return th.GetSize() > EnregisteredParamTypeMaxSize;
+            }
+
+            public sealed override int GetRetBuffArgOffset(bool hasThis) => OffsetOfFirstGCRefMapSlot + (hasThis ? 8 : 0);
+
+            public override int StackElemSize(int parmSize, bool isValueType = false, bool isFloatHfa = false)
+            {
+                int stackSlotSize = 8;
+                return ALIGN_UP(parmSize, stackSlotSize);
+            }
         }
 
         private class Wasm32TransitionBlock : TransitionBlock

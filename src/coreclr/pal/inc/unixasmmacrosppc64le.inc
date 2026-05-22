@@ -1,6 +1,16 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+#include <ppc64le/InlineTls.inc>
+
+.macro INLINE_GETTHREAD target
+        INLINE_GET_TLS_VAR \target, C_FUNC(tls_CurrentThread)
+.endm
+
+.macro INLINE_GET_ALLOC_CONTEXT_BASE target
+        INLINE_GETTHREAD \target
+.endm
+
 .macro NESTED_ENTRY Name, Section, Handler
         LEAF_ENTRY \Name, \Section
         .ifnc \Handler, NoHandler

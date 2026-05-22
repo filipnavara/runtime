@@ -1,0 +1,635 @@
+// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+
+#include "AsmMacros_Shared.h"
+
+.abiversion 2
+.text
+
+.set PPC64_CALL_FRAME_TOC_SAVE, 24
+.set PPC64_STUB_CODE_PAGE_SIZE, 0x4000
+
+.set PPC64_STUB_PRECODE_PC_OFFSET, 8
+.set PPC64_STUB_PRECODE_DATA_DELTA, PPC64_STUB_CODE_PAGE_SIZE - PPC64_STUB_PRECODE_PC_OFFSET
+.set PPC64_FIXUP_PRECODE_FAST_PC_OFFSET, 8
+.set PPC64_FIXUP_PRECODE_FAST_DATA_DELTA, PPC64_STUB_CODE_PAGE_SIZE - PPC64_FIXUP_PRECODE_FAST_PC_OFFSET
+.set PPC64_FIXUP_PRECODE_SLOW_PC_OFFSET, 56
+.set PPC64_FIXUP_PRECODE_SLOW_DATA_DELTA, PPC64_STUB_CODE_PAGE_SIZE - PPC64_FIXUP_PRECODE_SLOW_PC_OFFSET
+
+.set PPC64_PRESTUB_TRANSITION_BLOCK, 0xE0
+.set PPC64_PRESTUB_FLOAT_ARGUMENT_REGISTERS, PPC64_PRESTUB_TRANSITION_BLOCK - SIZEOF__FloatArgumentRegisters
+.set PPC64_PRESTUB_STACK_FRAME_SIZE, PPC64_PRESTUB_TRANSITION_BLOCK + SIZEOF__TransitionBlock
+
+.set PPC64_UMENTRY_STACK_FRAME_SIZE, 0x120
+.set PPC64_UMENTRY_LR_SAVE, 0x60
+.set PPC64_UMENTRY_R31_SAVE, 0x68
+.set PPC64_UMENTRY_R3_SAVE, 0x70
+.set PPC64_UMENTRY_F1_SAVE, 0xB0
+
+.macro SAVE_ARGUMENT_REGISTERS base, ofs
+    std 3,  \ofs+0(\base)
+    std 4,  \ofs+8(\base)
+    std 5,  \ofs+16(\base)
+    std 6,  \ofs+24(\base)
+    std 7,  \ofs+32(\base)
+    std 8,  \ofs+40(\base)
+    std 9,  \ofs+48(\base)
+    std 10, \ofs+56(\base)
+.endm
+
+.macro RESTORE_ARGUMENT_REGISTERS base, ofs
+    ld 3,  \ofs+0(\base)
+    ld 4,  \ofs+8(\base)
+    ld 5,  \ofs+16(\base)
+    ld 6,  \ofs+24(\base)
+    ld 7,  \ofs+32(\base)
+    ld 8,  \ofs+40(\base)
+    ld 9,  \ofs+48(\base)
+    ld 10, \ofs+56(\base)
+.endm
+
+.macro SAVE_FLOAT_ARGUMENT_REGISTERS base, ofs
+    stfd 1,  \ofs+0(\base)
+    stfd 2,  \ofs+8(\base)
+    stfd 3,  \ofs+16(\base)
+    stfd 4,  \ofs+24(\base)
+    stfd 5,  \ofs+32(\base)
+    stfd 6,  \ofs+40(\base)
+    stfd 7,  \ofs+48(\base)
+    stfd 8,  \ofs+56(\base)
+    stfd 9,  \ofs+64(\base)
+    stfd 10, \ofs+72(\base)
+    stfd 11, \ofs+80(\base)
+    stfd 12, \ofs+88(\base)
+    stfd 13, \ofs+96(\base)
+.endm
+
+.macro RESTORE_FLOAT_ARGUMENT_REGISTERS base, ofs
+    lfd 1,  \ofs+0(\base)
+    lfd 2,  \ofs+8(\base)
+    lfd 3,  \ofs+16(\base)
+    lfd 4,  \ofs+24(\base)
+    lfd 5,  \ofs+32(\base)
+    lfd 6,  \ofs+40(\base)
+    lfd 7,  \ofs+48(\base)
+    lfd 8,  \ofs+56(\base)
+    lfd 9,  \ofs+64(\base)
+    lfd 10, \ofs+72(\base)
+    lfd 11, \ofs+80(\base)
+    lfd 12, \ofs+88(\base)
+    lfd 13, \ofs+96(\base)
+.endm
+
+.macro SAVE_TRANSITION_BLOCK base
+    mflr 0
+    std 31, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r31(\base)
+    std 0,  PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__m_ReturnAddress(\base)
+    std 14, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r14(\base)
+    std 15, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r15(\base)
+    std 16, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r16(\base)
+    std 17, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r17(\base)
+    std 18, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r18(\base)
+    std 19, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r19(\base)
+    std 20, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r20(\base)
+    std 21, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r21(\base)
+    std 22, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r22(\base)
+    std 23, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r23(\base)
+    std 24, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r24(\base)
+    std 25, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r25(\base)
+    std 26, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r26(\base)
+    std 27, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r27(\base)
+    std 28, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r28(\base)
+    std 29, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r29(\base)
+    std 30, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r30(\base)
+    SAVE_ARGUMENT_REGISTERS \base, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__m_argumentRegisters
+    SAVE_FLOAT_ARGUMENT_REGISTERS \base, PPC64_PRESTUB_FLOAT_ARGUMENT_REGISTERS
+.endm
+
+.macro RESTORE_TRANSITION_BLOCK_FOR_TAILCALL base
+    RESTORE_FLOAT_ARGUMENT_REGISTERS \base, PPC64_PRESTUB_FLOAT_ARGUMENT_REGISTERS
+    RESTORE_ARGUMENT_REGISTERS \base, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__m_argumentRegisters
+    ld 31, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r31(\base)
+    ld 0,  PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__m_ReturnAddress(\base)
+    ld 14, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r14(\base)
+    ld 15, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r15(\base)
+    ld 16, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r16(\base)
+    ld 17, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r17(\base)
+    ld 18, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r18(\base)
+    ld 19, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r19(\base)
+    ld 20, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r20(\base)
+    ld 21, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r21(\base)
+    ld 22, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r22(\base)
+    ld 23, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r23(\base)
+    ld 24, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r24(\base)
+    ld 25, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r25(\base)
+    ld 26, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r26(\base)
+    ld 27, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r27(\base)
+    ld 28, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r28(\base)
+    ld 29, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r29(\base)
+    ld 30, PPC64_PRESTUB_TRANSITION_BLOCK + TransitionBlock__r30(\base)
+    mtlr 0
+.endm
+
+LEAF_ENTRY GetCurrentIP, _TEXT
+    mflr 3
+    blr
+LEAF_END GetCurrentIP, _TEXT
+
+LEAF_ENTRY GetCurrentSP, _TEXT
+    mr 3, 1
+    blr
+LEAF_END GetCurrentSP, _TEXT
+
+NESTED_ENTRY CallDescrWorkerInternal, _TEXT, NoHandler
+    mflr 0
+    stdu 1, -64(1)
+    .cfi_adjust_cfa_offset 64
+    std 0, PPC64_UMENTRY_LR_SAVE(1)
+    std 2, 24(1)
+    std 30, 32(1)
+    std 31, 40(1)
+    .cfi_offset 65, 16
+    .cfi_offset 2, 24
+    .cfi_offset 30, 32
+    .cfi_offset 31, 40
+
+    mr 31, 3
+    mr 30, 1
+
+    lwz 4, CallDescrData__numStackSlots(31)
+    cmpwi 4, 0
+    beq LOCAL_LABEL(donestack)
+
+    sldi 5, 4, 3
+    addi 6, 5, 96
+    addi 6, 6, 15
+    clrrdi 6, 6, 4
+    subf 1, 6, 1
+
+    ld 7, CallDescrData__pSrc(31)
+    add 8, 7, 5
+    addi 9, 1, 96
+    add 9, 9, 5
+
+LOCAL_LABEL(stackloop):
+    addi 8, 8, -8
+    ld 10, 0(8)
+    addi 9, 9, -8
+    std 10, 0(9)
+    addi 4, 4, -1
+    cmpwi 4, 0
+    bne LOCAL_LABEL(stackloop)
+
+LOCAL_LABEL(donestack):
+    ld 12, CallDescrData__pFloatArgumentRegisters(31)
+    cmpdi 12, 0
+    beq LOCAL_LABEL(NoFloatingPoint)
+
+    lfd 1, 0(12)
+    lfd 2, 8(12)
+    lfd 3, 16(12)
+    lfd 4, 24(12)
+    lfd 5, 32(12)
+    lfd 6, 40(12)
+    lfd 7, 48(12)
+    lfd 8, 56(12)
+    lfd 9, 64(12)
+    lfd 10, 72(12)
+    lfd 11, 80(12)
+    lfd 12, 88(12)
+    lfd 13, 96(12)
+
+LOCAL_LABEL(NoFloatingPoint):
+    ld 12, CallDescrData__pArgumentRegisters(31)
+    ld 3, 0(12)
+    ld 4, 8(12)
+    ld 5, 16(12)
+    ld 6, 24(12)
+    ld 7, 32(12)
+    ld 8, 40(12)
+    ld 9, 48(12)
+    ld 10, 56(12)
+
+    ld 12, CallDescrData__pTarget(31)
+    mtctr 12
+    bctrl
+LOCAL_LABEL(CallDescrWorkerInternalReturnAddress):
+
+    lwz 5, CallDescrData__fpReturnSize(31)
+    cmpwi 5, 0
+    beq LOCAL_LABEL(IntReturn)
+
+    stfd 1, CallDescrData__returnValue(31)
+    andi. 5, 5, FpStruct__BothFloat
+    bne LOCAL_LABEL(SecondFieldFloatReturn)
+    std 3, CallDescrData__returnValue + 8(31)
+    b LOCAL_LABEL(ReturnDone)
+
+LOCAL_LABEL(SecondFieldFloatReturn):
+    stfd 2, CallDescrData__returnValue + 8(31)
+    b LOCAL_LABEL(ReturnDone)
+
+LOCAL_LABEL(IntReturn):
+    std 3, CallDescrData__returnValue(31)
+    std 4, CallDescrData__returnValue + 8(31)
+
+LOCAL_LABEL(ReturnDone):
+    mr 1, 30
+    ld 31, 40(1)
+    ld 30, 32(1)
+    ld 2, 24(1)
+    ld 0, PPC64_UMENTRY_LR_SAVE(1)
+    mtlr 0
+    addi 1, 1, 64
+    blr
+
+PATCH_LABEL CallDescrWorkerInternalReturnAddressOffset
+    .quad LOCAL_LABEL(CallDescrWorkerInternalReturnAddress) - C_FUNC(CallDescrWorkerInternal)
+NESTED_END CallDescrWorkerInternal, _TEXT
+
+LEAF_ENTRY JIT_PatchedCodeStart, _TEXT
+    blr
+LEAF_END JIT_PatchedCodeStart, _TEXT
+
+LEAF_ENTRY JIT_WriteBarrier, _TEXT
+    b RhpAssignRefPpc64le
+LEAF_END_MARKED JIT_WriteBarrier, _TEXT
+
+LEAF_ENTRY JIT_CheckedWriteBarrier, _TEXT
+    b RhpCheckedAssignRef
+LEAF_END_MARKED JIT_CheckedWriteBarrier, _TEXT
+
+LEAF_ENTRY JIT_ByRefWriteBarrier, _TEXT
+    b RhpByRefAssignRef
+LEAF_END_MARKED JIT_ByRefWriteBarrier, _TEXT
+
+LEAF_ENTRY JIT_WriteBarrier_Table, _TEXT
+    .quad 0
+    .quad 0
+    .quad 0
+    .quad 0
+    .quad 0
+    .quad 0
+    .quad 0
+    .quad 0
+    .quad 0
+LEAF_END_MARKED JIT_WriteBarrier_Table, _TEXT
+
+LEAF_ENTRY JIT_PatchedCodeLast, _TEXT
+    blr
+LEAF_END JIT_PatchedCodeLast, _TEXT
+
+NESTED_ENTRY ThePreStub, _TEXT, NoHandler
+    stdu 1, -PPC64_PRESTUB_STACK_FRAME_SIZE(1)
+    .cfi_adjust_cfa_offset PPC64_PRESTUB_STACK_FRAME_SIZE
+    std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    SAVE_TRANSITION_BLOCK 1
+
+    addi 3, 1, PPC64_PRESTUB_TRANSITION_BLOCK
+    mr 4, METHODDESC_REGISTER
+    bl C_FUNC(PreStubWorker)
+    nop
+
+    mr 12, 3
+    RESTORE_TRANSITION_BLOCK_FOR_TAILCALL 1
+    addi 1, 1, PPC64_PRESTUB_STACK_FRAME_SIZE
+    .cfi_adjust_cfa_offset -PPC64_PRESTUB_STACK_FRAME_SIZE
+    mtctr 12
+    bctr
+NESTED_END ThePreStub, _TEXT
+
+NESTED_ENTRY PInvokeImportThunk, _TEXT, NoHandler
+    mflr 0
+    stdu 1, -PPC64_UMENTRY_STACK_FRAME_SIZE(1)
+    .cfi_adjust_cfa_offset PPC64_UMENTRY_STACK_FRAME_SIZE
+    std 0, PPC64_UMENTRY_LR_SAVE(1)
+    std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    std 31, PPC64_UMENTRY_R31_SAVE(1)
+
+    bl LOCAL_LABEL(PInvokeImportThunkGetPc)
+LOCAL_LABEL(PInvokeImportThunkGetPc):
+    mflr 2
+    addis 2, 2, .TOC.-LOCAL_LABEL(PInvokeImportThunkGetPc)@ha
+    addi 2, 2, .TOC.-LOCAL_LABEL(PInvokeImportThunkGetPc)@l
+
+    SAVE_ARGUMENT_REGISTERS 1, PPC64_UMENTRY_R3_SAVE
+    SAVE_FLOAT_ARGUMENT_REGISTERS 1, PPC64_UMENTRY_F1_SAVE
+
+    mr 3, METHODDESC_REGISTER
+    bl C_FUNC(PInvokeImportWorker)
+    nop
+
+    mr 12, 3
+    RESTORE_FLOAT_ARGUMENT_REGISTERS 1, PPC64_UMENTRY_F1_SAVE
+    RESTORE_ARGUMENT_REGISTERS 1, PPC64_UMENTRY_R3_SAVE
+    ld 31, PPC64_UMENTRY_R31_SAVE(1)
+    ld 0, PPC64_UMENTRY_LR_SAVE(1)
+    mtlr 0
+    addi 1, 1, PPC64_UMENTRY_STACK_FRAME_SIZE
+    .cfi_adjust_cfa_offset -PPC64_UMENTRY_STACK_FRAME_SIZE
+    mtctr 12
+    bctr
+NESTED_END PInvokeImportThunk, _TEXT
+
+NESTED_ENTRY TheUMEntryPrestub, _TEXT, NoHandler
+    mflr 0
+    stdu 1, -PPC64_UMENTRY_STACK_FRAME_SIZE(1)
+    .cfi_adjust_cfa_offset PPC64_UMENTRY_STACK_FRAME_SIZE
+    std 0, PPC64_UMENTRY_LR_SAVE(1)
+    std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    std 31, PPC64_UMENTRY_R31_SAVE(1)
+
+    SAVE_ARGUMENT_REGISTERS 1, PPC64_UMENTRY_R3_SAVE
+    SAVE_FLOAT_ARGUMENT_REGISTERS 1, PPC64_UMENTRY_F1_SAVE
+
+    mr 3, METHODDESC_REGISTER
+    bl C_FUNC(TheUMEntryPrestubWorker)
+    nop
+
+    mr 12, 3
+    RESTORE_FLOAT_ARGUMENT_REGISTERS 1, PPC64_UMENTRY_F1_SAVE
+    RESTORE_ARGUMENT_REGISTERS 1, PPC64_UMENTRY_R3_SAVE
+    ld 31, PPC64_UMENTRY_R31_SAVE(1)
+    ld 0, PPC64_UMENTRY_LR_SAVE(1)
+    mtlr 0
+    addi 1, 1, PPC64_UMENTRY_STACK_FRAME_SIZE
+    .cfi_adjust_cfa_offset -PPC64_UMENTRY_STACK_FRAME_SIZE
+    mtctr 12
+    bctr
+NESTED_END TheUMEntryPrestub, _TEXT
+
+NESTED_ENTRY VarargPInvokeStub, _TEXT, NoHandler
+    trap
+    blr
+NESTED_END VarargPInvokeStub, _TEXT
+
+NESTED_ENTRY VarargPInvokeStub_RetBuffArg, _TEXT, NoHandler
+    trap
+    blr
+NESTED_END VarargPInvokeStub_RetBuffArg, _TEXT
+
+NESTED_ENTRY GenericPInvokeCalliHelper, _TEXT, NoHandler
+    trap
+    blr
+NESTED_END GenericPInvokeCalliHelper, _TEXT
+
+NESTED_ENTRY DelayLoad_Helper, _TEXT, NoHandler
+    trap
+    blr
+NESTED_END DelayLoad_Helper, _TEXT
+
+NESTED_ENTRY DelayLoad_Helper_Obj, _TEXT, NoHandler
+    trap
+    blr
+NESTED_END DelayLoad_Helper_Obj, _TEXT
+
+NESTED_ENTRY DelayLoad_Helper_ObjObj, _TEXT, NoHandler
+    trap
+    blr
+NESTED_END DelayLoad_Helper_ObjObj, _TEXT
+
+NESTED_ENTRY DelayLoad_MethodCall, _TEXT, NoHandler
+    trap
+    blr
+NESTED_END DelayLoad_MethodCall, _TEXT
+
+LEAF_ENTRY ThePreStubPatch, _TEXT
+PATCH_LABEL ThePreStubPatchLabel
+    blr
+LEAF_END ThePreStubPatch, _TEXT
+
+LEAF_ENTRY StubPrecodeCode, _TEXT
+    mflr 0
+    bcl 20, 31, LOCAL_LABEL(StubPrecodeGetPc)
+LOCAL_LABEL(StubPrecodeGetPc):
+    mflr 11
+    mtlr 0
+    addi 11, 11, PPC64_STUB_PRECODE_DATA_DELTA
+    ld 12, StubPrecodeData__SecretParam(11)
+    ld 11, StubPrecodeData__Target(11)
+    mtctr 11
+    bctr
+    trap
+LEAF_END_MARKED StubPrecodeCode, _TEXT
+
+LEAF_ENTRY FixupPrecodeCode, _TEXT
+    mflr 0
+    bcl 20, 31, LOCAL_LABEL(FixupPrecodeFastGetPc)
+LOCAL_LABEL(FixupPrecodeFastGetPc):
+    mflr 11
+    mtlr 0
+    addi 11, 11, PPC64_FIXUP_PRECODE_FAST_DATA_DELTA
+    ld 12, FixupPrecodeData__Target(11)
+    addi 0, 11, -PPC64_STUB_CODE_PAGE_SIZE
+    cmpd 12, 0
+    beq LOCAL_LABEL(FixupPrecodeSlowPath)
+    mtctr 12
+    bctr
+
+LOCAL_LABEL(FixupPrecodeSlowPath):
+    sync
+    mflr 0
+    bcl 20, 31, LOCAL_LABEL(FixupPrecodeSlowGetPc)
+LOCAL_LABEL(FixupPrecodeSlowGetPc):
+    mflr 11
+    mtlr 0
+    addi 11, 11, PPC64_FIXUP_PRECODE_SLOW_DATA_DELTA
+    ld 12, FixupPrecodeData__MethodDesc(11)
+    ld 11, FixupPrecodeData__PrecodeFixupThunk(11)
+    mtctr 11
+    bctr
+    trap
+LEAF_END_MARKED FixupPrecodeCode, _TEXT
+
+LEAF_ENTRY ThisPtrRetBufPrecodeWorker, _TEXT
+    mr 12, 3
+    mr 3, 4
+    mtctr 12
+    bctr
+LEAF_END ThisPtrRetBufPrecodeWorker, _TEXT
+
+NESTED_ENTRY ResolveWorkerAsmStub, _TEXT, NoHandler
+    stdu 1, -PPC64_PRESTUB_STACK_FRAME_SIZE(1)
+    .cfi_adjust_cfa_offset PPC64_PRESTUB_STACK_FRAME_SIZE
+    std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    SAVE_TRANSITION_BLOCK 1
+
+    addi 3, 1, PPC64_PRESTUB_TRANSITION_BLOCK
+    clrrdi 4, 11, 2
+    mr 5, 12
+    andi. 6, 11, 3
+    bl C_FUNC(VSD_ResolveWorker)
+    nop
+
+    mr 12, 3
+    RESTORE_TRANSITION_BLOCK_FOR_TAILCALL 1
+    addi 1, 1, PPC64_PRESTUB_STACK_FRAME_SIZE
+    .cfi_adjust_cfa_offset -PPC64_PRESTUB_STACK_FRAME_SIZE
+    mtctr 12
+    bctr
+NESTED_END ResolveWorkerAsmStub, _TEXT
+
+NESTED_ENTRY ResolveWorkerChainLookupAsmStub, _TEXT, NoHandler
+    b C_FUNC(ResolveWorkerAsmStub)
+NESTED_END ResolveWorkerChainLookupAsmStub, _TEXT
+
+NESTED_ENTRY ProfileEnterNaked, _TEXT, NoHandler
+    blr
+NESTED_END ProfileEnterNaked, _TEXT
+
+NESTED_ENTRY ProfileLeaveNaked, _TEXT, NoHandler
+    blr
+NESTED_END ProfileLeaveNaked, _TEXT
+
+NESTED_ENTRY ProfileTailcallNaked, _TEXT, NoHandler
+    blr
+NESTED_END ProfileTailcallNaked, _TEXT
+
+NESTED_ENTRY JIT_ProfilerEnterLeaveTailcallStub, _TEXT, NoHandler
+    blr
+NESTED_END JIT_ProfilerEnterLeaveTailcallStub, _TEXT
+
+NESTED_ENTRY IL_Throw, _TEXT, NoHandler
+    trap
+    blr
+NESTED_END IL_Throw, _TEXT
+
+NESTED_ENTRY IL_Rethrow, _TEXT, NoHandler
+    trap
+    blr
+NESTED_END IL_Rethrow, _TEXT
+
+NESTED_ENTRY IL_ThrowExact, _TEXT, NoHandler
+    trap
+    blr
+NESTED_END IL_ThrowExact, _TEXT
+
+LEAF_ENTRY JIT_PollGC, _TEXT
+    blr
+LEAF_END JIT_PollGC, _TEXT
+
+LEAF_ENTRY JIT_PInvokeBegin, _TEXT
+    blr
+LEAF_END JIT_PInvokeBegin, _TEXT
+
+LEAF_ENTRY JIT_PInvokeEnd, _TEXT
+    blr
+LEAF_END JIT_PInvokeEnd, _TEXT
+
+#ifdef FEATURE_ON_STACK_REPLACEMENT
+NESTED_ENTRY JIT_Patchpoint, _TEXT, NoHandler
+    stdu 1, -PPC64_PRESTUB_STACK_FRAME_SIZE(1)
+    .cfi_adjust_cfa_offset PPC64_PRESTUB_STACK_FRAME_SIZE
+    std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    SAVE_TRANSITION_BLOCK 1
+
+    addi 3, 1, PPC64_PRESTUB_TRANSITION_BLOCK
+    bl C_FUNC(JIT_PatchpointWorkerWorkerWithPolicy)
+    nop
+
+    mr 12, 3
+    RESTORE_TRANSITION_BLOCK_FOR_TAILCALL 1
+    addi 1, 1, PPC64_PRESTUB_STACK_FRAME_SIZE
+    .cfi_adjust_cfa_offset -PPC64_PRESTUB_STACK_FRAME_SIZE
+    mr 3, 12
+    blr
+NESTED_END JIT_Patchpoint, _TEXT
+
+LEAF_ENTRY JIT_PatchpointForced, _TEXT
+    mr 4, 3
+    li 3, 0
+    b JIT_Patchpoint
+LEAF_END JIT_PatchpointForced, _TEXT
+#endif
+
+LEAF_ENTRY JIT_GetDynamicGCStaticBase_SingleAppDomain, _TEXT
+    trap
+    blr
+LEAF_END JIT_GetDynamicGCStaticBase_SingleAppDomain, _TEXT
+
+LEAF_ENTRY JIT_GetDynamicNonGCStaticBase_SingleAppDomain, _TEXT
+    trap
+    blr
+LEAF_END JIT_GetDynamicNonGCStaticBase_SingleAppDomain, _TEXT
+
+NESTED_ENTRY OnHijackTripThread, _TEXT, NoHandler
+    trap
+    blr
+NESTED_END OnHijackTripThread, _TEXT
+
+#ifdef FEATURE_TIERED_COMPILATION
+NESTED_ENTRY OnCallCountThresholdReachedStub, _TEXT, NoHandler
+    stdu 1, -PPC64_PRESTUB_STACK_FRAME_SIZE(1)
+    .cfi_adjust_cfa_offset PPC64_PRESTUB_STACK_FRAME_SIZE
+    std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    SAVE_TRANSITION_BLOCK 1
+
+    addi 3, 1, PPC64_PRESTUB_TRANSITION_BLOCK
+    mr 4, 12
+    bl C_FUNC(OnCallCountThresholdReached)
+    nop
+
+    mr 12, 3
+    RESTORE_TRANSITION_BLOCK_FOR_TAILCALL 1
+    addi 1, 1, PPC64_PRESTUB_STACK_FRAME_SIZE
+    .cfi_adjust_cfa_offset -PPC64_PRESTUB_STACK_FRAME_SIZE
+    mtctr 12
+    bctr
+NESTED_END OnCallCountThresholdReachedStub, _TEXT
+#endif
+
+// ------------------------------------------------------------------
+// size_t GetThreadStaticsVariableOffset()
+//
+// Return the initial-exec TLS offset of t_ThreadStatics. JIT code adds
+// this offset to r13, the PPC64LE thread pointer.
+LEAF_ENTRY GetThreadStaticsVariableOffset, _TEXT
+    addis 3, 2, t_ThreadStatics@got@tprel@ha
+    ld 3, t_ThreadStatics@got@tprel@l(3)
+    blr
+LEAF_END GetThreadStaticsVariableOffset, _TEXT
+
+NESTED_ENTRY CallEHFunclet, _TEXT, NoHandler
+    stdu 1, -32(1)
+    mflr 0
+    std 0, 16(1)
+    std 31, 24(1)
+
+    std 1, 0(6)
+    ld 31, CONTEXT_R31(5)
+    mtctr 4
+    bctrl
+
+    ld 31, 24(1)
+    ld 0, 16(1)
+    mtlr 0
+    addi 1, 1, 32
+    blr
+NESTED_END CallEHFunclet, _TEXT
+
+NESTED_ENTRY CallEHFilterFunclet, _TEXT, NoHandler
+    stdu 1, -32(1)
+    mflr 0
+    std 0, 16(1)
+    std 31, 24(1)
+
+    std 1, 0(6)
+    mr 31, 4
+    mtctr 5
+    bctrl
+
+    ld 31, 24(1)
+    ld 0, 16(1)
+    mtlr 0
+    addi 1, 1, 32
+    blr
+NESTED_END CallEHFilterFunclet, _TEXT
+
+NESTED_ENTRY RedirectForThreadAbort, _TEXT, NoHandler
+    trap
+    blr
+NESTED_END RedirectForThreadAbort, _TEXT
+
+LEAF_ENTRY JIT_StackProbe, _TEXT
+    blr
+LEAF_END_MARKED JIT_StackProbe, _TEXT

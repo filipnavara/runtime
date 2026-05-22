@@ -125,6 +125,20 @@
 #define NOT_LOONGARCH64_ARG(x)    , x
 #endif
 
+#ifdef TARGET_POWERPC64
+#define POWERPC64_FIRST_ARG(x)  x ,
+#define POWERPC64_ARG(x)        , x
+#define POWERPC64_ONLY(x)       x
+#define NOT_POWERPC64(x)
+#define NOT_POWERPC64_ARG(x)
+#else
+#define POWERPC64_FIRST_ARG(x)
+#define POWERPC64_ARG(x)
+#define POWERPC64_ONLY(x)
+#define NOT_POWERPC64(x)        x
+#define NOT_POWERPC64_ARG(x)    , x
+#endif
+
 #ifdef TARGET_RISCV64
 #define RISCV64_FIRST_ARG(x)  x ,
 #define RISCV64_ARG(x)        , x

@@ -948,9 +948,19 @@ typedef struct _DISPATCHER_CONTEXT {
 #elif defined(HOST_POWERPC64)
 
 typedef struct _DISPATCHER_CONTEXT {
-    // PPC64LE does not build the VM or JIT at this point,
-    // so we only provide a dummy definition.
-    DWORD Reserved;
+    ULONG64 ControlPc;
+    ULONG64 ImageBase;
+    PRUNTIME_FUNCTION FunctionEntry;
+    ULONG64 EstablisherFrame;
+    ULONG64 TargetPc;
+    PCONTEXT ContextRecord;
+    PEXCEPTION_ROUTINE LanguageHandler;
+    PVOID HandlerData;
+    PVOID HistoryTable;
+    ULONG64 ScopeIndex;
+    BOOLEAN ControlPcIsUnwound;
+    PBYTE  NonVolatileRegisters;
+    ULONG64 Reserved;
 } DISPATCHER_CONTEXT, *PDISPATCHER_CONTEXT;
 
 #elif defined(HOST_WASM)

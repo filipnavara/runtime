@@ -41,6 +41,10 @@
 
 #define SIZEOF_PRECODE_BASE         CODE_SIZE_ALIGN
 
+#elif defined(TARGET_POWERPC64)
+
+#define SIZEOF_PRECODE_BASE         CODE_SIZE_ALIGN
+
 #endif // TARGET_AMD64
 
 #ifndef DACCESS_COMPILE
@@ -104,6 +108,8 @@ struct StubPrecode
     static const SIZE_T CodeSize = 24;
 #elif defined(TARGET_RISCV64)
     static const SIZE_T CodeSize = 24;
+#elif defined(TARGET_POWERPC64)
+    static const SIZE_T CodeSize = 40;
 #endif // TARGET_AMD64
 
     BYTE m_code[CodeSize];
@@ -395,6 +401,9 @@ struct FixupPrecode
 #elif defined(TARGET_RISCV64)
     static const SIZE_T CodeSize = 32;
     static const int FixupCodeOffset = 10;
+#elif defined(TARGET_POWERPC64)
+    static const SIZE_T CodeSize = 88;
+    static const int FixupCodeOffset = 44;
 #endif // TARGET_AMD64
 
     BYTE m_code[CodeSize];
@@ -461,12 +470,17 @@ struct FixupPrecode
         PCODE oldTarget = (PCODE)GetData()->Target;
         if (oldTarget != ((PCODE)this + FixupCodeOffset))
         {
-#ifdef FEATURE_CODE_VERSIONING
-            // No change needed, jmp is already in place
-#else
-            // Setting the target more than once is unexpected
-            return FALSE;
+#ifdef TARGET_POWERPC64
+            if (oldTarget != (PCODE)this)
 #endif
+            {
+#ifdef FEATURE_CODE_VERSIONING
+                // No change needed, jmp is already in place
+#else
+                // Setting the target more than once is unexpected
+                return FALSE;
+#endif
+            }
         }
 
         _ASSERTE(IS_ALIGNED(&GetData()->Target, sizeof(SIZE_T)));

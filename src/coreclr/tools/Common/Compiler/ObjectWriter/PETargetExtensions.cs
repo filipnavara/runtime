@@ -90,6 +90,9 @@ namespace ILCompiler.ObjectWriter
                 case Internal.TypeSystem.TargetArchitecture.LoongArch64:
                     return Machine.LoongArch64;
 
+                case Internal.TypeSystem.TargetArchitecture.Ppc64le:
+                    return Machine.PowerPC;
+
                 case Internal.TypeSystem.TargetArchitecture.RiscV64:
                     return Machine.RiscV64;
 

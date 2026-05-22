@@ -330,6 +330,46 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genConsumeRegs(op2);
             GetEmitter()->emitIns_R_R_R(INS_add, emitActualTypeSize(treeNode), targetReg, op1->GetRegNum(),
                                         op2->GetRegNum());
+
+            if (treeNode->gtOverflow())
+            {
+                if (treeNode->IsUnsigned())
+                {
+                    GetEmitter()->emitIns_R_R((emitActualTypeSize(treeNode) == EA_8BYTE) ? INS_cmpld : INS_cmplw,
+                                              emitActualTypeSize(treeNode), targetReg, op1->GetRegNum());
+                    if (m_compiler->fgUseThrowHelperBlocks())
+                    {
+                        Compiler::AddCodeDsc* add = m_compiler->fgGetExcptnTarget(SCK_OVERFLOW, m_compiler->compCurBB);
+                        assert((add != nullptr) && "failed to find overflow exception throw block");
+                        assert(add->acdUsed);
+                        GetEmitter()->emitIns_J(INS_blt, add->acdDstBlk);
+                    }
+                    else
+                    {
+                        BasicBlock* skipLabel = genCreateTempLabel();
+                        GetEmitter()->emitIns_J(INS_bge, skipLabel);
+                        genEmitHelperCall(m_compiler->acdHelper(SCK_OVERFLOW), 0, EA_UNKNOWN);
+                        genDefineTempLabel(skipLabel);
+                    }
+                }
+                else
+                {
+                    regNumber tempReg  = internalRegisters.Extract(treeNode);
+                    regNumber tempReg2 = internalRegisters.Extract(treeNode);
+
+                    GetEmitter()->emitIns_R_R_R(INS_xor, emitActualTypeSize(treeNode), tempReg, op1->GetRegNum(),
+                                                targetReg);
+                    GetEmitter()->emitIns_R_R_R(INS_xor, emitActualTypeSize(treeNode), tempReg2, op2->GetRegNum(),
+                                                targetReg);
+                    GetEmitter()->emitIns_R_R_R(INS_and, emitActualTypeSize(treeNode), tempReg, tempReg, tempReg2);
+                    if (emitActualTypeSize(treeNode) == EA_4BYTE)
+                    {
+                        GetEmitter()->emitIns_R_R(INS_extsw, EA_PTRSIZE, tempReg, tempReg);
+                    }
+                    genJumpToThrowHlpBlk_la(SCK_OVERFLOW, INS_blt, tempReg);
+                }
+            }
+
             genProduceReg(treeNode);
             break;
         }
@@ -348,8 +388,47 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
 
             genConsumeRegs(op1);
             genConsumeRegs(op2);
+
+            if (treeNode->gtOverflow() && treeNode->IsUnsigned())
+            {
+                GetEmitter()->emitIns_R_R((emitActualTypeSize(treeNode) == EA_8BYTE) ? INS_cmpld : INS_cmplw,
+                                          emitActualTypeSize(treeNode), op1->GetRegNum(), op2->GetRegNum());
+                if (m_compiler->fgUseThrowHelperBlocks())
+                {
+                    Compiler::AddCodeDsc* add = m_compiler->fgGetExcptnTarget(SCK_OVERFLOW, m_compiler->compCurBB);
+                    assert((add != nullptr) && "failed to find overflow exception throw block");
+                    assert(add->acdUsed);
+                    GetEmitter()->emitIns_J(INS_blt, add->acdDstBlk);
+                }
+                else
+                {
+                    BasicBlock* skipLabel = genCreateTempLabel();
+                    GetEmitter()->emitIns_J(INS_bge, skipLabel);
+                    genEmitHelperCall(m_compiler->acdHelper(SCK_OVERFLOW), 0, EA_UNKNOWN);
+                    genDefineTempLabel(skipLabel);
+                }
+            }
+
             GetEmitter()->emitIns_R_R_R(INS_subf, emitActualTypeSize(treeNode), targetReg, op2->GetRegNum(),
                                         op1->GetRegNum());
+
+            if (treeNode->gtOverflow() && !treeNode->IsUnsigned())
+            {
+                regNumber tempReg  = internalRegisters.Extract(treeNode);
+                regNumber tempReg2 = internalRegisters.Extract(treeNode);
+
+                GetEmitter()->emitIns_R_R_R(INS_xor, emitActualTypeSize(treeNode), tempReg, op1->GetRegNum(),
+                                            op2->GetRegNum());
+                GetEmitter()->emitIns_R_R_R(INS_xor, emitActualTypeSize(treeNode), tempReg2, op1->GetRegNum(),
+                                            targetReg);
+                GetEmitter()->emitIns_R_R_R(INS_and, emitActualTypeSize(treeNode), tempReg, tempReg, tempReg2);
+                if (emitActualTypeSize(treeNode) == EA_4BYTE)
+                {
+                    GetEmitter()->emitIns_R_R(INS_extsw, EA_PTRSIZE, tempReg, tempReg);
+                }
+                genJumpToThrowHlpBlk_la(SCK_OVERFLOW, INS_blt, tempReg);
+            }
+
             genProduceReg(treeNode);
             break;
         }
@@ -3392,6 +3471,10 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
 
             regNumber baseReg = REG_NA;
             int       offset  = ppcGetLclFrameOffset(m_compiler, varNumOut, argOffsetOut, &baseReg);
+            if (treeNode->isSplitStackArg())
+            {
+                offset -= FIRST_ARG_STACK_OFFS;
+            }
             regNumber tmpReg  = ppcOffsetFitsInstruction(storeIns, offset) ? REG_NA : internalRegisters.GetSingle(treeNode);
             genInstrWithConstant(storeIns, storeAttr, REG_R0, baseReg, offset, tmpReg);
         }
@@ -3401,6 +3484,10 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
 
             regNumber baseReg = REG_NA;
             int       offset  = ppcGetLclFrameOffset(m_compiler, varNumOut, argOffsetOut, &baseReg);
+            if (treeNode->isSplitStackArg())
+            {
+                offset -= FIRST_ARG_STACK_OFFS;
+            }
             regNumber tmpReg  = ppcOffsetFitsInstruction(storeIns, offset) ? REG_NA : internalRegisters.GetSingle(treeNode);
             genInstrWithConstant(storeIns, storeAttr, source->GetRegNum(), baseReg, offset, tmpReg);
         }
@@ -3414,7 +3501,41 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
 
     if (source->OperIs(GT_FIELD_LIST))
     {
-        genPutArgStkFieldList(treeNode, varNumOut);
+        const unsigned argOffset = treeNode->getArgOffset();
+        // Split arguments use ABI stack offsets directly for their stack segments.
+        // Full stack arguments live past the caller linkage and parameter-save area.
+        const bool addPpc64leStackArgBias = !treeNode->isSplitStackArg();
+        regNumber  tmpReg                 = REG_NA;
+
+        for (GenTreeFieldList::Use& use : source->AsFieldList()->Uses())
+        {
+            GenTree* nextArgNode = use.GetNode();
+            genConsumeReg(nextArgNode);
+
+            regNumber reg    = nextArgNode->GetRegNum();
+            var_types type   = use.GetType();
+            emitAttr  attr   = emitTypeSize(type);
+            unsigned  offset = argOffset + use.GetOffset();
+
+            instruction storeIns = ins_Store(type);
+            bool        fpBased  = false;
+            int         frameOff = m_compiler->lvaFrameAddress(varNumOut, &fpBased) + static_cast<int>(offset);
+            if (addPpc64leStackArgBias)
+            {
+                frameOff += FIRST_ARG_STACK_OFFS;
+            }
+
+            if (!ppcOffsetFitsInstruction(storeIns, frameOff))
+            {
+                if (tmpReg == REG_NA)
+                {
+                    tmpReg = internalRegisters.GetSingle(treeNode);
+                }
+            }
+
+            regNumber baseReg = fpBased ? REG_FPBASE : REG_SPBASE;
+            genInstrWithConstant(storeIns, attr, reg, baseReg, frameOff, tmpReg);
+        }
         return;
     }
 

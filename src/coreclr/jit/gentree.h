@@ -4858,6 +4858,8 @@ class CallArg
     bool m_needPlace : 1;
     // True when we have decided the evaluation order for this argument in LateArgs
     bool m_processed : 1;
+    // True when this is the stack fragment of an argument split between registers and stack.
+    bool m_isSplitStackArg : 1;
 
 private:
     CallArg()
@@ -4871,6 +4873,7 @@ private:
         , m_needTmp(false)
         , m_needPlace(false)
         , m_processed(false)
+        , m_isSplitStackArg(false)
     {
     }
 
@@ -4906,6 +4909,8 @@ public:
     CORINFO_CLASS_HANDLE GetSignatureClassHandle() { return m_signatureLayout == nullptr ? NO_CLASS_HANDLE : m_signatureLayout->GetClassHandle(); }
     var_types GetSignatureType() { return m_signatureType; }
     WellKnownArg GetWellKnownArg() { return m_wellKnownArg; }
+    bool IsSplitStackArg() const { return m_isSplitStackArg; }
+    void SetIsSplitStackArg() { m_isSplitStackArg = true; }
     // clang-format on
 
     // Get the real argument node, i.e. not a setup or placeholder node.
@@ -8756,6 +8761,8 @@ public:
                                  // In future if we need to add more such bool fields consider bit fields.
 #endif
 
+    bool gtIsSplitStackArg;
+
     // Instruction selection: during codegen time, what code sequence we will be using
     // to encode this operation.
     // TODO-Throughput: The following information should be obtained from the child
@@ -8783,7 +8790,8 @@ public:
                      unsigned     stackByteOffset,
                      unsigned     stackByteSize,
                      GenTreeCall* callNode,
-                     bool         putInIncomingArgArea)
+                     bool         putInIncomingArgArea,
+                     bool         isSplitStackArg = false)
         : GenTreeUnOp(oper, type, op1 DEBUGARG(/*largeNode*/ false))
         , m_byteOffset(stackByteOffset)
         , m_byteSize(stackByteSize)
@@ -8796,6 +8804,7 @@ public:
 #if FEATURE_FASTTAILCALL
         , gtPutInIncomingArgArea(putInIncomingArgArea)
 #endif // FEATURE_FASTTAILCALL
+        , gtIsSplitStackArg(isSplitStackArg)
         , gtPutArgStkKind(Kind::Invalid)
 #if defined(TARGET_XARCH)
         , m_argLoadSizeDelta(UINT8_MAX)
@@ -8822,6 +8831,11 @@ public:
     }
 
 #endif // !FEATURE_FASTTAILCALL
+
+    bool isSplitStackArg() const
+    {
+        return gtIsSplitStackArg;
+    }
 
     unsigned getArgOffset() const
     {

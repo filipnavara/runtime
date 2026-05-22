@@ -11,6 +11,28 @@
 #include "ecall.h"
 #include "writebarriermanager.h"
 
+#if defined(TARGET_POWERPC64)
+EXTERN_C FCDECL1(Object*, RhpNewFast_Ppc64leGlobalEntry, MethodTable* pMT)
+{
+    return RhpNewFast(pMT);
+}
+
+EXTERN_C FCDECL2(Object*, RhpNewArrayFast_Ppc64leGlobalEntry, MethodTable* pMT, INT_PTR size)
+{
+    return RhpNewArrayFast(pMT, size);
+}
+
+EXTERN_C FCDECL2(Object*, RhpNewPtrArrayFast_Ppc64leGlobalEntry, MethodTable* pMT, INT_PTR size)
+{
+    return RhpNewPtrArrayFast(pMT, size);
+}
+
+EXTERN_C FCDECL2(Object*, RhNewString_Ppc64leGlobalEntry, MethodTable* pMT, INT_PTR stringLength)
+{
+    return RhNewString(pMT, stringLength);
+}
+#endif // TARGET_POWERPC64
+
 void InitJITAllocationHelpers()
 {
     STANDARD_VM_CONTRACT;
@@ -28,6 +50,13 @@ void InitJITAllocationHelpers()
         // if (multi-proc || server GC || non-Windows)
         if (GCHeapUtilities::UseThreadAllocationContexts())
         {
+#if defined(TARGET_POWERPC64)
+            SetJitHelperFunction(CORINFO_HELP_NEWSFAST, RhpNewFast_Ppc64leGlobalEntry);
+            SetJitHelperFunction(CORINFO_HELP_NEWARR_1_VC, RhpNewArrayFast_Ppc64leGlobalEntry);
+            SetJitHelperFunction(CORINFO_HELP_NEWARR_1_PTR, RhpNewPtrArrayFast_Ppc64leGlobalEntry);
+
+            ECall::DynamicallyAssignFCallImpl(GetEEFuncEntryPoint(RhNewString_Ppc64leGlobalEntry), ECall::FastAllocateString);
+#else
             SetJitHelperFunction(CORINFO_HELP_NEWSFAST, RhpNewFast);
             SetJitHelperFunction(CORINFO_HELP_NEWARR_1_VC, RhpNewArrayFast);
             SetJitHelperFunction(CORINFO_HELP_NEWARR_1_PTR, RhpNewPtrArrayFast);
@@ -39,6 +68,7 @@ void InitJITAllocationHelpers()
 #endif
 
             ECall::DynamicallyAssignFCallImpl(GetEEFuncEntryPoint(RhNewString), ECall::FastAllocateString);
+#endif // TARGET_POWERPC64
         }
         else
         {

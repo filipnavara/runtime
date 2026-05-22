@@ -396,8 +396,8 @@ NESTED_ENTRY DelayLoad_MethodCall, _TEXT, NoHandler
     ESTABLISH_TOC_FROM_PC LOCAL_LABEL(DelayLoad_MethodCallGetPc)
 
     addi 3, 1, PPC64_PRESTUB_TRANSITION_BLOCK
-    mr 4, 12
-    mr 5, 11
+    mr 4, 11
+    mr 5, 9
     mr 6, 10
     bl C_FUNC(ExternalMethodFixupWorker)
     nop
@@ -420,8 +420,8 @@ NESTED_ENTRY DelayLoad_Helper\suffix, _TEXT, NoHandler
     ESTABLISH_TOC_FROM_PC LOCAL_LABEL(DelayLoad_Helper\suffix\()GetPc)
 
     addi 3, 1, PPC64_PRESTUB_TRANSITION_BLOCK
-    mr 4, 12
-    mr 5, 11
+    mr 4, 11
+    mr 5, 9
     mr 6, 10
     li 7, \frameFlags
     bl C_FUNC(DynamicHelperWorker)

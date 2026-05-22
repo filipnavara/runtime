@@ -35,11 +35,11 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                 case ImportThunkKind.DelayLoadHelper:
                 case ImportThunkKind.DelayLoadHelperWithExistingIndirectionCell:
                 case ImportThunkKind.VirtualStubDispatch:
-                    // r12 contains the indirection cell on entry and is consumed by the
+                    // r11 contains the indirection cell on entry and is consumed by the
                     // delay-load assembly helpers as their first scratch argument.
 
-                    // r11 contains the import section index.
-                    instructionEncoder.EmitLI(Register.R11, _containingImportSection.IndexFromBeginningOfArray);
+                    // r9 contains the import section index.
+                    instructionEncoder.EmitLI(Register.R9, _containingImportSection.IndexFromBeginningOfArray);
 
                     // r10 contains Module*.
                     instructionEncoder.EmitLD(Register.R10, factory.ModuleImport);

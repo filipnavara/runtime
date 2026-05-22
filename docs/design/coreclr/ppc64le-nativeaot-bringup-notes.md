@@ -107,9 +107,28 @@ DOTNET_PROCESSOR_COUNT=1 \
 ./System.Runtime.Tests -method System.Tests.SingleTests.NegativeZero
 ```
 
-At this checkpoint, a no-argument `Fact` such as
-`System.Tests.SingleTests.NegativeZero` passes, and the parameterized
-`System.Tests.SingleTests.IsSubnormal` theory passes all rows.
+The NativeAOT single-file runner accepts the standard xUnit trait filters. Use
+them for broad runs; unfiltered direct runs include tests that are normally
+excluded by platform or active-issue traits and produce misleading failures such
+as Browser-only runtime-feature tests or NativeAOT-disabled reflection tests:
+
+```sh
+cd artifacts/bin/System.Runtime.Tests/Release/net11.0-unix/publish
+GLIBC_TUNABLES=glibc.rtld.optional_static_tls=128000 \
+DOTNET_PROCESSOR_COUNT=1 \
+./System.Runtime.Tests \
+  -notrait category=nonlinuxtests \
+  -notrait category=nonnetcoreapptests \
+  -notrait category=IgnoreForCI \
+  -notrait category=failing \
+  -notrait category=OuterLoop
+```
+
+At this checkpoint, the filtered Release NativeAOT `System.Runtime.Tests` run
+passes under qemu/binfmt with 68,593 tests run, 0 failures, and 122 skipped.
+Focused checks for `System.Tests.SingleTests.IsSubnormal`,
+`System.Text.Tests.CompositeFormatTests.MemoryExtensionsTryWrite_Valid`, and
+the checked `Int128`/`UInt128` arithmetic tests pass.
 
 One misleading clue came from disassembling a generated `DynamicInvoke` thunk
 that appeared to load the argument storage from `r4` instead of the expected

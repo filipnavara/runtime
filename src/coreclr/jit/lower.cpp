@@ -1651,7 +1651,7 @@ void Lowering::LowerArg(GenTreeCall* call, CallArg* callArg)
 
             GenTree* putArg = new (m_compiler, GT_PUTARG_STK)
                 GenTreePutArgStk(GT_PUTARG_STK, TYP_VOID, arg, stackSeg.GetStackOffset(), stackSeg.GetStackSize(), call,
-                                 putInIncomingArgArea);
+                                 putInIncomingArgArea, callArg->IsSplitStackArg());
 
             BlockRange().InsertAfter(arg, putArg);
             *ppArg = arg = putArg;
@@ -1878,6 +1878,7 @@ void Lowering::SplitArgumentBetweenRegistersAndStack(GenTreeCall* call, CallArg*
     }
 
     callArg->AbiInfo = newStackAbi;
+    callArg->SetIsSplitStackArg();
     *ppArg = arg = stackNode;
 
     NewCallArg newRegisterArgAdd = NewCallArg::Struct(registersNode, TYP_STRUCT, registersLayout);

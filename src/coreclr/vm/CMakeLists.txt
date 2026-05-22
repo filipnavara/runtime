@@ -816,8 +816,10 @@ else()
         )
     elseif(CLR_CMAKE_TARGET_ARCH_POWERPC64)
         set(VM_SOURCES_WKS_ARCH_ASM
+            ${ARCH_SOURCES_DIR}/AllocSlow.S
             ${ARCH_SOURCES_DIR}/asmhelpers.S
             ${ARCH_SOURCES_DIR}/thunktemplates.S
+            ${RUNTIME_DIR}/${ARCH_SOURCES_DIR}/AllocFast.S
             ${RUNTIME_DIR}/${ARCH_SOURCES_DIR}/WriteBarriers.S
         )
     endif()
@@ -960,8 +962,6 @@ elseif(CLR_CMAKE_TARGET_ARCH_POWERPC64)
     )
 
     set(VM_SOURCES_WKS_ARCH
-        ${RUNTIME_DIR}/portable/AllocFast.cpp
-        ./portable/AllocSlow.cpp
         gcinfodecoder.cpp
     )
 elseif(CLR_CMAKE_TARGET_ARCH_WASM)

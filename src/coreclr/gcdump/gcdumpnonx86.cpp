@@ -147,6 +147,19 @@ PCSTR GetRegName (UINT32 regnum)
     }
 
     return "???";
+#elif defined(TARGET_POWERPC64)
+    if (regnum < 32)
+    {
+        static CHAR szRegName[16];
+        _snprintf_s(szRegName, ARRAY_SIZE(szRegName), sizeof(szRegName), "r%u", regnum);
+        return szRegName;
+    }
+    else if (regnum == 32)
+    {
+        return "pc";
+    }
+
+    return "???";
 #endif
 }
 
@@ -362,7 +375,7 @@ size_t      GCDump::DumpGCTable(PTR_CBYTE      gcInfoBlock,
                                                   | DECODE_GC_LIFETIMES
                                                   | DECODE_PROLOG_LENGTH
                                                   | DECODE_RETURN_KIND
-#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
                                                   | DECODE_HAS_TAILCALLS
 #endif
                                                  ),
@@ -495,7 +508,7 @@ size_t      GCDump::DumpGCTable(PTR_CBYTE      gcInfoBlock,
 
 #ifdef TARGET_AMD64
     gcPrintf("Wants Report Only Leaf: %u\n", hdrdecoder.WantsReportOnlyLeaf());
-#elif defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#elif defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
     gcPrintf("Has tailcalls: %u\n", hdrdecoder.HasTailCalls());
 #endif // TARGET_AMD64
     gcPrintf("Size of parameter area: %x\n", hdrdecoder.GetSizeOfStackParameterArea());

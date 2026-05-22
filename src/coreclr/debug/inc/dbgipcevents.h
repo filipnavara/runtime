@@ -1147,6 +1147,13 @@ struct MSLAYOUT DebuggerREGDISPLAY
     SIZE_T  T5;
     SIZE_T  T6;
     SIZE_T  PC;
+#elif defined(TARGET_POWERPC64)
+    #define DebuggerIPCE_FloatCount 32
+    SIZE_T  R[32];
+    SIZE_T  PC;
+    SIZE_T  SP;
+    SIZE_T  FP;
+    SIZE_T  LR;
 #else
     #define DebuggerIPCE_FloatCount 1
 
@@ -1675,6 +1682,13 @@ static_assert(DBG_TARGET_REGNUM_AMBIENT_SP == ICorDebugInfo::REGNUM_AMBIENT_SP);
 #define DBG_TARGET_REGNUM_SP 2
 #define DBG_TARGET_REGNUM_AMBIENT_SP 34
 #ifdef TARGET_RISCV64
+static_assert(DBG_TARGET_REGNUM_SP == ICorDebugInfo::REGNUM_SP);
+static_assert(DBG_TARGET_REGNUM_AMBIENT_SP == ICorDebugInfo::REGNUM_AMBIENT_SP);
+#endif
+#elif defined(TARGET_POWERPC64)
+#define DBG_TARGET_REGNUM_SP 1
+#define DBG_TARGET_REGNUM_AMBIENT_SP 34
+#ifdef TARGET_POWERPC64
 static_assert(DBG_TARGET_REGNUM_SP == ICorDebugInfo::REGNUM_SP);
 static_assert(DBG_TARGET_REGNUM_AMBIENT_SP == ICorDebugInfo::REGNUM_AMBIENT_SP);
 #endif

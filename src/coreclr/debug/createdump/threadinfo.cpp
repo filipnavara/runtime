@@ -35,6 +35,9 @@ GetFrameLocation(CONTEXT* pContext, uint64_t* ip, uint64_t* sp)
 #elif defined(__loongarch64)
     *ip = pContext->Pc;
     *sp = pContext->Sp;
+#elif defined(__powerpc64__)
+    *ip = pContext->Nip;
+    *sp = pContext->R1;
 #endif
 }
 

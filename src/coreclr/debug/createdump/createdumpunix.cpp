@@ -4,7 +4,7 @@
 #include "createdump.h"
 #include <minipal/ospagesize.h>
 
-#if defined(__arm__) || defined(__aarch64__) || defined(__loongarch64) || defined(__riscv)
+#if defined(__arm__) || defined(__aarch64__) || defined(__loongarch64) || defined(__riscv) || defined(__powerpc64__)
 long g_pageSize = 0;
 #endif
 
@@ -20,7 +20,7 @@ CreateDump(const CreateDumpOptions& options)
     bool result = false;
 
     // Initialize PAGE_SIZE
-#if defined(__arm__) || defined(__aarch64__) || defined(__loongarch64) || defined(__riscv)
+#if defined(__arm__) || defined(__aarch64__) || defined(__loongarch64) || defined(__riscv) || defined(__powerpc64__)
     g_pageSize = minipal_getpagesize();
 #endif
     TRACE("PAGE_SIZE %d\n", PAGE_SIZE);

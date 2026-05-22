@@ -500,6 +500,21 @@ int LinearScan::BuildNode(GenTree* tree)
             return 1;
         }
 
+        case GT_PATCHPOINT:
+        {
+            int srcCount = BuildOperandUses(tree->gtGetOp1(), RBM_ARG_0.GetIntRegSet());
+            srcCount += BuildOperandUses(tree->gtGetOp2(), RBM_ARG_1.GetIntRegSet());
+            BuildKills(tree, m_compiler->compHelperCallKillSet(CORINFO_HELP_PATCHPOINT));
+            return srcCount;
+        }
+
+        case GT_PATCHPOINT_FORCED:
+        {
+            int srcCount = BuildOperandUses(tree->gtGetOp1(), RBM_ARG_0.GetIntRegSet());
+            BuildKills(tree, m_compiler->compHelperCallKillSet(CORINFO_HELP_PATCHPOINT_FORCED));
+            return srcCount;
+        }
+
         case GT_STORE_BLK:
             return BuildBlockStore(tree->AsBlk());
 

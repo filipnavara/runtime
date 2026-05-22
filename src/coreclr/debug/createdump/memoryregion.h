@@ -3,7 +3,7 @@
 
 #include "specialdiaginfo.h"
 
-#if !defined(PAGE_SIZE) && (defined(__arm__) || defined(__aarch64__) || defined(__loongarch64)) || defined(__riscv)
+#if !defined(PAGE_SIZE) && (defined(__arm__) || defined(__aarch64__) || defined(__loongarch64) || defined(__riscv) || defined(__powerpc64__))
 extern long g_pageSize;
 #define PAGE_SIZE g_pageSize
 #endif

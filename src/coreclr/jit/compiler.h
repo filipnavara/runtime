@@ -9487,8 +9487,8 @@ public:
             reg     = REG_T5;
             regMask = RBM_T5;
 #elif defined(TARGET_POWERPC64)
-            reg     = REG_R12;
-            regMask = RBM_R12;
+            reg     = REG_R11;
+            regMask = RBM_R11;
 #elif defined(TARGET_WASM)
             reg     = REG_NA;
             regMask = RBM_NONE;

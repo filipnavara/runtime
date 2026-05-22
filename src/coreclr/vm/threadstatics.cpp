@@ -1147,7 +1147,7 @@ static void* GetTlsIndexObjectAddress()
     return GetThreadStaticDescriptor(p);
 }
 
-#elif !defined(TARGET_ANDROID) && defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif !defined(TARGET_ANDROID) && (defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64))
 
 extern "C" size_t GetThreadStaticsVariableOffset();
 
@@ -1179,11 +1179,12 @@ void GetThreadLocalStaticBlocksInfo(CORINFO_THREAD_STATIC_BLOCKS_INFO* pInfo)
     pInfo->tlsGetAddrFtnPtr = reinterpret_cast<void*>(&__tls_get_addr);
     pInfo->tlsIndexObject = GetTlsIndexObjectAddress();
 
-#elif defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 
-    // For Linux arm64/loongarch64/riscv64, just get the offset of thread static variable, and during execution,
+    // For Linux arm64/loongarch64/riscv64/ppc64le, just get the offset of thread static variable, and during execution,
     // this offset, arm64 taken from trpid_elp0 system register gives back the thread variable address.
     // this offset, loongarch64 taken from $tp register gives back the thread variable address.
+    // this offset, ppc64le taken from r13 gives back the thread variable address.
 #if !(defined(TARGET_LINUX_MUSL) && defined(TARGET_RISCV64))
     // On musl riscv64, this optimization is disabled due to initial-exec TLS incompatibility.
     threadStaticBaseOffset = GetThreadStaticsVariableOffset();

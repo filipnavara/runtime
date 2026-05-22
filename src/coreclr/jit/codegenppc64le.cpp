@@ -687,6 +687,11 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genCodeForReturnTrap(treeNode->AsOp());
             break;
 
+        case GT_PATCHPOINT:
+        case GT_PATCHPOINT_FORCED:
+            genPatchpoint(treeNode->AsOp());
+            break;
+
         case GT_RETURN:
         case GT_RETFILT:
             genReturn(treeNode);
@@ -3838,17 +3843,20 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
     {
         assert(genIsValidIntReg(params.ireg));
 
+        // ELFv2 global entry points derive the callee TOC from r12. Keep all
+        // indirect calls ABI-shaped by branching through r12, even when the
+        // target is expected to be managed code.
+        if (params.ireg != REG_INDIRECT_CALL_TARGET_REG)
+        {
+            inst_Mov(TYP_I_IMPL, REG_INDIRECT_CALL_TARGET_REG, params.ireg, /* canSkip */ false);
+            params.ireg = REG_INDIRECT_CALL_TARGET_REG;
+        }
+
         if (call->IsUnmanaged())
         {
             // ELFv2 global entry points derive the callee TOC from r12, so unmanaged indirect
             // calls must branch through r12 and restore the managed TOC after the call returns.
             GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R2, REG_SPBASE, PPC_TOC_SAVE_OFFSET);
-
-            if (params.ireg != REG_INDIRECT_CALL_TARGET_REG)
-            {
-                inst_Mov(TYP_I_IMPL, REG_INDIRECT_CALL_TARGET_REG, params.ireg, /* canSkip */ false);
-                params.ireg = REG_INDIRECT_CALL_TARGET_REG;
-            }
 
             restoreTocAfterUnmanagedCall = true;
         }
@@ -3986,20 +3994,15 @@ void CodeGen::genOSRHandleTier0CalleeSavedRegistersAndFrame()
 
 void CodeGen::genEstablishPpc64leTocForReversePInvoke()
 {
-    if (!m_compiler->opts.IsReversePInvoke())
+    if (!m_compiler->opts.IsReversePInvoke() || !m_compiler->opts.compReloc)
     {
         return;
     }
 
-    if (!m_compiler->opts.compReloc)
-    {
-        NYI_POWERPC64("reverse P/Invoke TOC establishment without relocatable code");
-    }
-
+    emitter* emit = GetEmitter();
     // PPC64 ELFv2 global entry points are entered with r12 holding the callee
     // entry address. Use it to establish this method's TOC before the normal
     // prolog can emit any TOC-relative references.
-    emitter* emit = GetEmitter();
     emit->emitIns_R_L(INS_lea, EA_PTRSIZE, emit->emitPrologIG, REG_R11, REG_R0);
     emit->emitIns_R_R_R(INS_subf, EA_PTRSIZE, REG_R2, REG_R11, REG_R12);
     instGen(INS_nop);

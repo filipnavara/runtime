@@ -1900,6 +1900,8 @@ void ThreadSuspend::UnlockThreadStore(BOOL bThreadDestroyed, ThreadSuspend::SUSP
 #ifdef TARGET_X86
 #define CONTEXT_COMPLETE (CONTEXT_FULL | CONTEXT_FLOATING_POINT |       \
                           CONTEXT_DEBUG_REGISTERS | CONTEXT_EXTENDED_REGISTERS)
+#elif defined(TARGET_POWERPC64)
+#define CONTEXT_COMPLETE CONTEXT_FULL
 #else
 #define CONTEXT_COMPLETE (CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS)
 #endif

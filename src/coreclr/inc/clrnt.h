@@ -497,6 +497,60 @@ RtlVirtualUnwind(
 
 #endif // TARGET_RISCV64
 
+#ifdef TARGET_POWERPC64
+#include "daccess.h"
+
+#define UNW_FLAG_NHANDLER               0x0             /* any handler */
+#define UNW_FLAG_EHANDLER               0x1             /* filter handler */
+#define UNW_FLAG_UHANDLER               0x2             /* unwind handler */
+
+FORCEINLINE
+ULONG64
+RtlpGetFunctionEndAddress (
+    _In_ PT_RUNTIME_FUNCTION FunctionEntry,
+    _In_ ULONG64 ImageBase
+    )
+{
+    ULONG64 FunctionLength;
+
+    FunctionLength = FunctionEntry->UnwindData;
+    if ((FunctionLength & 3) != 0) {
+        FunctionLength = (FunctionLength >> 2) & 0x7ff;
+    } else {
+        FunctionLength = *(PTR_ULONG64)(ImageBase + FunctionLength) & 0x3ffff;
+    }
+
+    return FunctionEntry->BeginAddress + 2 * FunctionLength;
+}
+
+#define RUNTIME_FUNCTION__BeginAddress(FunctionEntry)               ((FunctionEntry)->BeginAddress)
+#define RUNTIME_FUNCTION__SetBeginAddress(FunctionEntry,address)    ((FunctionEntry)->BeginAddress = (address))
+
+#define RUNTIME_FUNCTION__EndAddress(FunctionEntry, ImageBase)      (RtlpGetFunctionEndAddress(FunctionEntry, (ULONG64)(ImageBase)))
+
+#define RUNTIME_FUNCTION__SetUnwindInfoAddress(prf,address)         do { (prf)->UnwindData = (address); } while (0)
+
+typedef struct _UNWIND_INFO {
+    // dummy
+} UNWIND_INFO, *PUNWIND_INFO;
+
+EXTERN_C
+NTSYSAPI
+PEXCEPTION_ROUTINE
+NTAPI
+RtlVirtualUnwind(
+    IN ULONG HandlerType,
+    IN ULONG64 ImageBase,
+    IN ULONG64 ControlPc,
+    IN PRUNTIME_FUNCTION FunctionEntry,
+    IN OUT PCONTEXT ContextRecord,
+    OUT PVOID *HandlerData,
+    OUT PULONG64 EstablisherFrame,
+    IN OUT PKNONVOLATILE_CONTEXT_POINTERS ContextPointers OPTIONAL
+    );
+
+#endif // TARGET_POWERPC64
+
 #ifdef TARGET_WASM
 //
 // Define unwind information flags.

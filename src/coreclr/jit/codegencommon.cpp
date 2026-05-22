@@ -7385,7 +7385,8 @@ void CodeGen::genPatchpoint(GenTreeOp* treeNode)
 #elif defined(TARGET_RISCV64)
     GetEmitter()->emitIns_R_R_I(INS_jalr, EA_PTRSIZE, REG_R0, REG_INTRET, 0);
 #elif defined(TARGET_POWERPC64)
-    GetEmitter()->emitIns_R_R_I(INS_bclr, EA_PTRSIZE, REG_R0, REG_INTRET, 0);
+    GetEmitter()->emitIns_R_R(INS_mtctr, EA_PTRSIZE, REG_INTRET, REG_INTRET);
+    GetEmitter()->emitIns(INS_bctr);
 #else
 #error "Unsupported target architecture for GT_PATCHPOINT"
 #endif

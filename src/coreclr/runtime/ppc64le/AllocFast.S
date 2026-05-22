@@ -10,43 +10,26 @@
 // allocation context then automatically fallback to the slow allocation path.
 //  r3 == MethodTable
 LEAF_ENTRY RhpNewFast, _TEXT
-    mflr 0
-    stdu 1, -48(1)
-    std 0, 16(1)
-    std 14, 24(1)
-    std 3, 32(1)
+    INLINE_GET_ALLOC_CONTEXT_BASE 9
 
-    INLINE_GET_ALLOC_CONTEXT_BASE 3
-    ld 14, 32(1)
+    lwz 5, OFFSETOF__MethodTable__m_uBaseSize(3)
 
-    lwz 5, OFFSETOF__MethodTable__m_uBaseSize(14)
-
-    ld 6, OFFSETOF__ee_alloc_context + OFFSETOF__ee_alloc_context__alloc_ptr(3)
+    ld 6, OFFSETOF__ee_alloc_context + OFFSETOF__ee_alloc_context__alloc_ptr(9)
     cmpdi 6, 0
     beq LOCAL_LABEL(RhpNewFast_RarePath)
-    ld 7, OFFSETOF__ee_alloc_context + OFFSETOF__ee_alloc_context__combined_limit(3)
+    ld 7, OFFSETOF__ee_alloc_context + OFFSETOF__ee_alloc_context__combined_limit(9)
     sub 7, 7, 6
     cmpld 5, 7
     bgt LOCAL_LABEL(RhpNewFast_RarePath)
 
     add 8, 6, 5
-    std 14, OFFSETOF__Object__m_pEEType(6)
-    std 8, OFFSETOF__ee_alloc_context + OFFSETOF__ee_alloc_context__alloc_ptr(3)
+    std 3, OFFSETOF__Object__m_pEEType(6)
+    std 8, OFFSETOF__ee_alloc_context + OFFSETOF__ee_alloc_context__alloc_ptr(9)
     mr 3, 6
-
-    ld 14, 24(1)
-    ld 0, 16(1)
-    mtlr 0
-    addi 1, 1, 48
     blr
 
 LOCAL_LABEL(RhpNewFast_RarePath):
-    mr 3, 14
     li 4, 0
-    ld 14, 24(1)
-    ld 0, 16(1)
-    mtlr 0
-    addi 1, 1, 48
     b C_FUNC(RhpNewObject)
 LEAF_END RhpNewFast, _TEXT
 
@@ -89,50 +72,24 @@ NESTED_END RhpNewObject, _TEXT
 //  r4 == character/element count
 //  r5 == string/array size
 .macro NEW_ARRAY_FAST
-    mflr 0
-    stdu 1, -80(1)
-    std 0, 16(1)
-    std 14, 24(1)
-    std 15, 32(1)
-    std 3, 40(1)
-    std 4, 48(1)
-    std 5, 56(1)
+    INLINE_GET_ALLOC_CONTEXT_BASE 9
 
-    INLINE_GET_ALLOC_CONTEXT_BASE 3
-    ld 14, 40(1)
-    ld 15, 48(1)
-    ld 5, 56(1)
-
-    ld 6, OFFSETOF__ee_alloc_context + OFFSETOF__ee_alloc_context__alloc_ptr(3)
+    ld 6, OFFSETOF__ee_alloc_context + OFFSETOF__ee_alloc_context__alloc_ptr(9)
     cmpdi 6, 0
     beq 1f
-    ld 7, OFFSETOF__ee_alloc_context + OFFSETOF__ee_alloc_context__combined_limit(3)
+    ld 7, OFFSETOF__ee_alloc_context + OFFSETOF__ee_alloc_context__combined_limit(9)
     sub 7, 7, 6
     cmpld 5, 7
     bgt 1f
 
     add 8, 6, 5
-    std 14, OFFSETOF__Object__m_pEEType(6)
-    stw 15, OFFSETOF__Array__m_Length(6)
-    std 8, OFFSETOF__ee_alloc_context + OFFSETOF__ee_alloc_context__alloc_ptr(3)
+    std 3, OFFSETOF__Object__m_pEEType(6)
+    stw 4, OFFSETOF__Array__m_Length(6)
+    std 8, OFFSETOF__ee_alloc_context + OFFSETOF__ee_alloc_context__alloc_ptr(9)
     mr 3, 6
-
-    ld 15, 32(1)
-    ld 14, 24(1)
-    ld 0, 16(1)
-    mtlr 0
-    addi 1, 1, 80
     blr
 
 1:
-    mr 3, 14
-    mr 4, 15
-
-    ld 15, 32(1)
-    ld 14, 24(1)
-    ld 0, 16(1)
-    mtlr 0
-    addi 1, 1, 80
     b C_FUNC(RhpNewVariableSizeObject)
 .endm
 

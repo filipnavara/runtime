@@ -9795,7 +9795,7 @@ void CEEInfo::getFpStructLowering(CORINFO_CLASS_HANDLE structHnd, CORINFO_FPSTRU
 
     JIT_TO_EE_TRANSITION();
 
-#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
     FpStructInRegistersInfo info = MethodTable::GetFpStructInRegistersInfo(TypeHandle(structHnd));
     if (info.flags != FpStruct::UseIntCallConv)
     {
@@ -9827,7 +9827,7 @@ void CEEInfo::getFpStructLowering(CORINFO_CLASS_HANDLE structHnd, CORINFO_FPSTRU
     {
         pLowering->byIntegerCallConv = true;
     }
-#endif // TARGET_RISCV64 || TARGET_LOONGARCH64
+#endif // TARGET_RISCV64 || TARGET_LOONGARCH64 || TARGET_POWERPC64
 
     EE_TO_JIT_TRANSITION();
 }

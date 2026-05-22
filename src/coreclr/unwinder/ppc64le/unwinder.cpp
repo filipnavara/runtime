@@ -7,6 +7,306 @@
 
 #include "unwinder.h"
 
+static bool IsEndCode(BYTE opcode)
+{
+    return (opcode & 0xFE) == 0xE4;
+}
+
+static BYTE ReadUnwindByte(ULONG_PTR address)
+{
+    return *dac_cast<PTR_BYTE>(address);
+}
+
+static DWORD ReadUnwindDword(ULONG_PTR address)
+{
+    return *dac_cast<PTR_DWORD>(address);
+}
+
+static DWORD64 ReadStackQword(DWORD64 address)
+{
+    return *dac_cast<PTR_UINT64>(address);
+}
+
+static void RestoreIntegerRegister(PCONTEXT context, PT_KNONVOLATILE_CONTEXT_POINTERS contextPointers, DWORD reg, DWORD64 address)
+{
+    DWORD64 value = ReadStackQword(address);
+
+    switch (reg)
+    {
+        case 14:
+            context->R14 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R14 = (PDWORD64)address;
+            }
+            break;
+        case 15:
+            context->R15 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R15 = (PDWORD64)address;
+            }
+            break;
+        case 16:
+            context->R16 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R16 = (PDWORD64)address;
+            }
+            break;
+        case 17:
+            context->R17 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R17 = (PDWORD64)address;
+            }
+            break;
+        case 18:
+            context->R18 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R18 = (PDWORD64)address;
+            }
+            break;
+        case 19:
+            context->R19 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R19 = (PDWORD64)address;
+            }
+            break;
+        case 20:
+            context->R20 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R20 = (PDWORD64)address;
+            }
+            break;
+        case 21:
+            context->R21 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R21 = (PDWORD64)address;
+            }
+            break;
+        case 22:
+            context->R22 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R22 = (PDWORD64)address;
+            }
+            break;
+        case 23:
+            context->R23 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R23 = (PDWORD64)address;
+            }
+            break;
+        case 24:
+            context->R24 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R24 = (PDWORD64)address;
+            }
+            break;
+        case 25:
+            context->R25 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R25 = (PDWORD64)address;
+            }
+            break;
+        case 26:
+            context->R26 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R26 = (PDWORD64)address;
+            }
+            break;
+        case 27:
+            context->R27 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R27 = (PDWORD64)address;
+            }
+            break;
+        case 28:
+            context->R28 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R28 = (PDWORD64)address;
+            }
+            break;
+        case 29:
+            context->R29 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R29 = (PDWORD64)address;
+            }
+            break;
+        case 30:
+            context->R30 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R30 = (PDWORD64)address;
+            }
+            break;
+        case 31:
+            context->R31 = value;
+            if (contextPointers != nullptr)
+            {
+                contextPointers->R31 = (PDWORD64)address;
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+static unsigned GetUnwindCodeSize(BYTE opcode)
+{
+    if ((opcode & 0xE0) == 0x00)
+    {
+        return 1;
+    }
+
+    if ((opcode & 0xF8) == 0xC0)
+    {
+        return 2;
+    }
+
+    if ((opcode == 0xD0) || ((opcode & 0xFE) == 0xDC) || (opcode == 0xE2))
+    {
+        return 3;
+    }
+
+    if (opcode == 0xE0)
+    {
+        return 4;
+    }
+
+    if (opcode == 0xE6)
+    {
+        return 2;
+    }
+
+    return 1;
+}
+
+static void UnwindPpc64leJitFrame(
+    ULONG64 imageBase,
+    PCONTEXT context,
+    PT_RUNTIME_FUNCTION functionEntry,
+    PULONG64 establisherFrame,
+    PT_KNONVOLATILE_CONTEXT_POINTERS contextPointers)
+{
+    ULONG_PTR unwindData = imageBase + functionEntry->UnwindData;
+    DWORD     header     = ReadUnwindDword(unwindData);
+    unwindData += sizeof(DWORD);
+
+    DWORD codeWords   = (header >> 27) & 0x1F;
+    DWORD epilogCount = (header >> 22) & 0x1F;
+    DWORD eBit        = (header >> 21) & 0x01;
+
+    if ((codeWords == 0) && (epilogCount == 0))
+    {
+        DWORD extended = ReadUnwindDword(unwindData);
+        unwindData += sizeof(DWORD);
+        codeWords   = (extended >> 16) & 0xFF;
+        epilogCount = extended & 0xFFFF;
+    }
+
+    if (eBit == 0)
+    {
+        unwindData += epilogCount * sizeof(DWORD);
+    }
+
+    ULONG_PTR code    = unwindData;
+    ULONG_PTR codeEnd = unwindData + (codeWords * sizeof(DWORD));
+
+    DWORD savedIntegerCalleeCount = 0;
+    bool  restoredLink            = false;
+
+    while (code < codeEnd)
+    {
+        BYTE opcode = ReadUnwindByte(code++);
+        if (IsEndCode(opcode))
+        {
+            break;
+        }
+
+        if ((opcode & 0xE0) == 0x00)
+        {
+            context->R1 += 16 * (opcode & 0x1F);
+        }
+        else if ((opcode & 0xF8) == 0xC0)
+        {
+            DWORD value = ((opcode & 0x07) << 8) | ReadUnwindByte(code);
+            code += 1;
+            context->R1 += 16 * value;
+        }
+        else if (opcode == 0xD0)
+        {
+            DWORD reg    = ReadUnwindByte(code);
+            DWORD offset = ReadUnwindByte(code + 1) * sizeof(DWORD64);
+            code += 2;
+
+            RestoreIntegerRegister(context, contextPointers, reg, context->R1 + offset);
+
+            if ((reg >= 14) && (reg <= 30))
+            {
+                savedIntegerCalleeCount++;
+            }
+        }
+        else if ((opcode & 0xFE) == 0xDC)
+        {
+            code += 2;
+        }
+        else if (opcode == 0xE0)
+        {
+            DWORD value = (ReadUnwindByte(code) << 16) | (ReadUnwindByte(code + 1) << 8) | ReadUnwindByte(code + 2);
+            code += 3;
+            context->R1 += 16 * value;
+        }
+        else if (opcode == 0xE1)
+        {
+            context->R1 = context->R31;
+        }
+        else if (opcode == 0xE2)
+        {
+            DWORD value = (ReadUnwindByte(code) << 8) | ReadUnwindByte(code + 1);
+            code += 2;
+            context->R1 = context->R31 - (8 * value);
+        }
+        else if (opcode == 0xE6)
+        {
+            DWORD offset  = ReadUnwindByte(code) * sizeof(DWORD64);
+            code += 1;
+
+            context->Link = ReadStackQword(context->R1 + offset);
+            restoredLink  = true;
+        }
+        else
+        {
+            code += GetUnwindCodeSize(opcode) - 1;
+        }
+    }
+
+    if (!restoredLink)
+    {
+        DWORD64 linkAddress = context->R1 - ((savedIntegerCalleeCount + 1) * sizeof(DWORD64));
+        context->Link       = ReadStackQword(linkAddress);
+    }
+
+    context->Nip = context->Link;
+
+    if (establisherFrame != nullptr)
+    {
+        *establisherFrame = context->R1;
+    }
+}
+
 BOOL OOPStackUnwinderPPC64LE::Unwind(T_CONTEXT* pContext)
 {
     if (pContext->Link == 0)
@@ -73,34 +373,16 @@ RtlVirtualUnwind(
 
     if (ARGUMENT_PRESENT(ContextPointers))
     {
-        ContextPointers->R14 = &ContextRecord->R14;
-        ContextPointers->R15 = &ContextRecord->R15;
-        ContextPointers->R16 = &ContextRecord->R16;
-        ContextPointers->R17 = &ContextRecord->R17;
-        ContextPointers->R18 = &ContextRecord->R18;
-        ContextPointers->R19 = &ContextRecord->R19;
-        ContextPointers->R20 = &ContextRecord->R20;
-        ContextPointers->R21 = &ContextRecord->R21;
-        ContextPointers->R22 = &ContextRecord->R22;
-        ContextPointers->R23 = &ContextRecord->R23;
-        ContextPointers->R24 = &ContextRecord->R24;
-        ContextPointers->R25 = &ContextRecord->R25;
-        ContextPointers->R26 = &ContextRecord->R26;
-        ContextPointers->R27 = &ContextRecord->R27;
-        ContextPointers->R28 = &ContextRecord->R28;
-        ContextPointers->R29 = &ContextRecord->R29;
-        ContextPointers->R30 = &ContextRecord->R30;
-        ContextPointers->R31 = &ContextRecord->R31;
+        memset(ContextPointers, 0, sizeof(*ContextPointers));
     }
 
-    if (ContextRecord->Link != 0)
+    if (FunctionEntry != nullptr)
     {
-        ContextRecord->Nip = ContextRecord->Link;
-        ContextRecord->Link = 0;
+        UnwindPpc64leJitFrame(ImageBase, ContextRecord, FunctionEntry, EstablisherFrame, ContextPointers);
     }
     else
     {
-        ContextRecord->Nip = 0;
+        ContextRecord->Nip = ContextRecord->Link;
     }
 
     return nullptr;

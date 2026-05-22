@@ -25,6 +25,8 @@
 .set PPC64_UMENTRY_R31_SAVE, 0x68
 .set PPC64_UMENTRY_R3_SAVE, 0x70
 .set PPC64_UMENTRY_F1_SAVE, 0xB0
+.set PPC64_HIJACK_ARGS_OFFSET, 0x20
+.set PPC64_HIJACK_FRAME_SIZE, PPC64_HIJACK_ARGS_OFFSET + SIZEOF__HijackArgs
 
 .macro SAVE_ARGUMENT_REGISTERS base, ofs
     std 3,  \ofs+0(\base)
@@ -373,25 +375,70 @@ NESTED_ENTRY GenericPInvokeCalliHelper, _TEXT, NoHandler
     blr
 NESTED_END GenericPInvokeCalliHelper, _TEXT
 
-NESTED_ENTRY DelayLoad_Helper, _TEXT, NoHandler
-    trap
-    blr
-NESTED_END DelayLoad_Helper, _TEXT
-
-NESTED_ENTRY DelayLoad_Helper_Obj, _TEXT, NoHandler
-    trap
-    blr
-NESTED_END DelayLoad_Helper_Obj, _TEXT
-
-NESTED_ENTRY DelayLoad_Helper_ObjObj, _TEXT, NoHandler
-    trap
-    blr
-NESTED_END DelayLoad_Helper_ObjObj, _TEXT
+#ifdef FEATURE_READYTORUN
 
 NESTED_ENTRY DelayLoad_MethodCall, _TEXT, NoHandler
-    trap
-    blr
+    stdu 1, -PPC64_PRESTUB_STACK_FRAME_SIZE(1)
+    .cfi_adjust_cfa_offset PPC64_PRESTUB_STACK_FRAME_SIZE
+    std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    SAVE_TRANSITION_BLOCK 1
+
+    addi 3, 1, PPC64_PRESTUB_TRANSITION_BLOCK
+    mr 4, 12
+    mr 5, 11
+    mr 6, 10
+    bl C_FUNC(ExternalMethodFixupWorker)
+    nop
+
+    mr 12, 3
+    ld 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    RESTORE_TRANSITION_BLOCK_FOR_TAILCALL 1
+    addi 1, 1, PPC64_PRESTUB_STACK_FRAME_SIZE
+    .cfi_adjust_cfa_offset -PPC64_PRESTUB_STACK_FRAME_SIZE
+    mtctr 12
+    bctr
 NESTED_END DelayLoad_MethodCall, _TEXT
+
+.macro DYNAMIC_HELPER suffix, frameFlags
+NESTED_ENTRY DelayLoad_Helper\suffix, _TEXT, NoHandler
+    stdu 1, -PPC64_PRESTUB_STACK_FRAME_SIZE(1)
+    .cfi_adjust_cfa_offset PPC64_PRESTUB_STACK_FRAME_SIZE
+    std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    SAVE_TRANSITION_BLOCK 1
+
+    addi 3, 1, PPC64_PRESTUB_TRANSITION_BLOCK
+    mr 4, 12
+    mr 5, 11
+    mr 6, 10
+    li 7, \frameFlags
+    bl C_FUNC(DynamicHelperWorker)
+    nop
+
+    cmpdi 3, 0
+    bne LOCAL_LABEL(DelayLoad_Helper\suffix\()_TailCall)
+
+    ld 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    RESTORE_TRANSITION_BLOCK_FOR_TAILCALL 1
+    addi 1, 1, PPC64_PRESTUB_STACK_FRAME_SIZE
+    .cfi_adjust_cfa_offset -PPC64_PRESTUB_STACK_FRAME_SIZE
+    blr
+
+LOCAL_LABEL(DelayLoad_Helper\suffix\()_TailCall):
+    mr 12, 3
+    ld 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    RESTORE_TRANSITION_BLOCK_FOR_TAILCALL 1
+    addi 1, 1, PPC64_PRESTUB_STACK_FRAME_SIZE
+    .cfi_adjust_cfa_offset -PPC64_PRESTUB_STACK_FRAME_SIZE
+    mtctr 12
+    bctr
+NESTED_END DelayLoad_Helper\suffix, _TEXT
+.endm
+
+DYNAMIC_HELPER , DynamicHelperFrameFlags_Default
+DYNAMIC_HELPER _Obj, DynamicHelperFrameFlags_ObjectArg
+DYNAMIC_HELPER _ObjObj, DynamicHelperFrameFlags_ObjectArg2
+
+#endif // FEATURE_READYTORUN
 
 LEAF_ENTRY ThePreStubPatch, _TEXT
 PATCH_LABEL ThePreStubPatchLabel
@@ -611,8 +658,77 @@ LEAF_ENTRY JIT_GetDynamicNonGCStaticBase_SingleAppDomain, _TEXT
     blr
 LEAF_END JIT_GetDynamicNonGCStaticBase_SingleAppDomain, _TEXT
 
+// OnHijackTripThread is reached by replacing a managed return address. Save the
+// register state that may contain return values or GC roots, let the VM perform
+// the hijack work, then return to the original address written back by the VM.
 NESTED_ENTRY OnHijackTripThread, _TEXT, NoHandler
-    trap
+    stdu 1, -PPC64_HIJACK_FRAME_SIZE(1)
+    .cfi_adjust_cfa_offset PPC64_HIJACK_FRAME_SIZE
+
+    mflr 0
+    std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+
+    std 31, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R31(1)
+    std 0,  PPC64_HIJACK_ARGS_OFFSET + HijackArgs__Link(1)
+    std 14, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R14(1)
+    std 15, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R15(1)
+    std 16, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R16(1)
+    std 17, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R17(1)
+    std 18, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R18(1)
+    std 19, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R19(1)
+    std 20, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R20(1)
+    std 21, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R21(1)
+    std 22, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R22(1)
+    std 23, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R23(1)
+    std 24, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R24(1)
+    std 25, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R25(1)
+    std 26, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R26(1)
+    std 27, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R27(1)
+    std 28, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R28(1)
+    std 29, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R29(1)
+    std 30, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R30(1)
+
+    std 3, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R3(1)
+    std 4, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R4(1)
+    std 5, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R5(1)
+    stfd 1, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__F1(1)
+    stfd 2, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__F2(1)
+
+    addi 3, 1, PPC64_HIJACK_ARGS_OFFSET
+    bl C_FUNC(OnHijackWorker)
+    nop
+
+    ld 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+
+    ld 3, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R3(1)
+    ld 4, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R4(1)
+    ld 5, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R5(1)
+    lfd 1, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__F1(1)
+    lfd 2, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__F2(1)
+
+    ld 31, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R31(1)
+    ld 0,  PPC64_HIJACK_ARGS_OFFSET + HijackArgs__Link(1)
+    ld 14, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R14(1)
+    ld 15, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R15(1)
+    ld 16, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R16(1)
+    ld 17, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R17(1)
+    ld 18, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R18(1)
+    ld 19, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R19(1)
+    ld 20, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R20(1)
+    ld 21, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R21(1)
+    ld 22, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R22(1)
+    ld 23, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R23(1)
+    ld 24, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R24(1)
+    ld 25, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R25(1)
+    ld 26, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R26(1)
+    ld 27, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R27(1)
+    ld 28, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R28(1)
+    ld 29, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R29(1)
+    ld 30, PPC64_HIJACK_ARGS_OFFSET + HijackArgs__R30(1)
+
+    mtlr 0
+    addi 1, 1, PPC64_HIJACK_FRAME_SIZE
+    .cfi_adjust_cfa_offset -PPC64_HIJACK_FRAME_SIZE
     blr
 NESTED_END OnHijackTripThread, _TEXT
 

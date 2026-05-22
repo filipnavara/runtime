@@ -408,6 +408,27 @@ void ExInfo::UpdateNonvolatileRegisters(CONTEXT *pContextRecord, REGDISPLAY *pRe
     UPDATEREG(S11);
     UPDATEREG(Fp);
 
+#elif defined(TARGET_POWERPC64)
+
+    UPDATEREG(R14);
+    UPDATEREG(R15);
+    UPDATEREG(R16);
+    UPDATEREG(R17);
+    UPDATEREG(R18);
+    UPDATEREG(R19);
+    UPDATEREG(R20);
+    UPDATEREG(R21);
+    UPDATEREG(R22);
+    UPDATEREG(R23);
+    UPDATEREG(R24);
+    UPDATEREG(R25);
+    UPDATEREG(R26);
+    UPDATEREG(R27);
+    UPDATEREG(R28);
+    UPDATEREG(R29);
+    UPDATEREG(R30);
+    UPDATEREG(R31);
+
 #elif defined(TARGET_WASM)
     // nothing to do, wasm doesn't have registers
 #else

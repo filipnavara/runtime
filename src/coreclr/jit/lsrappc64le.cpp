@@ -681,6 +681,19 @@ int LinearScan::BuildCall(GenTreeCall* call)
             assert(ctrlExprCandidates != RBM_NONE);
         }
 
+        if (call->GetIndirectionCellArgKind() != WellKnownArg::None)
+        {
+            // The indirection cell is passed in REG_R2R_INDIRECT_PARAM. On
+            // PPC64LE this is also the ELFv2 indirect-call target register, but
+            // delay-load helpers consume it as the cell address. Keep the
+            // control expression in a different register so codegen can branch
+            // through the target without overwriting the cell argument.
+            SingleTypeRegSet r2rIndirectParamReg = RBM_R2R_INDIRECT_PARAM.GetIntRegSet();
+            ctrlExprCandidates =
+                (ctrlExprCandidates == RBM_NONE ? allRegs(TYP_INT) : ctrlExprCandidates) & ~r2rIndirectParamReg;
+            assert(ctrlExprCandidates != RBM_NONE);
+        }
+
         if (ctrlExpr->isContainedIntOrIImmed())
         {
             buildInternalIntRegisterDefForNode(call);

@@ -396,10 +396,55 @@ void SoftwareExceptionFrame::UpdateContextFromTransitionBlock(TransitionBlock* p
         return;
     }
 
-    m_Context.R1  = (UINT_PTR)(pTransitionBlock + 1);
-    m_Context.Nip = pTransitionBlock->m_ReturnAddress;
-    m_Context.R31 = (UINT_PTR)pTransitionBlock->m_calleeSavedRegisters.r31;
-    m_Context.Link = (UINT_PTR)pTransitionBlock->m_calleeSavedRegisters.link;
+    m_Context.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT;
+
+    m_Context.R3  = pTransitionBlock->m_argumentRegisters.r[0];
+    m_Context.R4  = pTransitionBlock->m_argumentRegisters.r[1];
+    m_Context.R5  = pTransitionBlock->m_argumentRegisters.r[2];
+    m_Context.R6  = pTransitionBlock->m_argumentRegisters.r[3];
+    m_Context.R7  = pTransitionBlock->m_argumentRegisters.r[4];
+    m_Context.R8  = pTransitionBlock->m_argumentRegisters.r[5];
+    m_Context.R9  = pTransitionBlock->m_argumentRegisters.r[6];
+    m_Context.R10 = pTransitionBlock->m_argumentRegisters.r[7];
+
+    m_Context.R14 = pTransitionBlock->r14;
+    m_Context.R15 = pTransitionBlock->r15;
+    m_Context.R16 = pTransitionBlock->r16;
+    m_Context.R17 = pTransitionBlock->r17;
+    m_Context.R18 = pTransitionBlock->r18;
+    m_Context.R19 = pTransitionBlock->r19;
+    m_Context.R20 = pTransitionBlock->r20;
+    m_Context.R21 = pTransitionBlock->r21;
+    m_Context.R22 = pTransitionBlock->r22;
+    m_Context.R23 = pTransitionBlock->r23;
+    m_Context.R24 = pTransitionBlock->r24;
+    m_Context.R25 = pTransitionBlock->r25;
+    m_Context.R26 = pTransitionBlock->r26;
+    m_Context.R27 = pTransitionBlock->r27;
+    m_Context.R28 = pTransitionBlock->r28;
+    m_Context.R29 = pTransitionBlock->r29;
+    m_Context.R30 = pTransitionBlock->r30;
+    m_Context.R31 = pTransitionBlock->r31;
+
+    FloatArgumentRegisters* pFloatArgs =
+        (FloatArgumentRegisters*)((BYTE*)pTransitionBlock + TransitionBlock::GetOffsetOfFloatArgumentRegisters());
+    memcpy(&m_Context.F1, &pFloatArgs->f[0], sizeof(double));
+    memcpy(&m_Context.F2, &pFloatArgs->f[1], sizeof(double));
+    memcpy(&m_Context.F3, &pFloatArgs->f[2], sizeof(double));
+    memcpy(&m_Context.F4, &pFloatArgs->f[3], sizeof(double));
+    memcpy(&m_Context.F5, &pFloatArgs->f[4], sizeof(double));
+    memcpy(&m_Context.F6, &pFloatArgs->f[5], sizeof(double));
+    memcpy(&m_Context.F7, &pFloatArgs->f[6], sizeof(double));
+    memcpy(&m_Context.F8, &pFloatArgs->f[7], sizeof(double));
+    memcpy(&m_Context.F9, &pFloatArgs->f[8], sizeof(double));
+    memcpy(&m_Context.F10, &pFloatArgs->f[9], sizeof(double));
+    memcpy(&m_Context.F11, &pFloatArgs->f[10], sizeof(double));
+    memcpy(&m_Context.F12, &pFloatArgs->f[11], sizeof(double));
+    memcpy(&m_Context.F13, &pFloatArgs->f[12], sizeof(double));
+
+    m_Context.R1   = (UINT_PTR)(pTransitionBlock + 1);
+    m_Context.Nip  = pTransitionBlock->m_ReturnAddress;
+    m_Context.Link = pTransitionBlock->m_ReturnAddress;
     m_ReturnAddress = pTransitionBlock->m_ReturnAddress;
 
     FillContextPointers(&m_ContextPointers, &m_Context);

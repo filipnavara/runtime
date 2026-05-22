@@ -51,9 +51,9 @@ class AsmOffsets
     public const int OFFSETOF__REGDISPLAY__SP = 0xba8;
     public const int OFFSETOF__REGDISPLAY__ControlPC = 0xbb0;
 #elif TARGET_POWERPC64
-    public const int SIZEOF__REGDISPLAY = 0x1A8;
-    public const int OFFSETOF__REGDISPLAY__SP = 0x108;
-    public const int OFFSETOF__REGDISPLAY__ControlPC = 0x110;
+    public const int SIZEOF__REGDISPLAY = 0x650;
+    public const int OFFSETOF__REGDISPLAY__SP = 0x5d8;
+    public const int OFFSETOF__REGDISPLAY__ControlPC = 0x5e0;
 #elif TARGET_WASM
     public const int SIZEOF__REGDISPLAY = 0x58;
     public const int OFFSETOF__REGDISPLAY__SP = 0x50;
@@ -125,9 +125,9 @@ class AsmOffsets
     public const int OFFSETOF__REGDISPLAY__SP = 0xba0;
     public const int OFFSETOF__REGDISPLAY__ControlPC = 0xba8;
 #elif TARGET_POWERPC64
-    public const int SIZEOF__REGDISPLAY = 0x1A8;
-    public const int OFFSETOF__REGDISPLAY__SP = 0x108;
-    public const int OFFSETOF__REGDISPLAY__ControlPC = 0x110;
+    public const int SIZEOF__REGDISPLAY = 0x650;
+    public const int OFFSETOF__REGDISPLAY__SP = 0x5d8;
+    public const int OFFSETOF__REGDISPLAY__ControlPC = 0x5e0;
 #elif TARGET_WASM
     public const int SIZEOF__REGDISPLAY = 0x54;
     public const int OFFSETOF__REGDISPLAY__SP = 0x4c;
@@ -183,7 +183,7 @@ class AsmOffsets
 #elif TARGET_LOONGARCH64
     public const int SIZEOF__PAL_LIMITED_CONTEXT = 0x520;
 #elif TARGET_POWERPC64
-    public const int SIZEOF__PAL_LIMITED_CONTEXT = 0x188;
+    public const int SIZEOF__PAL_LIMITED_CONTEXT = 0x240;
 #elif TARGET_WASM
     public const int SIZEOF__PAL_LIMITED_CONTEXT = 0x14;
 #endif
@@ -207,8 +207,8 @@ class AsmOffsets
     public const int OFFSETOF__PAL_LIMITED_CONTEXT__IP = 0x108;
     public const int OFFSETOF__PAL_LIMITED_CONTEXT__FP = 0xb8;
 #elif TARGET_POWERPC64
-    public const int OFFSETOF__PAL_LIMITED_CONTEXT__IP = 0xF0;
-    public const int OFFSETOF__PAL_LIMITED_CONTEXT__FP = 0x0;
+    public const int OFFSETOF__PAL_LIMITED_CONTEXT__IP = 0x210;
+    public const int OFFSETOF__PAL_LIMITED_CONTEXT__FP = 0x100;
 #elif TARGET_WASM
     public const int OFFSETOF__PAL_LIMITED_CONTEXT__IP = 0x10;
     public const int OFFSETOF__PAL_LIMITED_CONTEXT__FP = 0x0c;
@@ -277,7 +277,6 @@ class AsmOffsets
 #endif // TARGET_64BIT
 
 #if __cplusplus
-#if !TARGET_POWERPC64
     static_assert(sizeof(CONTEXT) == AsmOffsets::SIZEOF__PAL_LIMITED_CONTEXT);
 #if TARGET_AMD64
     static_assert(offsetof(CONTEXT, Rip) == AsmOffsets::OFFSETOF__PAL_LIMITED_CONTEXT__IP);
@@ -297,6 +296,9 @@ class AsmOffsets
 #elif TARGET_LOONGARCH64
     static_assert(offsetof(CONTEXT, Pc) == AsmOffsets::OFFSETOF__PAL_LIMITED_CONTEXT__IP);
     static_assert(offsetof(CONTEXT, Fp) == AsmOffsets::OFFSETOF__PAL_LIMITED_CONTEXT__FP);
+#elif TARGET_POWERPC64
+    static_assert(offsetof(CONTEXT, Nip) == AsmOffsets::OFFSETOF__PAL_LIMITED_CONTEXT__IP);
+    static_assert(offsetof(CONTEXT, R31) == AsmOffsets::OFFSETOF__PAL_LIMITED_CONTEXT__FP);
 #elif TARGET_WASM
     static_assert(offsetof(CONTEXT, InterpreterIP) == AsmOffsets::OFFSETOF__PAL_LIMITED_CONTEXT__IP);
     static_assert(offsetof(CONTEXT, InterpreterFP) == AsmOffsets::OFFSETOF__PAL_LIMITED_CONTEXT__FP);
@@ -329,7 +331,6 @@ class AsmOffsets
     static_assert(offsetof(ExInfo, m_propagateExceptionContext) == OFFSETOF__ExInfo__m_pReversePInvokePropagationContext);
 #endif
 
-#endif // !TARGET_POWERPC64
 #endif // __cplusplus
 }
 #if __cplusplus

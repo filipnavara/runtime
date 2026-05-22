@@ -8,6 +8,7 @@
 #include "virtualcallstub.h"
 #include "jitinterface.h"
 #include "codeman.h"
+#include "executableallocator.h"
 
 #ifdef PROFILING_SUPPORTED
 #include "proftoeeinterfaceimpl.h"
@@ -314,58 +315,200 @@ VOID ResetCurrentContext()
 
 #ifdef FEATURE_READYTORUN
 #ifndef FEATURE_STUBPRECODE_DYNAMIC_HELPERS
+#ifndef DACCESS_COMPILE
+namespace
+{
+constexpr int RegR0  = 0;
+constexpr int RegR3  = 3;
+constexpr int RegR4  = 4;
+constexpr int RegR5  = 5;
+constexpr int RegR6  = 6;
+constexpr int RegR12 = 12;
+
+void EmitPpc64Instr(BYTE*& p, DWORD instr)
+{
+    *(DWORD*)p = instr;
+    p += sizeof(DWORD);
+}
+
+DWORD Ppc64DForm(unsigned opcode, int rt, int ra, int imm)
+{
+    return (opcode << 26) | (rt << 21) | (ra << 16) | (imm & 0xffff);
+}
+
+DWORD Ppc64XFormMtctr(int reg)
+{
+    return 0x7c0903a6 | (reg << 21);
+}
+
+DWORD Ppc64Sldi32(int reg)
+{
+    return 0x780007c6 | (reg << 21) | (reg << 16);
+}
+
+void EmitPpc64LoadImm(BYTE*& p, int reg, TADDR value)
+{
+    uint64_t imm = static_cast<uint64_t>(value);
+
+    EmitPpc64Instr(p, Ppc64DForm(15, reg, RegR0, static_cast<int16_t>((imm >> 48) & 0xffff))); // addis
+    EmitPpc64Instr(p, Ppc64DForm(24, reg, reg, static_cast<uint16_t>((imm >> 32) & 0xffff)));  // ori
+    EmitPpc64Instr(p, Ppc64Sldi32(reg));                                                       // sldi reg, reg, 32
+    EmitPpc64Instr(p, Ppc64DForm(25, reg, reg, static_cast<uint16_t>((imm >> 16) & 0xffff)));  // oris
+    EmitPpc64Instr(p, Ppc64DForm(24, reg, reg, static_cast<uint16_t>(imm & 0xffff)));          // ori
+}
+
+void EmitPpc64TailCall(BYTE*& p, PCODE target)
+{
+    EmitPpc64LoadImm(p, RegR12, static_cast<TADDR>(target));
+    EmitPpc64Instr(p, Ppc64XFormMtctr(RegR12)); // mtctr r12
+    EmitPpc64Instr(p, 0x4e800420);              // bctr
+}
+
+#define DYNAMIC_HELPER_ALIGNMENT sizeof(TADDR)
+
+#define BEGIN_DYNAMIC_HELPER_EMIT_WORKER(size)                                                            \
+    SIZE_T cb        = size;                                                                              \
+    SIZE_T cbAligned = ALIGN_UP(cb, DYNAMIC_HELPER_ALIGNMENT);                                            \
+    BYTE*  pStartRX  = (BYTE*)(void*)pAllocator->GetDynamicHelpersHeap()->AllocAlignedMem(cbAligned,      \
+                                                                                         DYNAMIC_HELPER_ALIGNMENT); \
+    ExecutableWriterHolderNoLog<BYTE> startWriterHolder(pStartRX, cbAligned);                            \
+    BYTE*                             pStart = startWriterHolder.GetRW();                                \
+    BYTE*                             p      = pStart;
+
+#define BEGIN_DYNAMIC_HELPER_EMIT(size) BEGIN_DYNAMIC_HELPER_EMIT_WORKER(size)
+
+#define END_DYNAMIC_HELPER_EMIT()                                                                         \
+    _ASSERTE(pStart + cb == p);                                                                           \
+    while (p < pStart + cbAligned)                                                                        \
+    {                                                                                                     \
+        *(DWORD*)p = 0;                                                                                   \
+        p += sizeof(DWORD);                                                                               \
+    }                                                                                                     \
+    ClrFlushInstructionCache(pStartRX, cbAligned);                                                        \
+    return (PCODE)pStartRX
+} // anonymous namespace
+
 PCODE DynamicHelpers::CreateHelper(LoaderAllocator* pAllocator, TADDR arg, PCODE target)
 {
-    PORTABILITY_ASSERT("DynamicHelpers::CreateHelper is not implemented on PPC64LE");
-    return NULL;
+    STANDARD_VM_CONTRACT;
+
+    BEGIN_DYNAMIC_HELPER_EMIT(48);
+
+    EmitPpc64LoadImm(p, RegR3, arg);
+    EmitPpc64TailCall(p, target);
+
+    END_DYNAMIC_HELPER_EMIT();
 }
 
 PCODE DynamicHelpers::CreateHelperWithArg(LoaderAllocator* pAllocator, TADDR arg, PCODE target)
 {
-    PORTABILITY_ASSERT("DynamicHelpers::CreateHelperWithArg is not implemented on PPC64LE");
-    return NULL;
+    STANDARD_VM_CONTRACT;
+
+    BEGIN_DYNAMIC_HELPER_EMIT(48);
+
+    EmitPpc64LoadImm(p, RegR4, arg);
+    EmitPpc64TailCall(p, target);
+
+    END_DYNAMIC_HELPER_EMIT();
 }
 
 PCODE DynamicHelpers::CreateHelper(LoaderAllocator* pAllocator, TADDR arg, TADDR arg2, PCODE target)
 {
-    PORTABILITY_ASSERT("DynamicHelpers::CreateHelper is not implemented on PPC64LE");
-    return NULL;
+    STANDARD_VM_CONTRACT;
+
+    BEGIN_DYNAMIC_HELPER_EMIT(68);
+
+    EmitPpc64LoadImm(p, RegR3, arg);
+    EmitPpc64LoadImm(p, RegR4, arg2);
+    EmitPpc64TailCall(p, target);
+
+    END_DYNAMIC_HELPER_EMIT();
 }
 
 PCODE DynamicHelpers::CreateHelperArgMove(LoaderAllocator* pAllocator, TADDR arg, PCODE target)
 {
-    PORTABILITY_ASSERT("DynamicHelpers::CreateHelperArgMove is not implemented on PPC64LE");
-    return NULL;
+    STANDARD_VM_CONTRACT;
+
+    BEGIN_DYNAMIC_HELPER_EMIT(52);
+
+    EmitPpc64Instr(p, Ppc64DForm(14, RegR4, RegR3, 0)); // addi r4, r3, 0
+    EmitPpc64LoadImm(p, RegR3, arg);
+    EmitPpc64TailCall(p, target);
+
+    END_DYNAMIC_HELPER_EMIT();
 }
 
 PCODE DynamicHelpers::CreateReturn(LoaderAllocator* pAllocator)
 {
-    PORTABILITY_ASSERT("DynamicHelpers::CreateReturn is not implemented on PPC64LE");
-    return NULL;
+    STANDARD_VM_CONTRACT;
+
+    BEGIN_DYNAMIC_HELPER_EMIT(4);
+
+    EmitPpc64Instr(p, 0x4e800020); // blr
+
+    END_DYNAMIC_HELPER_EMIT();
 }
 
 PCODE DynamicHelpers::CreateReturnConst(LoaderAllocator* pAllocator, TADDR arg)
 {
-    PORTABILITY_ASSERT("DynamicHelpers::CreateReturnConst is not implemented on PPC64LE");
-    return NULL;
+    STANDARD_VM_CONTRACT;
+
+    BEGIN_DYNAMIC_HELPER_EMIT(24);
+
+    EmitPpc64LoadImm(p, RegR3, arg);
+    EmitPpc64Instr(p, 0x4e800020); // blr
+
+    END_DYNAMIC_HELPER_EMIT();
 }
 
 PCODE DynamicHelpers::CreateReturnIndirConst(LoaderAllocator* pAllocator, TADDR arg, INT8 offset)
 {
-    PORTABILITY_ASSERT("DynamicHelpers::CreateReturnIndirConst is not implemented on PPC64LE");
-    return NULL;
+    STANDARD_VM_CONTRACT;
+
+    if (offset == 0)
+    {
+        BEGIN_DYNAMIC_HELPER_EMIT(28);
+
+        EmitPpc64LoadImm(p, RegR12, arg);
+        EmitPpc64Instr(p, Ppc64DForm(58, RegR3, RegR12, 0)); // ld r3, 0(r12)
+        EmitPpc64Instr(p, 0x4e800020);                       // blr
+
+        END_DYNAMIC_HELPER_EMIT();
+    }
+
+    BEGIN_DYNAMIC_HELPER_EMIT(32);
+
+    EmitPpc64LoadImm(p, RegR12, arg);
+    EmitPpc64Instr(p, Ppc64DForm(58, RegR3, RegR12, 0)); // ld r3, 0(r12)
+    EmitPpc64Instr(p, Ppc64DForm(14, RegR3, RegR3, offset));
+    EmitPpc64Instr(p, 0x4e800020); // blr
+
+    END_DYNAMIC_HELPER_EMIT();
 }
 
 PCODE DynamicHelpers::CreateHelperWithTwoArgs(LoaderAllocator* pAllocator, TADDR arg, PCODE target)
 {
-    PORTABILITY_ASSERT("DynamicHelpers::CreateHelperWithTwoArgs is not implemented on PPC64LE");
-    return NULL;
+    STANDARD_VM_CONTRACT;
+
+    BEGIN_DYNAMIC_HELPER_EMIT(48);
+
+    EmitPpc64LoadImm(p, RegR5, arg);
+    EmitPpc64TailCall(p, target);
+
+    END_DYNAMIC_HELPER_EMIT();
 }
 
 PCODE DynamicHelpers::CreateHelperWithTwoArgs(LoaderAllocator* pAllocator, TADDR arg, TADDR arg2, PCODE target)
 {
-    PORTABILITY_ASSERT("DynamicHelpers::CreateHelperWithTwoArgs is not implemented on PPC64LE");
-    return NULL;
+    STANDARD_VM_CONTRACT;
+
+    BEGIN_DYNAMIC_HELPER_EMIT(68);
+
+    EmitPpc64LoadImm(p, RegR5, arg);
+    EmitPpc64LoadImm(p, RegR6, arg2);
+    EmitPpc64TailCall(p, target);
+
+    END_DYNAMIC_HELPER_EMIT();
 }
 
 PCODE DynamicHelpers::CreateDictionaryLookupHelper(
@@ -374,6 +517,58 @@ PCODE DynamicHelpers::CreateDictionaryLookupHelper(
     PORTABILITY_ASSERT("DynamicHelpers::CreateDictionaryLookupHelper is not implemented on PPC64LE");
     return NULL;
 }
+#else  // DACCESS_COMPILE
+PCODE DynamicHelpers::CreateHelper(LoaderAllocator* pAllocator, TADDR arg, PCODE target)
+{
+    return NULL;
+}
+
+PCODE DynamicHelpers::CreateHelperWithArg(LoaderAllocator* pAllocator, TADDR arg, PCODE target)
+{
+    return NULL;
+}
+
+PCODE DynamicHelpers::CreateHelper(LoaderAllocator* pAllocator, TADDR arg, TADDR arg2, PCODE target)
+{
+    return NULL;
+}
+
+PCODE DynamicHelpers::CreateHelperArgMove(LoaderAllocator* pAllocator, TADDR arg, PCODE target)
+{
+    return NULL;
+}
+
+PCODE DynamicHelpers::CreateReturn(LoaderAllocator* pAllocator)
+{
+    return NULL;
+}
+
+PCODE DynamicHelpers::CreateReturnConst(LoaderAllocator* pAllocator, TADDR arg)
+{
+    return NULL;
+}
+
+PCODE DynamicHelpers::CreateReturnIndirConst(LoaderAllocator* pAllocator, TADDR arg, INT8 offset)
+{
+    return NULL;
+}
+
+PCODE DynamicHelpers::CreateHelperWithTwoArgs(LoaderAllocator* pAllocator, TADDR arg, PCODE target)
+{
+    return NULL;
+}
+
+PCODE DynamicHelpers::CreateHelperWithTwoArgs(LoaderAllocator* pAllocator, TADDR arg, TADDR arg2, PCODE target)
+{
+    return NULL;
+}
+
+PCODE DynamicHelpers::CreateDictionaryLookupHelper(
+    LoaderAllocator* pAllocator, CORINFO_RUNTIME_LOOKUP* pLookup, DWORD dictionaryIndexAndSlot, Module* pModule)
+{
+    return NULL;
+}
+#endif // DACCESS_COMPILE
 #endif // !FEATURE_STUBPRECODE_DYNAMIC_HELPERS
 #endif // FEATURE_READYTORUN
 

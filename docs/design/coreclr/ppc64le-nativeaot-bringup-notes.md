@@ -3,7 +3,14 @@
 This note tracks the current PPC64LE NativeAOT implementation state and the
 debugging workflows that are useful when changing it.
 
-## Build And Smoke Flow
+## Workspace And Build Flow
+
+The active bring-up checkout lives directly inside WSL at
+`/home/filip/runtime-ppc64le-wsl`. Do not maintain a second synchronized
+checkout and do not prefix local commands with `wsl`; run the build, test,
+debugger, and qemu/binfmt commands directly from this tree.
+
+## NativeAOT Build And Smoke Flow
 
 Do not build a PPC64LE host runtime for the bring-up flow. Build x64 host tools
 and cross-compile the PPC64LE NativeAOT runtime pack and tests. The SDK pack
@@ -75,6 +82,86 @@ When the build is only compiling an individual smoke test, pass the same
 `BuildNativeAOTRuntimePack` and local-pack properties through MSBuild. The local
 PPC64LE pack must be built because there are no upstream PPC64LE NativeAOT
 runtime packs to restore.
+
+## Current CoreCLR BringUpTests Investigation
+
+For initial CoreCLR test passes, keep ReadyToRun and tiering disabled so JIT
+failures are not mixed with R2R fixups, tiered recompilation, or OSR behavior:
+
+```sh
+export DOTNET_ReadyToRun=0
+export DOTNET_TieredCompilation=0
+```
+
+The recent `string.Format`/null-conditional cast failure was caused by a
+PPC64LE-only morph-time conversion of JIT helper calls into R2R-style indirect
+helper calls. Removing that morph change keeps normal JIT helper calls in the
+same shape used by the other architectures and fixes the focused repros below.
+
+The focused `string.Format` repro is:
+
+```csharp
+Console.WriteLine(string.Format("value={0}", 123));
+Console.WriteLine(string.Format("{0}: {1}", "name", "value"));
+```
+
+Run it with:
+
+```sh
+CORE_ROOT=$PWD/artifacts/tests/coreclr/linux.ppc64le.Release/Tests/Core_Root \
+DOTNET_ReadyToRun=0 \
+DOTNET_TieredCompilation=0 \
+$CORE_ROOT/corerun /tmp/ppc-format-repro/bin/Release/net11.0/ppc-format-repro.dll
+```
+
+This now prints the expected output in full-opt mode:
+
+```txt
+value=123
+name: value
+```
+
+The smaller shape found during that investigation is a null-conditional
+interface call followed by an immediate interface `castclass` at the merge:
+
+```csharp
+[MethodImpl(MethodImplOptions.NoInlining)]
+static void M(IFormatProvider? provider)
+{
+    ICustomFormatter? cf =
+        (ICustomFormatter?)provider?.GetFormat(typeof(ICustomFormatter));
+    Console.WriteLine(cf == null ? "null" : "not-null");
+}
+
+M(null);
+```
+
+This now prints `null` in full-opt mode.
+
+Two additional CoreCLR bring-up fixes were needed after the morph cleanup:
+
+- PPC64LE conditional branches now reserve worst-case space for long conditional
+  branches and emit an inverted short branch over a long unconditional branch
+  when the target is out of B-form range. This fixed the checked-JIT emitter
+  assertion seen in `System.TimeZoneInfo:CacheTransitionsForYear`.
+- PPC64LE exception resume now updates nonvolatile registers, preserves reserved
+  ABI registers `r2` and `r13` in `RtlRestoreContext`, and resumes at `Nip`
+  instead of `Link`. This fixed caught-exception crashes in
+  `__tls_get_addr_opt` and the `ArrayExc` case where a throwing range-check
+  helper resumed after the helper call instead of at the caller's catch handler.
+
+The CodeGen BringUpTests wrappers currently pass with ReadyToRun and tiering
+disabled:
+
+```sh
+for t in r d do ro; do
+    CORE_ROOT=$PWD/artifacts/tests/coreclr/linux.ppc64le.Release/Tests/Core_Root \
+    DOTNET_ReadyToRun=0 \
+    DOTNET_TieredCompilation=0 \
+    artifacts/tests/coreclr/linux.ppc64le.Release/JIT/CodeGenBringUpTests/JIT.CodeGenBringUpTests_$t/JIT.CodeGenBringUpTests_$t.sh \
+        -coreroot $PWD/artifacts/tests/coreclr/linux.ppc64le.Release/Tests/Core_Root
+done
+```
 
 ## Current System.Runtime Investigation
 

@@ -86,7 +86,10 @@ LEAF_ENTRY CONTEXT_CaptureContext, _TEXT
 	mfspr 5, 1
 	std %r5, CONTEXT_XER(%r3)
 	mflr %r5
+	// RtlCaptureContext describes the continuation after this call, so the
+	// current LR is both the saved link register and the resume IP.
 	std %r5, CONTEXT_LINK(%r3)
+	std %r5, CONTEXT_NIP(%r3)
 	mfspr 5, 9
 	std %r5, CONTEXT_CTR(%r3)
 
@@ -136,10 +139,11 @@ LEAF_ENTRY RtlRestoreContext, _TEXT
 	lfd %f30, CONTEXT_F30(%r3)
 	lfd %f31, CONTEXT_F31(%r3)
 
-	// Restore all general purpose registers
+	// Restore all general purpose registers except the ABI-reserved TOC and
+	// thread-pointer registers. Managed unwind contexts do not reliably carry
+	// them, and they must retain their current-thread values.
 	ld %r0, CONTEXT_R0(%r3)
 	ld %r1, CONTEXT_R1(%r3)
-	ld %r2, CONTEXT_R2(%r3)
 	ld %r4, CONTEXT_R4(%r3)
 	ld %r5, CONTEXT_R5(%r3)
 	ld %r6, CONTEXT_R6(%r3)
@@ -149,7 +153,6 @@ LEAF_ENTRY RtlRestoreContext, _TEXT
 	ld %r10, CONTEXT_R10(%r3)
 	ld %r11, CONTEXT_R11(%r3)
 	ld %r12, CONTEXT_R12(%r3)
-	ld %r13, CONTEXT_R13(%r3)
 	ld %r14, CONTEXT_R14(%r3)
 	ld %r15, CONTEXT_R15(%r3)
 	ld %r16, CONTEXT_R16(%r3)
@@ -174,10 +177,11 @@ LEAF_ENTRY RtlRestoreContext, _TEXT
 	mtspr 1, 12
 
 	// Restore Control Register - LR
-	mtlr %r0
+	ld %r12, CONTEXT_LINK(%r3)
+	mtlr %r12
 
 	// Restore Control Register - CTR
-	ld %r12, CONTEXT_LINK(%r3)
+	ld %r12, CONTEXT_NIP(%r3)
 	mtctr %r12
 
 	// Restore R3 register

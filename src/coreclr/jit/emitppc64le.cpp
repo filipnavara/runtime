@@ -28,6 +28,27 @@ const emitJumpKind emitReverseJumpKinds[] = {
 #include "emitjmps.h"
 };
 
+static instruction ppcReverseBranchIns(instruction ins)
+{
+    switch (ins)
+    {
+        case INS_beq:
+            return INS_bne;
+        case INS_bne:
+            return INS_beq;
+        case INS_blt:
+            return INS_bge;
+        case INS_bge:
+            return INS_blt;
+        case INS_bgt:
+            return INS_ble;
+        case INS_ble:
+            return INS_bgt;
+        default:
+            unreached();
+    }
+}
+
 /*static*/ instruction emitter::emitJumpKindToIns(emitJumpKind jumpKind)
 {
     assert((unsigned)jumpKind < ArrLen(emitJumpKindInstructions));
@@ -1076,8 +1097,26 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_bne:
             if (id->idInsOpt() == INS_OPTS_JUMP)
             {
-                code =
-                    ppcEncodeBFormBranch(code, emitOutputInstrJumpDistance(dst, ig, static_cast<instrDescJmp*>(id)));
+                instrDescJmp* jmp = static_cast<instrDescJmp*>(id);
+                if (jmp->idjShort)
+                {
+                    code = ppcEncodeBFormBranch(code, emitOutputInstrJumpDistance(dst, ig, jmp));
+                }
+                else
+                {
+                    assert(id->idIns() != INS_bc);
+                    assert(id->idCodeSize() == 2 * sizeof(code_t));
+
+                    code_t reversedBranch = emitInsCode(ppcReverseBranchIns(id->idIns()));
+                    reversedBranch        = ppcEncodeBFormBranch(reversedBranch, 2 * sizeof(code_t));
+                    emitOutput_Instr(dst, reversedBranch);
+
+                    code_t branch = emitInsCode(INS_b);
+                    branch = ppcEncodeIFormBranch(branch, emitOutputInstrJumpDistance(dstAfterOne, ig, jmp));
+                    emitOutput_Instr(dstAfterOne, branch);
+
+                    goto UPDATE_GC_INFO;
+                }
             }
             else if (id->idInsOpt() == INS_OPTS_I)
             {
@@ -1374,7 +1413,7 @@ void emitter::emitIns_Jump(instruction ins, BasicBlock* dst)
 
     id->idIns(ins);
     id->idjShort = false;
-    id->idCodeSize(sizeof(code_t));
+    id->idCodeSize((emitIsCmpJump(ins) ? 2 : 1) * sizeof(code_t));
     id->idInsOpt(INS_OPTS_JUMP);
     id->idAddr()->iiaBBlabel = dst;
 

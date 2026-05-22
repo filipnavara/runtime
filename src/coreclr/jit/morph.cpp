@@ -1749,17 +1749,6 @@ void CallArgs::AddFinalArgsAndDetermineABIInfo(Compiler* comp, GenTreeCall* call
     }
 #if defined(FEATURE_READYTORUN)
 
-#ifdef TARGET_POWERPC64
-    if ((call->gtEntryPoint.addr == nullptr) && call->IsHelperCall())
-    {
-        CORINFO_CONST_LOOKUP helperEntryPoint = comp->compGetHelperFtn(call->GetHelperNum());
-        if (helperEntryPoint.accessType == IAT_PVALUE)
-        {
-            call->setEntryPoint(helperEntryPoint);
-        }
-    }
-#endif
-
 #ifdef TARGET_WASM
     // TARGET_WASM does not use an explicit indirection cell arg for the R2R calling convention since
     // the address of the indirection cell is recoverable from the portable entrypoint which

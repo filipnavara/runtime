@@ -55,8 +55,8 @@ void ExecuteHandlerOnCustomStack(int code, siginfo_t *siginfo, void *context, si
     CONTEXT context2;
     RtlCaptureContext(&context2);
 
-    context2.Link = (size_t)signal_handler_worker;
-    context2.R0 = fakeFrameReturnAddress;
+    context2.Link = fakeFrameReturnAddress;
+    context2.Nip = (size_t)signal_handler_worker;
     context2.R1 = sp;
     context2.R3 = code;
     context2.R4 = (size_t)siginfo;

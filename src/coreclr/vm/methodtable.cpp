@@ -2701,7 +2701,7 @@ void  MethodTable::AssignClassifiedEightByteTypes(SystemVStructRegisterPassingHe
 
 #endif // defined(UNIX_AMD64_ABI_ITF)
 
-#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
 static void SetFpStructInRegistersInfoField(FpStructInRegistersInfo& info, int index,
     bool isFloating, unsigned size, uint32_t offset)
 {
@@ -3007,7 +3007,7 @@ FpStructInRegistersInfo MethodTable::GetFpStructInRegistersInfo(TypeHandle th)
     ));
     return info;
 }
-#endif // defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#endif // defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
 
 #if !defined(DACCESS_COMPILE)
 namespace

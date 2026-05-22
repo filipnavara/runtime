@@ -34,6 +34,10 @@ Get-Content $filename | ForEach-Object {
         $line = $line -replace '^#', ''
         Write-Output "LEAF_ENTRY ${prefix1}${line}, _TEXT"
         Write-Output "    ${jump} EXTERNAL_C_FUNC(${prefix2}${line})"
+        if ($jump -eq "bl") {
+            Write-Output "    nop"
+            Write-Output "    blr"
+        }
         Write-Output "LEAF_END ${prefix1}${line}, _TEXT"
         Write-Output ""
     }

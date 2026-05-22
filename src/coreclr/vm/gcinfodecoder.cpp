@@ -2349,6 +2349,8 @@ template <typename GcInfoEncoding> int TGcInfoDecoder<GcInfoEncoding>::GetStackR
     int esp = 3;
 #elif defined(TARGET_RISCV64)
     int esp = 2;
+#elif defined(TARGET_POWERPC64)
+    int esp = 1;
 #endif
 
     if( GC_SP_REL == spBase )

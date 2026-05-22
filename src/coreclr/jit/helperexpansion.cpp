@@ -847,6 +847,14 @@ bool Compiler::fgExpandThreadLocalAccessForCall(BasicBlock** pBlock, Statement* 
         return false;
     }
 
+#if defined(TARGET_POWERPC64)
+    // CoreCLR JIT code is emitted into a process that loads libcoreclr as a
+    // shared object. The PPC64LE fast path uses initial-exec TLS offsets from
+    // r13, which is not robust for this dynamic loading shape. Keep PPC64LE on
+    // the helper path until the JIT can emit a dynamic TLS access sequence here.
+    return false;
+#endif
+
     if (TargetOS::IsUnix)
     {
 #if defined(TARGET_ARM) || !defined(TARGET_64BIT)

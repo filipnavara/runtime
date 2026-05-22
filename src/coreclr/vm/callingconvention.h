@@ -48,7 +48,7 @@ struct ArgLocDesc
 
     int     m_byteStackIndex;     // Stack offset in bytes (or -1)
     int     m_byteStackSize;      // Stack size in bytes
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     FpStructInRegistersInfo m_structFields; // Struct field info when using floating-point register(s)
 #endif
 
@@ -106,7 +106,7 @@ struct ArgLocDesc
 #if defined(TARGET_ARM64)
         m_hfaFieldSize = 0;
 #endif // defined(TARGET_ARM64)
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
         m_structFields = {};
 #endif
 #if defined(UNIX_AMD64_ABI)
@@ -198,6 +198,33 @@ struct TransitionBlock
             INT64 s11;
             INT64 tp;
             INT64 gp;
+        };
+    };
+    TADDR padding; // Keep size of TransitionBlock as multiple of 16-byte. Simplifies code in PROLOG_WITH_TRANSITION_BLOCK
+    ArgumentRegisters       m_argumentRegisters;
+#elif defined(TARGET_POWERPC64)
+    union {
+        CalleeSavedRegisters m_calleeSavedRegisters;
+        struct {
+            INT64 r31; // frame pointer
+            TADDR m_ReturnAddress;
+            INT64 r14;
+            INT64 r15;
+            INT64 r16;
+            INT64 r17;
+            INT64 r18;
+            INT64 r19;
+            INT64 r20;
+            INT64 r21;
+            INT64 r22;
+            INT64 r23;
+            INT64 r24;
+            INT64 r25;
+            INT64 r26;
+            INT64 r27;
+            INT64 r28;
+            INT64 r29;
+            INT64 r30;
         };
     };
     TADDR padding; // Keep size of TransitionBlock as multiple of 16-byte. Simplifies code in PROLOG_WITH_TRANSITION_BLOCK
@@ -339,7 +366,7 @@ struct TransitionBlock
         {
             return argLocDescForStructInRegs->m_cFloatReg > 0;
         }
-    #elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+    #elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
         if (argLocDescForStructInRegs != NULL)
         {
             return argLocDescForStructInRegs->m_cFloatReg > 0;
@@ -405,7 +432,7 @@ public:
     {
         WRAPPER_NO_CONTRACT;
         m_dwFlags = 0;
-#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
         m_returnedFpFieldOffsets[0] = 0;
         m_returnedFpFieldOffsets[1] = 0;
 #endif
@@ -471,7 +498,7 @@ public:
         return m_dwFlags >> RETURN_FP_SIZE_SHIFT;
     }
 
-#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
     FpStructInRegistersInfo GetReturnFpStructInRegistersInfo()
     {
         WRAPPER_NO_CONTRACT;
@@ -484,7 +511,7 @@ public:
             m_returnedFpFieldOffsets[1],
         };
     }
-#endif // defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#endif // defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
 
 #ifdef TARGET_X86
     //=========================================================================
@@ -580,7 +607,7 @@ public:
 #elif defined(TARGET_ARM64)
         // Composites greater than 16 bytes are passed by reference
         return ((size > ENREGISTERED_PARAMTYPE_MAXSIZE) && !th.IsHFA());
-#elif defined(TARGET_LOONGARCH64)
+#elif defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
         // Composites greater than 16 bytes are passed by reference
         return (size > ENREGISTERED_PARAMTYPE_MAXSIZE);
 #elif defined(TARGET_RISCV64)
@@ -639,7 +666,7 @@ public:
             return ((m_argSize > ENREGISTERED_PARAMTYPE_MAXSIZE) && (!m_argTypeHandle.IsHFA() || this->IsVarArg()));
         }
         return FALSE;
-#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
         if (m_argType == ELEMENT_TYPE_VALUETYPE)
         {
             _ASSERTE(!m_argTypeHandle.IsNull());
@@ -709,7 +736,7 @@ public:
 
     ArgLocDesc* GetArgLocDescForStructInRegs()
     {
-#if defined(UNIX_AMD64_ABI) || defined (TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined (TARGET_RISCV64)
+#if defined(UNIX_AMD64_ABI) || defined (TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined (TARGET_RISCV64) || defined(TARGET_POWERPC64)
         return m_hasArgLocDescForStructInRegs ? &m_argLocDescForStructInRegs : NULL;
 #else
         return NULL;
@@ -906,7 +933,7 @@ public:
     }
 #endif // TARGET_AMD64
 
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     // Get layout information for the argument that the ArgIterator is currently visiting.
     // TODO-RISCV64: support SIMD.
     void GetArgLoc(int argOffset, ArgLocDesc *pLoc)
@@ -971,7 +998,7 @@ public:
 protected:
     DWORD               m_dwFlags;              // Cached flags
     int                 m_nSizeOfArgStack;      // Cached value of SizeOfArgStack
-#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
     // Cached offsets of struct fields returned according to hardware floating-point calling convention
     // (FpStruct::Flags are packed in m_dwFlags)
     unsigned m_returnedFpFieldOffsets[ENREGISTERED_RETURNTYPE_MAXSIZE / sizeof(ARG_SLOT)];
@@ -983,7 +1010,7 @@ protected:
     CorElementType      m_argType;
     int                 m_argSize;
     TypeHandle          m_argTypeHandle;
-#if (defined(TARGET_AMD64) && defined(UNIX_AMD64_ABI)) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if (defined(TARGET_AMD64) && defined(UNIX_AMD64_ABI)) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     ArgLocDesc          m_argLocDescForStructInRegs;
     bool                m_hasArgLocDescForStructInRegs;
 #endif // (TARGET_AMD64 && UNIX_AMD64_ABI) || TARGET_ARM64 || TARGET_LOONGARCH64 || TARGET_RISCV64
@@ -1017,7 +1044,7 @@ protected:
     int             m_idxFPReg;         // Next FP register to be assigned a value
 #endif
 
-#ifdef TARGET_RISCV64
+#if defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     int             m_idxGenReg;        // Next general register to be assigned a value
     int             m_idxStack;         // Next stack slot to be assigned a value
     int             m_idxFPReg;         // Next FP register to be assigned a value
@@ -1323,7 +1350,7 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
         m_ofsStack = 0;
 
         m_idxFPReg = 0;
-#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
         m_idxGenReg = numRegistersUsed;
         m_ofsStack = 0;
         m_idxFPReg = 0;
@@ -1360,7 +1387,7 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
     m_argSize = argSize;
     m_argTypeHandle = thValueType;
 
-#if defined(UNIX_AMD64_ABI) || defined (TARGET_ARM64) || defined (TARGET_LOONGARCH64) || defined (TARGET_RISCV64)
+#if defined(UNIX_AMD64_ABI) || defined (TARGET_ARM64) || defined (TARGET_LOONGARCH64) || defined (TARGET_RISCV64) || defined (TARGET_POWERPC64)
     m_hasArgLocDescForStructInRegs = false;
 #endif
 
@@ -1784,7 +1811,7 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
     int argOfs = TransitionBlock::GetOffsetOfArgs() + m_ofsStack;
     m_ofsStack += cbArg;
     return argOfs;
-#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     assert(!this->IsVarArg()); // Varargs on RISC-V and LoongArch not supported yet
     int cFPRegs = 0;
     FpStructInRegistersInfo info = {};
@@ -1970,7 +1997,7 @@ void ArgIteratorTemplate<ARGITERATOR_BASE>::ComputeReturnFlags()
         break;
 
     case ELEMENT_TYPE_R4:
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
         flags |= (FpStruct::OnlyOne | (2 << FpStruct::PosSizeShift1st)) << RETURN_FP_SIZE_SHIFT;
 #else
 #ifndef ARM_SOFTFP
@@ -1980,7 +2007,7 @@ void ArgIteratorTemplate<ARGITERATOR_BASE>::ComputeReturnFlags()
         break;
 
     case ELEMENT_TYPE_R8:
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
         flags |= (FpStruct::OnlyOne | (3 << FpStruct::PosSizeShift1st)) << RETURN_FP_SIZE_SHIFT;
 #else
 #ifndef ARM_SOFTFP
@@ -2049,7 +2076,7 @@ void ArgIteratorTemplate<ARGITERATOR_BASE>::ComputeReturnFlags()
             }
 #endif // defined(TARGET_X86) || defined(TARGET_AMD64)
 
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
             if  (size <= ENREGISTERED_RETURNTYPE_INTEGER_MAXSIZE)
             {
                 assert(!thValueType.IsTypeDesc());

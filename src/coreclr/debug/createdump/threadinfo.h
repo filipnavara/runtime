@@ -28,6 +28,42 @@ class CrashInfo;
 #define MCREG_Pc(mc)      ((mc).pc)
 #endif
 
+#if defined(__powerpc64__)
+// PTRACE_GETREGSET NT_PRSTATUS returns elf_gregset_t. Glibc does not expose a
+// user_regs_struct on powerpc64, so define the shape used by the kernel notes.
+struct user_regs_struct
+{
+    unsigned long gpr[32];
+    unsigned long nip;
+    unsigned long msr;
+    unsigned long orig_gpr3;
+    unsigned long ctr;
+    unsigned long link;
+    unsigned long xer;
+    unsigned long ccr;
+    unsigned long softe;
+    unsigned long trap;
+    unsigned long dar;
+    unsigned long dsisr;
+    unsigned long result;
+    unsigned long reserved[4];
+};
+
+struct user_fpregs_struct
+{
+    double fpregs[33];
+};
+
+#define MCREG_R1(mc)      ((mc).gpr[1])
+#define MCREG_R31(mc)     ((mc).gpr[31])
+#define MCREG_Nip(mc)     ((mc).nip)
+#define MCREG_Msr(mc)     ((mc).msr)
+#define MCREG_Ctr(mc)     ((mc).ctr)
+#define MCREG_Link(mc)    ((mc).link)
+#define MCREG_Xer(mc)     ((mc).xer)
+#define MCREG_Ccr(mc)     ((mc).ccr)
+#endif
+
 #define FPREG_ErrorOffset(fpregs) *(DWORD*)&((fpregs).rip)
 #define FPREG_ErrorSelector(fpregs) *(((WORD*)&((fpregs).rip)) + 2)
 #define FPREG_DataOffset(fpregs) *(DWORD*)&((fpregs).rdp)
@@ -168,6 +204,10 @@ public:
     inline const uint64_t GetInstructionPointer() const { return MCREG_Pc(m_gpRegisters); }
     inline const uint64_t GetStackPointer() const { return MCREG_Sp(m_gpRegisters); }
     inline const uint64_t GetFramePointer() const { return MCREG_Fp(m_gpRegisters); }
+#elif defined(__powerpc64__)
+    inline const uint64_t GetInstructionPointer() const { return MCREG_Nip(m_gpRegisters); }
+    inline const uint64_t GetStackPointer() const { return MCREG_R1(m_gpRegisters); }
+    inline const uint64_t GetFramePointer() const { return MCREG_R31(m_gpRegisters); }
 #endif
 #endif // __APPLE__
     bool IsCrashThread() const;

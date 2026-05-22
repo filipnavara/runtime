@@ -98,6 +98,10 @@ typedef DPTR(GCCoverageInfo) PTR_GCCoverageInfo; // see code:GCCoverageInfo::sav
 // The following encodings are undefined.
 #define INTERRUPT_INSTR                 0x20000000  // unimp, fld
 
+#elif defined(TARGET_POWERPC64)
+// PPC64 trap instruction.
+#define INTERRUPT_INSTR                 0x7fe00008
+
 #endif // _TARGET_*
 
 // The body of this method is in this header file to allow

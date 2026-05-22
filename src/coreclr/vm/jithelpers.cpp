@@ -1668,6 +1668,9 @@ extern "C" PCODE JIT_PatchpointWorkerWorkerWithPolicy(TransitionBlock * pTransit
 #elif defined(TARGET_LOONGARCH64)
         // jirl r0, rN, 0 = 4 bytes
         osrMethodCode = ip + 4;
+#elif defined(TARGET_POWERPC64)
+        // bctr = 4 bytes
+        osrMethodCode = ip + 4;
 #elif defined(TARGET_RISCV64)
         // jalr x0, xN, 0 = 4 bytes
         osrMethodCode = ip + 4;

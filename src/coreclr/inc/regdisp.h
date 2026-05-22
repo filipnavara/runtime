@@ -206,6 +206,23 @@ typedef struct _RiscV64VolatileContextPointer
 } RiscV64VolatileContextPointer;
 #endif
 
+#if defined(TARGET_POWERPC64)
+typedef struct _PowerPC64VolatileContextPointer
+{
+    PDWORD64 R0;
+    PDWORD64 R3;
+    PDWORD64 R4;
+    PDWORD64 R5;
+    PDWORD64 R6;
+    PDWORD64 R7;
+    PDWORD64 R8;
+    PDWORD64 R9;
+    PDWORD64 R10;
+    PDWORD64 R11;
+    PDWORD64 R12;
+} PowerPC64VolatileContextPointer;
+#endif
+
 struct REGDISPLAY : public REGDISPLAY_BASE {
 #ifdef TARGET_ARM64
     Arm64VolatileContextPointer     volatileCurrContextPointers;
@@ -217,6 +234,10 @@ struct REGDISPLAY : public REGDISPLAY_BASE {
 
 #ifdef TARGET_RISCV64
     RiscV64VolatileContextPointer    volatileCurrContextPointers;
+#endif
+
+#ifdef TARGET_POWERPC64
+    PowerPC64VolatileContextPointer    volatileCurrContextPointers;
 #endif
 
     REGDISPLAY()
@@ -251,7 +272,7 @@ inline TADDR GetRegdisplayStackMark(REGDISPLAY *display)
     _ASSERTE(GetRegdisplaySP(display) == GetSP(display->pCurrentContext));
     return GetRegdisplaySP(display);
 
-#elif defined(TARGET_ARM64) || defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#elif defined(TARGET_ARM64) || defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
 
     _ASSERTE(display->IsCallerContextValid);
     return GetSP(display->pCallerContext);
@@ -344,6 +365,8 @@ inline LPVOID GetRegdisplayReturnValue(REGDISPLAY *display)
     return (LPVOID)display->pCurrentContext->A0;
 #elif defined(TARGET_RISCV64)
     return (LPVOID)display->pCurrentContext->A0;
+#elif defined(TARGET_POWERPC64)
+    return (LPVOID)display->pCurrentContext->R3;
 #else
     PORTABILITY_ASSERT("GetRegdisplayReturnValue NYI for this platform (Regdisp.h)");
     return NULL;
@@ -415,6 +438,25 @@ inline void FillContextPointers(PT_KNONVOLATILE_CONTEXT_POINTERS pCtxPtrs, PT_CO
     *(&pCtxPtrs->Tp) = &pCtx->Tp;
     *(&pCtxPtrs->Fp) = &pCtx->Fp;
     *(&pCtxPtrs->Ra) = &pCtx->Ra;
+#elif defined(TARGET_POWERPC64) // TARGET_RISCV64
+    pCtxPtrs->R14 = &pCtx->R14;
+    pCtxPtrs->R15 = &pCtx->R15;
+    pCtxPtrs->R16 = &pCtx->R16;
+    pCtxPtrs->R17 = &pCtx->R17;
+    pCtxPtrs->R18 = &pCtx->R18;
+    pCtxPtrs->R19 = &pCtx->R19;
+    pCtxPtrs->R20 = &pCtx->R20;
+    pCtxPtrs->R21 = &pCtx->R21;
+    pCtxPtrs->R22 = &pCtx->R22;
+    pCtxPtrs->R23 = &pCtx->R23;
+    pCtxPtrs->R24 = &pCtx->R24;
+    pCtxPtrs->R25 = &pCtx->R25;
+    pCtxPtrs->R26 = &pCtx->R26;
+    pCtxPtrs->R27 = &pCtx->R27;
+    pCtxPtrs->R28 = &pCtx->R28;
+    pCtxPtrs->R29 = &pCtx->R29;
+    pCtxPtrs->R30 = &pCtx->R30;
+    pCtxPtrs->R31 = &pCtx->R31;
 #elif defined(TARGET_WASM)
     // Wasm doesn't have registers
 #else // TARGET_WASM

@@ -486,6 +486,28 @@ the target address in `r12`, branch through CTR, then restore `r2`. Direct
 P/Invoke calls load the target from the GOT; indirect unmanaged calls move the
 already-computed target into `r12`.
 
+CoreCLR JIT code currently uses absolute address materialization for method
+body references when `compReloc` is false; it does not rely on `r2` as a JIT
+TOC pointer. In that shape, reverse-P/Invoke / `[UnmanagedCallersOnly]` methods
+do not need a synthetic global-entry TOC prefix, and managed direct-call targets
+must not be adjusted by a local-entry offset. Keep the ELFv2 dual-entry
+`symbol+localentry` rule for relocatable R2R/AOT code shapes that actually use
+TOC-relative addressing. If CoreCLR JIT ever starts using TOC-relative data
+references, add an explicit JIT-side local-entry convention at the same time as
+the TOC-establishing prefix so direct same-code-heap calls skip the prefix and
+external/UCO function-pointer callers enter with `r12` set to the global entry.
+Even without a JIT TOC, indirect calls should still branch through `r12`.
+Managed targets do not depend on this, but runtime helpers and other native
+global entries do; branching through an arbitrary register can enter a PPC64
+ELFv2 global entry with stale `r12`, leading to a bogus callee TOC before the
+first TOC-relative load or PLT call.
+
+CoreCLR PPC64LE stublinker code follows the same rule for computed
+instantiating method stubs: shuffle GPR arguments, materialize the hidden
+instantiation argument, adjust boxed `this` for unboxing stubs, and tailcall the
+target through `r12`. This is required for generic delegate/reflection paths
+used by the libraries xUnit runner.
+
 Small call descriptors store the live callee-saved GC register mask in
 `idReg1`/`idReg2`, not just physical register numbers. PPC64LE has 17 integer
 callee-saved registers (`r14`-`r30`), so `REGNUM_BITS` is sized to 9 and the PPC

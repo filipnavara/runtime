@@ -136,6 +136,11 @@ DataTargetAdapter::GetPlatform(
         ulExpectedPointerSize = 8;
         platform = CORDB_PLATFORM_POSIX_RISCV64;
         break;
+
+    case IMAGE_FILE_MACHINE_POWERPC:
+        ulExpectedPointerSize = 8;
+        platform = CORDB_PLATFORM_POSIX_PPC64LE;
+        break;
 #else   // TARGET_UNIX
     case IMAGE_FILE_MACHINE_I386:
         ulExpectedPointerSize = 4;

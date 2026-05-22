@@ -7,3 +7,25 @@
 #include "threads.h"
 #include "../../shared/ppc64le/primitives.cpp"
 
+void CopyREGDISPLAY(REGDISPLAY* pDst, REGDISPLAY* pSrc)
+{
+    CONTEXT tmp;
+    CopyRegDisplay(pSrc, pDst, &tmp);
+}
+
+void SetSSFlag(DT_CONTEXT*, Thread* pThread)
+{
+    _ASSERTE(pThread == NULL);
+}
+
+void UnsetSSFlag(DT_CONTEXT*, Thread* pThread)
+{
+    _ASSERTE(pThread == NULL);
+}
+
+bool IsSSFlagEnabled(DT_CONTEXT*, Thread* pThread)
+{
+    _ASSERTE(pThread == NULL);
+    return false;
+}
+

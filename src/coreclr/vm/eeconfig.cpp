@@ -530,6 +530,12 @@ HRESULT EEConfig::sync()
     fDisableOptimizedThreadStaticAccess = CLRConfig::GetConfigValue(CLRConfig::EXTERNAL_DisableOptimizedThreadStaticAccess) != 0;
 
     fIsWriteBarrierCopyEnabled = CLRConfig::GetConfigValue(CLRConfig::UNSUPPORTED_UseGCWriteBarrierCopy) != 0;
+#ifdef TARGET_POWERPC64
+    // PPC64 write barrier entry points are small branches to the real helper
+    // bodies. They are not safe to memcpy to a new address because the branch
+    // displacements remain relative to the copied page.
+    fIsWriteBarrierCopyEnabled = false;
+#endif
 
 #ifdef TARGET_X86
     fPInvokeRestoreEsp = CLRConfig::GetConfigValue(CLRConfig::EXTERNAL_Jit_NetFx40PInvokeStackResilience);

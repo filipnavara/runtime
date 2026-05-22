@@ -627,12 +627,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                         }
                         return false;
                     case TargetArchitecture.LoongArch64:
-                        if (_argType == CorElementType.ELEMENT_TYPE_VALUETYPE)
-                        {
-                            Debug.Assert(!_argTypeHandle.IsNull());
-                            return ((_argSize > _transitionBlock.EnregisteredParamTypeMaxSize) || _transitionBlock.IsArgPassedByRef(_argTypeHandle));
-                        }
-                        return false;
+                    case TargetArchitecture.Ppc64le:
                     case TargetArchitecture.RiscV64:
                         if (_argType == CorElementType.ELEMENT_TYPE_VALUETYPE)
                         {
@@ -889,6 +884,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                         break;
 
                     case TargetArchitecture.LoongArch64:
+                    case TargetArchitecture.Ppc64le:
                     case TargetArchitecture.RiscV64:
                         _rvLa64IdxGenReg = numRegistersUsed;
                         _rvLa64OfsStack = 0;
@@ -1429,10 +1425,11 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                     }
 
                 case TargetArchitecture.LoongArch64:
+                case TargetArchitecture.Ppc64le:
                 case TargetArchitecture.RiscV64:
                     {
                         if (IsVarArg)
-                            throw new NotImplementedException("Varargs on RISC-V and LoongArch not supported yet");
+                            throw new NotImplementedException("Varargs on RISC-V, LoongArch, and PPC64LE not supported yet");
 
                         int cFPRegs = 0;
                         FpStructInRegistersInfo info = new FpStructInRegistersInfo{};
@@ -1456,7 +1453,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                                     else
                                     {
                                         info = RiscVLoongArch64FpStruct.GetFpStructInRegistersInfo(
-                                            _argTypeHandle.GetRuntimeTypeHandle(), TargetArchitecture.RiscV64);
+                                            _argTypeHandle.GetRuntimeTypeHandle(), _transitionBlock.Architecture);
                                         if (info.flags != FpStruct.UseIntCallConv)
                                         {
                                             cFPRegs = ((info.flags & FpStruct.BothFloat) != 0) ? 2 : 1;
@@ -1854,6 +1851,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                     }
 
                 case TargetArchitecture.LoongArch64:
+                case TargetArchitecture.Ppc64le:
                 case TargetArchitecture.RiscV64:
                     {
                         if (_hasArgLocDescForStructInRegs)

@@ -38,7 +38,7 @@ bool IsGcCoverageInterruptInstruction(PBYTE instrPtr)
 {
     UINT32 instrVal;
 
-#if defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     instrVal = *reinterpret_cast<UINT32*>(instrPtr);
 #elif defined(TARGET_ARM)
     size_t instrLen = GetARMInstructionLength(instrPtr);
@@ -59,7 +59,7 @@ bool IsGcCoverageInterruptInstruction(PBYTE instrPtr)
 
 bool IsOriginalInstruction(PBYTE instrPtr, GCCoverageInfo* gcCover, DWORD offset)
 {
-#if defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     UINT32 instrVal = *reinterpret_cast<UINT32*>(instrPtr);
     UINT32 origInstrVal = *reinterpret_cast<UINT32*>(gcCover->savedCode + offset);
     return (instrVal == origInstrVal);
@@ -931,7 +931,7 @@ void DoGcStress (PCONTEXT regs, NativeCodeVersion nativeCodeVersion)
     return;
 }
 
-#elif defined(TARGET_AMD64) || defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_AMD64) || defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 /////////////////////////////////////////////////////////////////////////////
 ////////////////////////////// end of x86-specific //////////////////////////
 /////////////////////////////////////////////////////////////////////////////
@@ -975,7 +975,7 @@ void replaceSafePointInstructionWithGcStressInstr(GcInfoDecoder* decoder, UINT32
     {
         *((DWORD*)instrPtrWriterHolder.GetRW()) = INTERRUPT_INSTR_32;
     }
-#elif defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     *((DWORD*)instrPtrWriterHolder.GetRW()) = INTERRUPT_INSTR;
 #else
     *((BYTE*)instrPtrWriterHolder.GetRW()) = INTERRUPT_INSTR;
@@ -1057,7 +1057,7 @@ bool replaceInterruptibleRangesWithGcStressInstr (UINT32 startOffset, UINT32 sto
             }
 
             instrPtrRW += instrLen;
-#elif defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
             *((DWORD*)instrPtrRW) = INTERRUPT_INSTR;
             instrPtrRW += 4;
 #else // AMD64
@@ -1281,6 +1281,8 @@ void RemoveGcCoverageInterrupt(TADDR instrPtr, BYTE * savedInstrPtr, GCCoverageI
 #elif defined(TARGET_LOONGARCH64)
     *(DWORD *)instrPtrWriterHolder.GetRW() = *(DWORD *)savedInstrPtr;
 #elif defined(TARGET_RISCV64)
+    *(DWORD *)instrPtrWriterHolder.GetRW() = *(DWORD *)savedInstrPtr;
+#elif defined(TARGET_POWERPC64)
     *(DWORD *)instrPtrWriterHolder.GetRW() = *(DWORD *)savedInstrPtr;
 #else
     *(BYTE *)instrPtrWriterHolder.GetRW() = *savedInstrPtr;

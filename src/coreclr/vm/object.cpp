@@ -418,7 +418,7 @@ void CopyValueClassArgUnchecked(ArgDestination *argDest, void* src, MethodTable 
         return;
     }
 
-#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 
     if (argDest->IsStructPassedInRegs())
     {
@@ -451,7 +451,7 @@ void InitValueClassArg(ArgDestination *argDest, MethodTable *pMT)
 
 #endif
 
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     if (argDest->IsStructPassedInRegs())
     {
         *(UINT64*)(argDest->GetStructGenRegDestinationAddress()) = 0;

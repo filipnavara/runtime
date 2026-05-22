@@ -29,8 +29,8 @@ public:
         LIMITED_METHOD_CONTRACT;
 #if defined(UNIX_AMD64_ABI)
         _ASSERTE((argLocDescForStructInRegs != NULL) || (offset != TransitionBlock::StructInRegsOffset));
-#elif defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
-        // This assert is not interesting on arm64/loongarch64. argLocDescForStructInRegs could be
+#elif defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+        // This assert is not interesting on arm64/loongarch64/riscv64/ppc64le. argLocDescForStructInRegs could be
         // initialized if the args are being enregistered.
 #else
         _ASSERTE(argLocDescForStructInRegs == NULL);
@@ -83,7 +83,7 @@ public:
 #endif // !DACCESS_COMPILE
 #endif // defined(TARGET_ARM64)
 
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     bool IsStructPassedInRegs()
     {
         return m_argLocDescForStructInRegs != NULL;
@@ -99,11 +99,11 @@ public:
     void CopyStructToRegisters(void *src, int fieldBytes, int destOffset)
     {
         static const INT64 NanBox =
-        #ifdef TARGET_RISCV64
+#ifdef TARGET_RISCV64
             0xffffffff00000000L;
-        #else
+#else
             0L;
-        #endif // TARGET_RISCV64
+#endif // TARGET_RISCV64
 
         _ASSERTE(IsStructPassedInRegs());
         _ASSERTE(destOffset == 0);
@@ -184,7 +184,7 @@ public:
         int argOfs = TransitionBlock::GetOffsetOfArgumentRegisters() + m_argLocDescForStructInRegs->m_idxGenReg * 8;
         return dac_cast<PTR_VOID>(dac_cast<TADDR>(m_base) + argOfs);
     }
-#endif // defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#endif // defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 
 #if defined(UNIX_AMD64_ABI)
 

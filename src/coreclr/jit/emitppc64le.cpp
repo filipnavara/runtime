@@ -613,7 +613,7 @@ void emitter::emitIns_R_L(instruction ins, emitAttr attr, insGroup* dst, regNumb
 {
     assert(dst != nullptr);
     assert(isGeneralRegister(reg));
-    assert((baseReg == REG_R0) || (baseReg == REG_R2));
+    assert((baseReg == REG_R0) || (baseReg == REG_R2) || (baseReg == REG_R12));
 
     instrDesc* id = emitNewInstr(attr);
 
@@ -1245,7 +1245,14 @@ unsigned emitter::emitOutputLabelLoad(BYTE* dst, instrDesc* id)
         emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addi), reg, reg, 0));
         cur += sizeof(code_t);
 
-        emitRecordRelocation(dst, reinterpret_cast<void*>(value), CorInfoReloc::PPC64_TOC16);
+        if (id->idReg2() == REG_R12)
+        {
+            emitRecordRelocation(dst, nullptr, CorInfoReloc::PPC64_REL16_TOC);
+        }
+        else
+        {
+            emitRecordRelocation(dst, reinterpret_cast<void*>(value), CorInfoReloc::PPC64_TOC16);
+        }
         return static_cast<unsigned>(cur - dst);
     }
 

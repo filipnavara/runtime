@@ -20,6 +20,7 @@ using Internal.IL;
 using Internal.TypeSystem;
 using Internal.TypeSystem.Ecma;
 using Internal.TypeSystem.Interop;
+using Internal.Text;
 using Internal.CorConstants;
 using Internal.Pgo;
 
@@ -4263,6 +4264,7 @@ namespace Internal.JitInterface
                 CorInfoReloc.RISCV64_PCREL_S => RelocType.IMAGE_REL_BASED_RISCV64_PCREL_S,
                 CorInfoReloc.PPC64_REL24 => RelocType.IMAGE_REL_BASED_PPC64_REL24,
                 CorInfoReloc.PPC64_TOC16 => RelocType.IMAGE_REL_BASED_PPC64_TOC16,
+                CorInfoReloc.PPC64_REL16_TOC => RelocType.IMAGE_REL_BASED_PPC64_REL16_TOC,
                 CorInfoReloc.PPC64_TPREL16 => RelocType.IMAGE_REL_BASED_PPC64_TPREL16,
                 CorInfoReloc.PPC64_GOT_TPREL16 => RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16,
                 CorInfoReloc.PPC64_GOT16 => RelocType.IMAGE_REL_BASED_PPC64_GOT16,
@@ -4286,52 +4288,63 @@ namespace Internal.JitInterface
             int length;
             ref ArrayBuilder<Relocation> sourceBlock = ref findRelocBlock(locationBlock, out length);
 
-            int relocDelta;
-            BlockType targetBlock = findKnownBlock(target, out relocDelta);
-
             ISymbolNode relocTarget;
-            switch (targetBlock)
+            int relocDelta;
+            if (fRelocType == CorInfoReloc.PPC64_REL16_TOC)
             {
-                case BlockType.Code:
-                    relocTarget = _methodCodeNode;
-                    break;
-
-                case BlockType.ColdCode:
 #if READYTORUN
-                    Debug.Assert(_methodColdCodeNode != null);
-                    relocTarget = _methodColdCodeNode;
-                    break;
+                relocTarget = null;
 #else
-                    throw new NotImplementedException("ColdCode relocs");
+                relocTarget = _compilation.NodeFactory.ExternDataSymbol(new Utf8String(".TOC."u8));
+#endif
+                relocDelta = 0;
+            }
+            else
+            {
+                BlockType targetBlock = findKnownBlock(target, out relocDelta);
+                switch (targetBlock)
+                {
+                    case BlockType.Code:
+                        relocTarget = _methodCodeNode;
+                        break;
+
+                    case BlockType.ColdCode:
+#if READYTORUN
+                        Debug.Assert(_methodColdCodeNode != null);
+                        relocTarget = _methodColdCodeNode;
+                        break;
+#else
+                        throw new NotImplementedException("ColdCode relocs");
 #endif
 
-                case BlockType.ROData:
-                    relocTarget = _roDataBlob;
-                    break;
+                    case BlockType.ROData:
+                        relocTarget = _roDataBlob;
+                        break;
 
-                case BlockType.RWData:
-                    relocTarget = _rwDataBlob;
-                    break;
+                    case BlockType.RWData:
+                        relocTarget = _rwDataBlob;
+                        break;
 
 #if READYTORUN
-                case BlockType.BBCounts:
-                    relocTarget = null;
-                    break;
+                    case BlockType.BBCounts:
+                        relocTarget = null;
+                        break;
 #endif
 
-                default:
-                    // Reloc points to something outside of the generated blocks
-                    var targetObject = HandleToObject(target);
+                    default:
+                        // Reloc points to something outside of the generated blocks
+                        var targetObject = HandleToObject(target);
 
 #if READYTORUN
-                    if (targetObject is RequiresRuntimeJitIfUsedSymbol requiresRuntimeSymbol)
-                    {
-                        throw new RequiresRuntimeJitException(requiresRuntimeSymbol.Message);
-                    }
+                        if (targetObject is RequiresRuntimeJitIfUsedSymbol requiresRuntimeSymbol)
+                        {
+                            throw new RequiresRuntimeJitException(requiresRuntimeSymbol.Message);
+                        }
 #endif
 
-                    relocTarget = (ISymbolNode)targetObject;
-                    break;
+                        relocTarget = (ISymbolNode)targetObject;
+                        break;
+                }
             }
 
             relocDelta += addlDelta;

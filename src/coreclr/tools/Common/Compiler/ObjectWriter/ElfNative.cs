@@ -480,6 +480,8 @@ namespace ILCompiler.ObjectWriter
         public const uint R_PPC64_GOT_TPREL16_LO_DS = 88;
         public const uint R_PPC64_GOT_TPREL16_HA = 90;
         public const uint R_PPC64_REL24_NOTOC = 116;
+        public const uint R_PPC64_REL16_LO = 250;
+        public const uint R_PPC64_REL16_HA = 252;
 
         // Relocations (loongarch64)
         public const uint R_LARCH_NONE = 0;

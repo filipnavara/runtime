@@ -83,12 +83,12 @@ namespace ILCompiler.ObjectWriter
 
             // PPC64 ELFv2 supports dual entry points. The JIT compiles
             // UnmanagedCallersOnly method bodies as reverse P/Invokes and emits
-            // a 16-byte global-entry TOC setup in the prolog. Local same-module
+            // an 8-byte global-entry TOC setup in the prolog. Local same-module
             // calls branch to symbol+localentry and keep the existing TOC.
-            // ELFv2 encodes localentry 16 as 4 << STO_PPC64_LOCAL_BIT, where
+            // ELFv2 encodes localentry 8 as 3 << STO_PPC64_LOCAL_BIT, where
             // the bit is 5.
-            const byte Ppc64LocalEntryOffset16 = 4 << 5;
-            return Ppc64LocalEntryOffset16;
+            const byte Ppc64LocalEntryOffset8 = 3 << 5;
+            return Ppc64LocalEntryOffset8;
         }
 
         private protected override void CreateSection(ObjectNodeSection section, Utf8String comdatName, Utf8String symbolName, int sectionIndex, Stream sectionStream)
@@ -646,6 +646,7 @@ namespace ILCompiler.ObjectWriter
                         IMAGE_REL_BASED_REL32 => R_PPC64_REL32,
                         IMAGE_REL_BASED_PPC64_REL24 => R_PPC64_REL24,
                         IMAGE_REL_BASED_PPC64_TOC16 => R_PPC64_TOC16_HA,
+                        IMAGE_REL_BASED_PPC64_REL16_TOC => R_PPC64_REL16_HA,
                         IMAGE_REL_BASED_PPC64_TPREL16 => R_PPC64_TPREL16_HA,
                         IMAGE_REL_BASED_PPC64_GOT_TPREL16 => R_PPC64_GOT_TPREL16_HA,
                         IMAGE_REL_BASED_PPC64_GOT16 => R_PPC64_GOT16_HA,
@@ -657,6 +658,10 @@ namespace ILCompiler.ObjectWriter
                     if (symbolicRelocation.Type is IMAGE_REL_BASED_PPC64_TOC16)
                     {
                         EmitPpc64Relocation(relocationStream, relocationEntry, symbolicRelocation, symbolIndex, R_PPC64_TOC16_LO, sizeof(uint));
+                    }
+                    else if (symbolicRelocation.Type is IMAGE_REL_BASED_PPC64_REL16_TOC)
+                    {
+                        EmitPpc64Relocation(relocationStream, relocationEntry, symbolicRelocation, symbolIndex, R_PPC64_REL16_LO, sizeof(uint), sizeof(uint));
                     }
                     else if (symbolicRelocation.Type is IMAGE_REL_BASED_PPC64_TPREL16)
                     {
@@ -681,11 +686,12 @@ namespace ILCompiler.ObjectWriter
             SymbolicRelocation symbolicRelocation,
             uint symbolIndex,
             uint type,
-            long offsetDelta = 0)
+            long offsetDelta = 0,
+            long addendDelta = 0)
         {
             BinaryPrimitives.WriteUInt64LittleEndian(relocationEntry, (ulong)(symbolicRelocation.Offset + offsetDelta));
             BinaryPrimitives.WriteUInt64LittleEndian(relocationEntry.Slice(8), ((ulong)symbolIndex << 32) | type);
-            BinaryPrimitives.WriteInt64LittleEndian(relocationEntry.Slice(16), symbolicRelocation.Addend);
+            BinaryPrimitives.WriteInt64LittleEndian(relocationEntry.Slice(16), symbolicRelocation.Addend + addendDelta);
             relocationStream.Write(relocationEntry);
         }
 

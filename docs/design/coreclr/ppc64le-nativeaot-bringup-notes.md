@@ -313,7 +313,7 @@ The current port uses these TOC entry rules:
 
 `[UnmanagedCallersOnly(EntryPoint = ...)]` exports point directly at the
 managed method body. The JIT emits the PPC64LE global-entry TOC setup in the
-method prolog, and the ELF writer annotates matching symbols with localentry 16
+method prolog, and the ELF writer annotates matching symbols with localentry 8
 so same-module calls can skip that setup while external callers enter through
 the global entry.
 
@@ -612,9 +612,9 @@ NativeAOT can still make same-module native calls to `[UnmanagedCallersOnly]`
 entrypoints such as startup helpers. PPC64 ELFv2 handles this with dual entry
 points: external callers enter at the symbol value, while local calls branch to
 `symbol+localentry` and preserve the current TOC. The PPC64LE UCO prolog uses
-`addis/addi/subf/nop` to establish `r2`; the `nop` pads the global entry to a
-16-byte local entry offset. In `st_other`, localentry 16 is encoded as
-`4 << STO_PPC64_LOCAL_BIT` (`0x80`), not as the byte count itself. The ELF
+the canonical `addis/addi` `.TOC.` sequence to establish `r2`, producing an
+8-byte local entry offset. In `st_other`, localentry 8 is encoded as
+`3 << STO_PPC64_LOCAL_BIT` (`0x60`), not as the byte count itself. The ELF
 writer applies this based on the compiled method body being
 `IsUnmanagedCallersOnly`; it does not need to pattern-match the prolog bytes
 because the JIT interface always sets `CORJIT_FLAG_REVERSE_PINVOKE` for these
@@ -641,6 +641,13 @@ Managed targets do not depend on this, but runtime helpers and other native
 global entries do; branching through an arbitrary register can enter a PPC64
 ELFv2 global entry with stale `r12`, leading to a bogus callee TOC before the
 first TOC-relative load or PLT call.
+
+Cached interface dispatch keeps the interface dispatch cell in `r11`, matching
+the JIT's PPC64LE virtual stub parameter register. The dispatch stubs use `r12`
+as the cache/target scratch so any fast-path target or slow-path resolver call
+still branches with `r12` set to the callee entry address. Using `r12` for the
+cell makes the slow resolver see the helper entry address as the cell once the
+JIT emits ELFv2-shaped indirect calls.
 
 CoreCLR PPC64LE stublinker code follows the same rule for computed
 instantiating method stubs: shuffle GPR arguments, materialize the hidden

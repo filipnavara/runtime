@@ -17,7 +17,7 @@ const char* emitFPregName(unsigned reg, bool varName = true);
 const char* emitVectorRegName(regNumber reg);
 #endif // DEBUG
 
-void emitIns_J(instruction ins, BasicBlock* dst);
+void emitIns_J(instruction ins, BasicBlock* dst, bool keepShort = false);
 
 static bool isValidSimm16(ssize_t value)
 {
@@ -105,7 +105,7 @@ unsigned emitOutputLabelLoad(BYTE* dst, instrDesc* id);
 unsigned emitOutputConstAddr(BYTE* dst, instrDesc* id);
 unsigned emitOutputConstLoad(BYTE* dst, instrDesc* id);
 
-void emitIns_Jump(instruction ins, BasicBlock* dst);
+void emitIns_Jump(instruction ins, BasicBlock* dst, bool keepShort = false);
 void emitOutputInstrJumpDistanceHelper(const insGroup* ig,
                                        instrDescJmp*   jmp,
                                        UNATIVE_OFFSET& dstOffs,

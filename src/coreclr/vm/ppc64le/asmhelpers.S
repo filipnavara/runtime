@@ -383,8 +383,7 @@ NESTED_END VarargPInvokeStub_RetBuffArg, _TEXT
 
 NESTED_ENTRY GenericPInvokeCalliHelper, _TEXT, NoHandler
     // The JIT calls this helper as an ELFv2 function, so r12 contains this
-    // helper's entry point on entry. The unmanaged target is preserved in r0
-    // by the call emitter before it loads the helper entry point into r12.
+    // helper's entry point on entry. The unmanaged target is passed in r0.
     ld 12, VASigCookie__pPInvokeILStub(11)
     cmpdi 12, 0
     beq C_FUNC(GenericPInvokeCalliGenILStub)
@@ -400,6 +399,7 @@ NESTED_ENTRY GenericPInvokeCalliHelper, _TEXT, NoHandler
 NESTED_END GenericPInvokeCalliHelper, _TEXT
 
 NESTED_ENTRY GenericPInvokeCalliGenILStub, _TEXT, NoHandler
+    mr 12, 0
     stdu 1, -PPC64_PRESTUB_STACK_FRAME_SIZE(1)
     .cfi_adjust_cfa_offset PPC64_PRESTUB_STACK_FRAME_SIZE
     std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
@@ -409,19 +409,20 @@ NESTED_ENTRY GenericPInvokeCalliGenILStub, _TEXT, NoHandler
     // GenericPInvokeCalliStubWorker(TransitionBlock*, VASigCookie*, PCODE)
     addi 3, 1, PPC64_PRESTUB_TRANSITION_BLOCK
     mr 4, 11
-    mr 5, 0
+    mr 5, 12
 
-    // Keep the helper's hidden registers across the worker call and transition
-    // block restore. The linkage area above the TOC save is free in this frame.
-    std 11, 32(1)
-    std 0, 40(1)
+    // Keep the helper's hidden registers across the worker call. They are
+    // restored before the transition block restores the caller's register state.
+    mr 26, 11
+    mr 27, 12
 
     bl C_FUNC(GenericPInvokeCalliStubWorker)
     nop
 
+    mr 11, 26
+    mr 12, 27
     RESTORE_TRANSITION_BLOCK_FOR_TAILCALL 1
-    ld 11, 32(1)
-    ld 0, 40(1)
+    mr 0, 12
     ld 2, PPC64_CALL_FRAME_TOC_SAVE(1)
     addi 1, 1, PPC64_PRESTUB_STACK_FRAME_SIZE
     .cfi_adjust_cfa_offset -PPC64_PRESTUB_STACK_FRAME_SIZE

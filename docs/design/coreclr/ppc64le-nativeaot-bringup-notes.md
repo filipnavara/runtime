@@ -350,12 +350,13 @@ ABI-correct sequence instead of a generated text-section thunk.
 In CoreCLR, fast allocation helpers such as `RhpNewFast`, `RhpNewArrayFast`,
 `RhpNewPtrArrayFast`, and `RhNewString` are assembly fast paths. Their
 `LEAF_ENTRY` symbols assume the `libcoreclr.so` TOC is already in `r2` because
-the first instructions use TOC-relative inline TLS loads. The helper table must
-not expose these raw local-entry labels to R2R or generated managed call sites
-that may currently hold a CoreLib TOC. `jitinterfacegen.cpp` exposes
-compiler-generated PPC64LE wrapper functions (`*_Ppc64leGlobalEntry`) for these
-helpers instead; the wrappers have normal ELFv2 global-entry TOC prologs, then
-call the local assembly fast path with the correct `r2`.
+the first instructions use TOC-relative inline TLS loads. The CoreCLR PPC64LE
+managed ABI now keeps `r2` as the runtime TOC across JIT and R2R managed code,
+so the helper table intentionally exposes these raw helper labels directly.
+Older bring-up builds used compiler-generated `*_Ppc64leGlobalEntry` wrappers
+to enter these helpers from an unknown TOC domain; that model is obsolete and
+conflicts with the runtime-TOC-preserving ABI documented in
+`docs/design/coreclr/ppc64le-toc-abi.md`.
 
 PPC64LE math `[RuntimeImport]` entries resolve to local `RhpPpc64leMath*`
 runtime wrappers. The wrappers live in `MathHelpers.cpp` and make the external

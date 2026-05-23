@@ -3213,20 +3213,10 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize, 
 
     CORINFO_CONST_LOOKUP helperFunction = m_compiler->compGetHelperFtn(static_cast<CorInfoHelpFunc>(helper));
     regMaskTP            killSet        = m_compiler->compHelperCallKillSet(static_cast<CorInfoHelpFunc>(helper));
-    bool                 restoreTocAfterHelperCall = false;
-    const bool           helperUsesExternalToc =
-        TargetOS::IsUnix && !m_compiler->IsTargetAbi(CORINFO_NATIVEAOT_ABI);
 
     if (callTargetReg == REG_NA)
     {
         callTargetReg = REG_DEFAULT_HELPER_CALL_TARGET;
-    }
-
-    if (helperUsesExternalToc)
-    {
-        callTargetReg = REG_INDIRECT_CALL_TARGET_REG;
-        GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R2, REG_SPBASE, PPC_TOC_SAVE_OFFSET);
-        restoreTocAfterHelperCall = true;
     }
 
     regMaskTP callTargetMask = genRegMask(callTargetReg);
@@ -3234,7 +3224,7 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize, 
 
     if ((helperFunction.accessType == IAT_VALUE) && m_compiler->opts.compReloc)
     {
-        params.callType = helperUsesExternalToc ? EC_FUNC_TOKEN_GOT : EC_FUNC_TOKEN;
+        params.callType = EC_FUNC_TOKEN;
         params.addr     = helperFunction.addr;
     }
     else if (helperFunction.accessType == IAT_VALUE)
@@ -3263,11 +3253,6 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize, 
     params.retSize  = retSize;
 
     genEmitCallWithCurrentGC(params);
-
-    if (restoreTocAfterHelperCall)
-    {
-        GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_R2, REG_SPBASE, PPC_TOC_SAVE_OFFSET);
-    }
 
     regSet.verifyRegistersUsed(killSet);
 }
@@ -3845,22 +3830,11 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
     }
 
     bool restoreTocAfterExternalCall = false;
-    const bool isRuntimeHelper =
-        call->IsHelperCall() ||
-        ((params.methHnd != NO_METHOD_HANDLE) && (Compiler::eeGetHelperNum(params.methHnd) != CORINFO_HELP_UNDEF));
-    const bool helperUsesExternalToc =
-        TargetOS::IsUnix && !m_compiler->IsTargetAbi(CORINFO_NATIVEAOT_ABI) && isRuntimeHelper;
     if (call->IsUnmanaged() && (params.callType == EC_FUNC_TOKEN))
     {
         // ELFv2 global entry points derive the callee TOC from r12. Direct unmanaged
         // calls load the external function address through the GOT and branch through
         // r12, avoiding linker-inserted PLT entries in managed code.
-        GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R2, REG_SPBASE, PPC_TOC_SAVE_OFFSET);
-        params.callType = EC_FUNC_TOKEN_GOT;
-        restoreTocAfterExternalCall = true;
-    }
-    else if (helperUsesExternalToc && (params.callType == EC_FUNC_TOKEN))
-    {
         GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R2, REG_SPBASE, PPC_TOC_SAVE_OFFSET);
         params.callType = EC_FUNC_TOKEN_GOT;
         restoreTocAfterExternalCall = true;
@@ -3878,7 +3852,7 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
             params.ireg = REG_INDIRECT_CALL_TARGET_REG;
         }
 
-        if (call->IsUnmanaged() || helperUsesExternalToc)
+        if (call->IsUnmanaged())
         {
             // ELFv2 global entry points derive the callee TOC from r12, so external indirect
             // calls must branch through r12 and restore the managed TOC after the call returns.

@@ -2990,6 +2990,13 @@ void Compiler::compInitOptions(JitFlags* jitFlags)
 
     opts.compReloc = jitFlags->IsSet(JitFlags::JIT_FLAG_RELOC);
 
+#if defined(TARGET_POWERPC64)
+    if (IsReadyToRun() && opts.compReloc)
+    {
+        NO_WAY("PPC64LE CoreCLR ReadyToRun requires non-TOC relocation materialization");
+    }
+#endif
+
     bool enableFakeSplitting = false;
 
 #ifdef DEBUG

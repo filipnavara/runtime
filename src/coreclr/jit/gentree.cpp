@@ -20030,6 +20030,13 @@ ValueSize GenTreeIndir::ValueSize() const
 
 bool GenTreeIntConCommon::ImmedValNeedsReloc(Compiler* comp)
 {
+#if defined(TARGET_POWERPC64)
+    if (comp->IsAot() && IsIconHandle())
+    {
+        return true;
+    }
+#endif
+
     return comp->opts.compReloc && IsIconHandle();
 }
 

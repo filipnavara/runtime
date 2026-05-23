@@ -94,6 +94,8 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
 
         public abstract int NumArgumentRegisters { get; }
 
+        public virtual int NumFloatArgumentRegisters => NumArgumentRegisters;
+
         public int SizeOfArgumentRegisters => NumArgumentRegisters * PointerSize;
 
         public abstract int NumCalleeSavedRegisters { get; }
@@ -772,6 +774,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
             public override int OffsetOfArgumentRegisters => OffsetOfFirstGCRefMapSlot;
 
             // f1 .. f13
+            public override int NumFloatArgumentRegisters => 13;
             public override int OffsetOfFloatArgumentRegisters => 13 * sizeof(double);
             public override int EnregisteredParamTypeMaxSize => 16;
             public override int EnregisteredReturnTypeIntegerMaxSize => 16;

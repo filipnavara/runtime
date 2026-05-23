@@ -4261,6 +4261,7 @@ namespace Internal.JitInterface
                 CorInfoReloc.RISCV64_PCREL_I => RelocType.IMAGE_REL_BASED_RISCV64_PCREL_I,
                 CorInfoReloc.RISCV64_PCREL_S => RelocType.IMAGE_REL_BASED_RISCV64_PCREL_S,
                 CorInfoReloc.PPC64_REL24 => RelocType.IMAGE_REL_BASED_PPC64_REL24,
+                CorInfoReloc.PPC64_REL16 => RelocType.IMAGE_REL_BASED_PPC64_REL16,
                 CorInfoReloc.PPC64_TOC16 => RelocType.IMAGE_REL_BASED_PPC64_TOC16,
                 CorInfoReloc.PPC64_REL16_TOC => RelocType.IMAGE_REL_BASED_PPC64_REL16_TOC,
                 CorInfoReloc.PPC64_TPREL16 => RelocType.IMAGE_REL_BASED_PPC64_TPREL16,

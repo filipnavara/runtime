@@ -174,8 +174,44 @@ void InvokeUtil::CopyArg(TypeHandle th, PVOID argRef, ArgDestination *argDest) {
         _ASSERTE(argRef != NULL);
         *(INT64 *)pArgDst = *(INT32 *)argRef;
         break;
+#elif defined(TARGET_POWERPC64)
+    case ELEMENT_TYPE_BOOLEAN:
+    case ELEMENT_TYPE_U1:
+        _ASSERTE(argRef != NULL);
+        *(UINT64 *)pArgDst = *(UINT8 *)argRef;
+        break;
 
-#else // !TARGET_RISCV64
+    case ELEMENT_TYPE_I1:
+        _ASSERTE(argRef != NULL);
+        *(INT64 *)pArgDst = *(INT8 *)argRef;
+        break;
+
+    case ELEMENT_TYPE_U2:
+    case ELEMENT_TYPE_CHAR:
+        _ASSERTE(argRef != NULL);
+        *(UINT64 *)pArgDst = *(UINT16 *)argRef;
+        break;
+
+    case ELEMENT_TYPE_I2:
+        _ASSERTE(argRef != NULL);
+        *(INT64 *)pArgDst = *(INT16 *)argRef;
+        break;
+
+    case ELEMENT_TYPE_I4:
+        _ASSERTE(argRef != NULL);
+        *(INT64 *)pArgDst = *(INT32 *)argRef;
+        break;
+
+    case ELEMENT_TYPE_U4:
+        _ASSERTE(argRef != NULL);
+        *(UINT64 *)pArgDst = *(UINT32 *)argRef;
+        break;
+
+    case ELEMENT_TYPE_R4:
+        _ASSERTE(argRef != NULL);
+        argDest->CopySingleFloatToRegister(argRef);
+        break;
+#else // !(TARGET_RISCV64 || TARGET_POWERPC64)
     case ELEMENT_TYPE_BOOLEAN:
     case ELEMENT_TYPE_U1:
     case ELEMENT_TYPE_I1:
@@ -204,7 +240,7 @@ void InvokeUtil::CopyArg(TypeHandle th, PVOID argRef, ArgDestination *argDest) {
         *(INT32 *)pArgDst = *(INT32 *)argRef;
         break;
     }
-#endif // TARGET_RISCV64
+#endif // TARGET_RISCV64 || TARGET_POWERPC64
 
     case ELEMENT_TYPE_I8:
     case ELEMENT_TYPE_U8:

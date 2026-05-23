@@ -1027,6 +1027,9 @@ bool CanJITOptimizeTLSAccess()
     // Optimization is disabled for linux musl arm64
 #elif defined(TARGET_LINUX_MUSL) && defined(TARGET_RISCV64)
     // Optimization is disabled for linux musl riscv64
+#elif defined(TARGET_POWERPC64)
+    // Optimization is disabled for PPC64LE until the JIT has a dynamic TLS
+    // sequence that is valid for libcoreclr loaded as a shared object.
 #elif defined(TARGET_FREEBSD) && defined(TARGET_ARM64)
     // Optimization is disabled for FreeBSD/arm64
 #elif defined(TARGET_ANDROID)

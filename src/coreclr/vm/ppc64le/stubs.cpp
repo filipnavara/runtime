@@ -388,6 +388,57 @@ void EmitPpc64TailCall(BYTE*& p, PCODE target)
     return (PCODE)pStartRX
 } // anonymous namespace
 
+DictionaryEntry GenericHandleWorkerCore(MethodDesc* pMD, MethodTable* pMT, LPVOID signature, DWORD dictionaryIndexAndSlot,
+                                        Module* pModule);
+
+struct Ppc64leGenericLookupArgs
+{
+    GenericHandleArgs handleArgs;
+    CorInfoHelpFunc helper;
+    uint16_t indirections;
+    bool testForNull;
+    uint16_t sizeOffset;
+    size_t offsets[CORINFO_MAXINDIRECTIONS];
+};
+
+extern "C" DictionaryEntry Ppc64leDictionaryLookupWorker(void* genericContext, Ppc64leGenericLookupArgs* pArgs)
+{
+    LIMITED_METHOD_CONTRACT;
+
+    TADDR result = (TADDR)genericContext;
+    WORD slotOffset = (WORD)(pArgs->handleArgs.dictionaryIndexAndSlot & 0xFFFF) * sizeof(Dictionary*);
+
+    for (uint16_t i = 0; i < pArgs->indirections; i++)
+    {
+        if ((i == pArgs->indirections - 1) && (pArgs->sizeOffset != CORINFO_NO_SIZE_CHECK))
+        {
+            _ASSERTE(pArgs->testForNull && (i > 0));
+            if (*(TADDR*)(result + pArgs->sizeOffset) <= slotOffset)
+            {
+                goto CallHelper;
+            }
+        }
+
+        result = *(TADDR*)(result + pArgs->offsets[i]);
+    }
+
+    if (!pArgs->testForNull || (result != 0))
+    {
+        return (DictionaryEntry)result;
+    }
+
+CallHelper:
+    if (pArgs->helper == CORINFO_HELP_RUNTIMEHANDLE_METHOD)
+    {
+        return GenericHandleWorkerCore((MethodDesc*)genericContext, nullptr, pArgs->handleArgs.signature,
+                                       pArgs->handleArgs.dictionaryIndexAndSlot, (Module*)pArgs->handleArgs.module);
+    }
+
+    _ASSERTE(pArgs->helper == CORINFO_HELP_RUNTIMEHANDLE_CLASS);
+    return GenericHandleWorkerCore(nullptr, (MethodTable*)genericContext, pArgs->handleArgs.signature,
+                                   pArgs->handleArgs.dictionaryIndexAndSlot, (Module*)pArgs->handleArgs.module);
+}
+
 PCODE DynamicHelpers::CreateHelper(LoaderAllocator* pAllocator, TADDR arg, PCODE target)
 {
     STANDARD_VM_CONTRACT;
@@ -514,8 +565,40 @@ PCODE DynamicHelpers::CreateHelperWithTwoArgs(LoaderAllocator* pAllocator, TADDR
 PCODE DynamicHelpers::CreateDictionaryLookupHelper(
     LoaderAllocator* pAllocator, CORINFO_RUNTIME_LOOKUP* pLookup, DWORD dictionaryIndexAndSlot, Module* pModule)
 {
-    PORTABILITY_ASSERT("DynamicHelpers::CreateDictionaryLookupHelper is not implemented on PPC64LE");
-    return NULL;
+    STANDARD_VM_CONTRACT;
+
+    PCODE helperAddress = GetDictionaryLookupHelper(pLookup->helper);
+
+    if (pLookup->indirections == CORINFO_USEHELPER)
+    {
+        GenericHandleArgs* pArgs =
+            (GenericHandleArgs*)(void*)pAllocator->GetDynamicHelpersHeap()->AllocAlignedMem(sizeof(GenericHandleArgs),
+                                                                                           DYNAMIC_HELPER_ALIGNMENT);
+        ExecutableWriterHolder<GenericHandleArgs> argsWriterHolder(pArgs, sizeof(GenericHandleArgs));
+        argsWriterHolder.GetRW()->dictionaryIndexAndSlot = dictionaryIndexAndSlot;
+        argsWriterHolder.GetRW()->signature              = pLookup->signature;
+        argsWriterHolder.GetRW()->module                 = (CORINFO_MODULE_HANDLE)pModule;
+
+        // r3 already contains the generic context. Pass GenericHandleArgs in r4.
+        return CreateHelperWithArg(pAllocator, (TADDR)pArgs, helperAddress);
+    }
+
+    Ppc64leGenericLookupArgs* pArgs = (Ppc64leGenericLookupArgs*)(void*)pAllocator->GetDynamicHelpersHeap()
+                                          ->AllocAlignedMem(sizeof(Ppc64leGenericLookupArgs), DYNAMIC_HELPER_ALIGNMENT);
+    ExecutableWriterHolder<Ppc64leGenericLookupArgs> argsWriterHolder(pArgs, sizeof(Ppc64leGenericLookupArgs));
+    argsWriterHolder.GetRW()->handleArgs.dictionaryIndexAndSlot = dictionaryIndexAndSlot;
+    argsWriterHolder.GetRW()->handleArgs.signature              = pLookup->signature;
+    argsWriterHolder.GetRW()->handleArgs.module                 = (CORINFO_MODULE_HANDLE)pModule;
+    argsWriterHolder.GetRW()->helper                            = pLookup->helper;
+    argsWriterHolder.GetRW()->indirections                      = pLookup->indirections;
+    argsWriterHolder.GetRW()->testForNull                       = pLookup->testForNull;
+    argsWriterHolder.GetRW()->sizeOffset                        = pLookup->sizeOffset;
+    for (uint16_t i = 0; i < CORINFO_MAXINDIRECTIONS; i++)
+    {
+        argsWriterHolder.GetRW()->offsets[i] = pLookup->offsets[i];
+    }
+
+    return CreateHelperWithArg(pAllocator, (TADDR)pArgs, (PCODE)Ppc64leDictionaryLookupWorker);
 }
 #else  // DACCESS_COMPILE
 PCODE DynamicHelpers::CreateHelper(LoaderAllocator* pAllocator, TADDR arg, PCODE target)

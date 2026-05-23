@@ -229,6 +229,36 @@ void PEImageLayout::InitDecoders(void* data, COUNT_T size)
 #define IMAGE_REL_BASED_PTR IMAGE_REL_BASED_HIGHLOW
 #endif // !TARGET_64BIT
 
+static UINT32 GetUnalignedLittleEndian32(const BYTE* address)
+{
+    return ((UINT32)address[0]) | ((UINT32)address[1] << 8) | ((UINT32)address[2] << 16) | ((UINT32)address[3] << 24);
+}
+
+static void SetUnalignedLittleEndian32(BYTE* address, UINT32 value)
+{
+    address[0] = (BYTE)value;
+    address[1] = (BYTE)(value >> 8);
+    address[2] = (BYTE)(value >> 16);
+    address[3] = (BYTE)(value >> 24);
+}
+
+static TADDR GetUnalignedLittleEndianPtr(const BYTE* address)
+{
+#ifdef TARGET_64BIT
+    return ((TADDR)GetUnalignedLittleEndian32(address + sizeof(UINT32)) << 32) | GetUnalignedLittleEndian32(address);
+#else
+    return GetUnalignedLittleEndian32(address);
+#endif
+}
+
+static void SetUnalignedLittleEndianPtr(BYTE* address, TADDR value)
+{
+    SetUnalignedLittleEndian32(address, (UINT32)value);
+#ifdef TARGET_64BIT
+    SetUnalignedLittleEndian32(address + sizeof(UINT32), (UINT32)(value >> 32));
+#endif
+}
+
 //To force base relocation on Vista (which uses ASLR), unmask IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
 //(0x40) for OptionalHeader.DllCharacteristics
 void PEImageLayout::ApplyBaseRelocations(bool relocationMustWriteCopy)
@@ -378,9 +408,12 @@ void PEImageLayout::ApplyBaseRelocations(bool relocationMustWriteCopy)
             switch (fixup>>12)
             {
             case IMAGE_REL_BASED_PTR:
-                *(TADDR *)address += delta;
+            {
+                TADDR fixedAddress = GetUnalignedLittleEndianPtr(address) + delta;
+                SetUnalignedLittleEndianPtr(address, fixedAddress);
                 pEndAddressToFlush = max(pEndAddressToFlush, address + sizeof(TADDR));
                 break;
+            }
 
 #ifdef TARGET_ARM
             case IMAGE_REL_BASED_THUMB_MOV32:

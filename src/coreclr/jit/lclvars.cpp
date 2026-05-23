@@ -4555,7 +4555,7 @@ void Compiler::lvaFixVirtualFrameOffsets()
 
 #if defined(TARGET_POWERPC64)
             if (varDsc->lvIsParam && (lclNum < info.compArgsCount) &&
-                lvaGetParameterABIInfo(lclNum).IsSplitAcrossRegistersAndStack())
+                lvaGetParameterABIInfo(lclNum).IsSplitAcrossRegistersAndStack() && codeGen->isFramePointerUsed())
             {
                 // PPC64 split parameters are reassembled in a local stack home.
                 // The virtual offset is already FP-relative; applying the fixed save-area

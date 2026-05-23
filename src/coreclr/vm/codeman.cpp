@@ -853,7 +853,7 @@ ExecutionManager::DeleteRange
 
 //-----------------------------------------------------------------------------
 
-#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 #define EXCEPTION_DATA_SUPPORTS_FUNCTION_FRAGMENTS
 #endif
 
@@ -923,7 +923,7 @@ BOOL IsFunctionFragment(TADDR baseAddress, PTR_RUNTIME_FUNCTION pFunctionEntry)
     }
 
     return ((*pUnwindCodes & 0xFF) == 0xE5);
-#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 
     // LOONGARCH64 is a little bit more flexible, in the sense that it supports partial prologs. However only one of the
     // prolog regions are allowed to alter SP and that's the Host Record. Partial prologs are used in ShrinkWrapping
@@ -1093,7 +1093,7 @@ PTR_VOID GetUnwindDataBlob(TADDR moduleBase, PTR_RUNTIME_FUNCTION pRuntimeFuncti
     return xdata;
 
 
-#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     // TODO: maybe optimize further.
     // if this function uses packed unwind data then at least one of the two least significant bits
     // will be non-zero.  if this is the case then there will be no xdata record to enumerate.

@@ -80,6 +80,8 @@ namespace ILCompiler.DependencyAnalysis
             }
         }
 
+        public bool UsePpc64lePcRelativeAddressLoads => false;
+
         public LazyGenericsPolicy LazyGenericsPolicy { get; }
         public CompilationModuleGroup CompilationModuleGroup
         {

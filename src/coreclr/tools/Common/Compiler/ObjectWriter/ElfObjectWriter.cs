@@ -645,6 +645,7 @@ namespace ILCompiler.ObjectWriter
                         IMAGE_REL_BASED_RELPTR32 => R_PPC64_REL32,
                         IMAGE_REL_BASED_REL32 => R_PPC64_REL32,
                         IMAGE_REL_BASED_PPC64_REL24 => R_PPC64_REL24,
+                        IMAGE_REL_BASED_PPC64_REL16 => R_PPC64_REL16_HA,
                         IMAGE_REL_BASED_PPC64_TOC16 => R_PPC64_TOC16_HA,
                         IMAGE_REL_BASED_PPC64_REL16_TOC => R_PPC64_REL16_HA,
                         IMAGE_REL_BASED_PPC64_TPREL16 => R_PPC64_TPREL16_HA,
@@ -655,7 +656,11 @@ namespace ILCompiler.ObjectWriter
 
                     EmitPpc64Relocation(relocationStream, relocationEntry, symbolicRelocation, symbolIndex, type);
 
-                    if (symbolicRelocation.Type is IMAGE_REL_BASED_PPC64_TOC16)
+                    if (symbolicRelocation.Type is IMAGE_REL_BASED_PPC64_REL16)
+                    {
+                        EmitPpc64Relocation(relocationStream, relocationEntry, symbolicRelocation, symbolIndex, R_PPC64_REL16_LO, sizeof(uint), sizeof(uint));
+                    }
+                    else if (symbolicRelocation.Type is IMAGE_REL_BASED_PPC64_TOC16)
                     {
                         EmitPpc64Relocation(relocationStream, relocationEntry, symbolicRelocation, symbolIndex, R_PPC64_TOC16_LO, sizeof(uint));
                     }

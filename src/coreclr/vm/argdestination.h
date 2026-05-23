@@ -157,15 +157,21 @@ public:
         }
     }
 
-#ifdef TARGET_RISCV64
+#if defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     void CopySingleFloatToRegister(void* src)
     {
         void* dest = GetDestinationAddress();
         UINT32 value = *(UINT32*)src;
         if (TransitionBlock::IsFloatArgumentRegisterOffset(m_offset))
         {
+#ifdef TARGET_RISCV64
             // NaN-box the floating register value or single-float instructions will treat it as NaN
             *(UINT64*)dest = 0xffffffff00000000L | value;
+#else
+            // CallDescrWorker restores PPC64LE FP argument registers with lfd.
+            // Store single-precision primitives in the double-format register slots.
+            *(double*)dest = *(float*)src;
+#endif
         }
         else
         {
@@ -174,7 +180,7 @@ public:
             *(UINT32*)dest = value;
         }
     }
-#endif // TARGET_RISCV64
+#endif // TARGET_RISCV64 || TARGET_POWERPC64
 
 #endif // !DACCESS_COMPILE
 

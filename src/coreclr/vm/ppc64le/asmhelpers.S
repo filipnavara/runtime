@@ -19,6 +19,7 @@
 .set PPC64_PRESTUB_TRANSITION_BLOCK, 0xE0
 .set PPC64_PRESTUB_FLOAT_ARGUMENT_REGISTERS, PPC64_PRESTUB_TRANSITION_BLOCK - SIZEOF__FloatArgumentRegisters
 .set PPC64_PRESTUB_STACK_FRAME_SIZE, PPC64_PRESTUB_TRANSITION_BLOCK + SIZEOF__TransitionBlock
+.set PPC64_PRESTUB_IMPORT_SECTION_INDEX_SAVE, 32
 
 .set PPC64_UMENTRY_STACK_FRAME_SIZE, 0x120
 .set PPC64_UMENTRY_LR_SAVE, 0x60
@@ -152,16 +153,17 @@ LEAF_END GetCurrentSP, _TEXT
 
 NESTED_ENTRY CallDescrWorkerInternal, _TEXT, NoHandler
     mflr 0
+    std 0, 16(1)
+    std 30, -16(1)
+    std 31, -8(1)
     stdu 1, -64(1)
     .cfi_adjust_cfa_offset 64
-    std 0, PPC64_UMENTRY_LR_SAVE(1)
     std 2, 24(1)
-    std 30, 32(1)
-    std 31, 40(1)
+    mfcr 0
+    std 0, 32(1)
     .cfi_offset 65, 16
-    .cfi_offset 2, 24
-    .cfi_offset 30, 32
-    .cfi_offset 31, 40
+    .cfi_offset 30, -16
+    .cfi_offset 31, -8
 
     mr 31, 3
     mr 30, 1
@@ -245,10 +247,12 @@ LOCAL_LABEL(IntReturn):
 
 LOCAL_LABEL(ReturnDone):
     mr 1, 30
-    ld 31, 40(1)
-    ld 30, 32(1)
+    ld 0, 32(1)
+    mtcrf 0x38, 0
+    ld 31, 56(1)
+    ld 30, 48(1)
     ld 2, 24(1)
-    ld 0, PPC64_UMENTRY_LR_SAVE(1)
+    ld 0, 80(1)
     mtlr 0
     addi 1, 1, 64
     blr
@@ -435,13 +439,14 @@ NESTED_ENTRY DelayLoad_MethodCall, _TEXT, NoHandler
     stdu 1, -PPC64_PRESTUB_STACK_FRAME_SIZE(1)
     .cfi_adjust_cfa_offset PPC64_PRESTUB_STACK_FRAME_SIZE
     std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    std 0, PPC64_PRESTUB_IMPORT_SECTION_INDEX_SAVE(1)
     SAVE_TRANSITION_BLOCK 1
     ESTABLISH_TOC_FROM_PC LOCAL_LABEL(DelayLoad_MethodCallGetPc)
 
     addi 3, 1, PPC64_PRESTUB_TRANSITION_BLOCK
     mr 4, 11
-    mr 5, 9
-    mr 6, 10
+    ld 5, PPC64_PRESTUB_IMPORT_SECTION_INDEX_SAVE(1)
+    mr 6, 12
     bl C_FUNC(ExternalMethodFixupWorker)
     nop
 
@@ -459,13 +464,14 @@ NESTED_ENTRY DelayLoad_Helper\suffix, _TEXT, NoHandler
     stdu 1, -PPC64_PRESTUB_STACK_FRAME_SIZE(1)
     .cfi_adjust_cfa_offset PPC64_PRESTUB_STACK_FRAME_SIZE
     std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
+    std 0, PPC64_PRESTUB_IMPORT_SECTION_INDEX_SAVE(1)
     SAVE_TRANSITION_BLOCK 1
     ESTABLISH_TOC_FROM_PC LOCAL_LABEL(DelayLoad_Helper\suffix\()GetPc)
 
     addi 3, 1, PPC64_PRESTUB_TRANSITION_BLOCK
     mr 4, 11
-    mr 5, 9
-    mr 6, 10
+    ld 5, PPC64_PRESTUB_IMPORT_SECTION_INDEX_SAVE(1)
+    mr 6, 12
     li 7, \frameFlags
     bl C_FUNC(DynamicHelperWorker)
     nop

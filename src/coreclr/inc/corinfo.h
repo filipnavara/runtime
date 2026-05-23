@@ -902,6 +902,7 @@ enum class CorInfoReloc
 
     // PPC64 relocs
     PPC64_REL24,                           // PowerPC64: B, BL
+    PPC64_REL16,                           // PowerPC64: addis+addi PC-relative address
     PPC64_TOC16,                           // PowerPC64: addis+addi TOC-relative address
     PPC64_TPREL16,                         // PowerPC64: addis+addi thread-pointer-relative address
     PPC64_GOT_TPREL16,                     // PowerPC64: addis+ld+add GOT thread-pointer-relative access

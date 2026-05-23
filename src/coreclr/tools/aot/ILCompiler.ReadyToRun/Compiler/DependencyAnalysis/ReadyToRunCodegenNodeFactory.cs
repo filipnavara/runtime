@@ -81,6 +81,8 @@ namespace ILCompiler.DependencyAnalysis
 
         public TargetDetails Target { get; }
 
+        public bool UsePpc64lePcRelativeAddressLoads => true;
+
         public ReadyToRunContainerFormat Format { get; }
 
         public ReadyToRunCompilationModuleGroupBase CompilationModuleGroup { get; }

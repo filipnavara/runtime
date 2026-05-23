@@ -354,6 +354,10 @@ void VTableCallHolder::Initialize(unsigned slot)
     }
 
     Ppc64StubEmitter::EmitTailBranchRegister(p, 11);
+    while (p < (DWORD*)((BYTE*)stub()->entryPoint() + VTableCallHolder::GetHolderSize(slot) - sizeof(DWORD)))
+    {
+        *p++ = 0;
+    }
     *p++ = slot;
 
     _ASSERT(p == (DWORD*)((BYTE*)stub()->entryPoint() + VTableCallHolder::GetHolderSize(slot)));

@@ -915,6 +915,21 @@ void CodeGen::genSetRegToConst(regNumber targetReg, var_types targetType, GenTre
                 attr = EA_SET_FLG(attr, EA_CNS_RELOC_FLG);
             }
 
+#ifdef DEBUG
+            if (m_compiler->IsReadyToRun() && !EA_IS_CNS_RELOC(attr))
+            {
+                const uint64_t debugHandleBit = 0x4000000000000000ULL;
+                const uint64_t handleBase     = 0x420000;
+                const uint64_t handleValue    = static_cast<uint64_t>(cnsVal);
+                if (((handleValue & 0xFFFF000000000000ULL) == debugHandleBit) &&
+                    (((handleValue & ~debugHandleBit) & 0x7) == 0) &&
+                    ((handleValue & ~debugHandleBit) >= handleBase))
+                {
+                    NO_WAY("PPC64LE ReadyToRun materialized an unresolved crossgen handle without a relocation");
+                }
+            }
+#endif
+
             if (targetType == TYP_BYREF)
             {
                 attr = EA_SET_FLG(attr, EA_BYREF_FLG);
@@ -3237,7 +3252,15 @@ void CodeGen::genEmitHelperCall(unsigned helper, int argSize, emitAttr retSize, 
     {
         assert(helperFunction.accessType == IAT_PVALUE);
 
-        instGen_Set_Reg_To_Imm(EA_PTRSIZE, callTargetReg, reinterpret_cast<ssize_t>(helperFunction.addr));
+        if (m_compiler->IsAot() && !m_compiler->IsTargetAbi(CORINFO_NATIVEAOT_ABI))
+        {
+            GetEmitter()->emitIns_R_AI(INS_addi, EA_HANDLE_CNS_RELOC, callTargetReg,
+                                       reinterpret_cast<ssize_t>(helperFunction.addr));
+        }
+        else
+        {
+            instGen_Set_Reg_To_Imm(EA_PTRSIZE, callTargetReg, reinterpret_cast<ssize_t>(helperFunction.addr));
+        }
         GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, callTargetReg, callTargetReg, 0);
         params.callType = EC_INDIR_R;
         params.ireg     = callTargetReg;
@@ -3994,7 +4017,7 @@ void CodeGen::genOSRHandleTier0CalleeSavedRegistersAndFrame()
 
 void CodeGen::genEstablishPpc64leTocForReversePInvoke()
 {
-    if (!m_compiler->opts.IsReversePInvoke() || !m_compiler->opts.compReloc)
+    if (!m_compiler->opts.IsReversePInvoke() || !m_compiler->opts.compReloc || m_compiler->IsReadyToRun())
     {
         return;
     }
@@ -4790,6 +4813,11 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
         emitAttr relocAttr = EA_HANDLE_CNS_RELOC;
         if (EA_IS_CNS_TLSGD_RELOC(size))
         {
+            if (m_compiler->IsReadyToRun())
+            {
+                NO_WAY("PPC64LE CoreCLR ReadyToRun TLS relocation materialization is unsupported");
+            }
+
             relocAttr = EA_SET_FLG(relocAttr, EA_CNS_TLSGD_RELOC);
             GetEmitter()->emitIns_R_R_I(INS_addis, relocAttr, reg, REG_R2, imm);
             GetEmitter()->emitIns_R_R_I(INS_ld, relocAttr, reg, reg, imm);
@@ -4802,10 +4830,30 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
             relocAttr = EA_SET_FLG(relocAttr, EA_BYREF_FLG);
         }
 
+        if (m_compiler->IsReadyToRun())
+        {
+            GetEmitter()->emitIns_R_AI(INS_addi, relocAttr, reg, imm);
+            return;
+        }
+
         GetEmitter()->emitIns_R_R_I(INS_addis, relocAttr, reg, REG_R2, imm);
         GetEmitter()->emitIns_R_R_I(INS_addi, relocAttr, reg, reg, imm);
         return;
     }
+
+#ifdef DEBUG
+    {
+        const uint64_t debugHandleBit = 0x4000000000000000ULL;
+        const uint64_t handleBase     = 0x420000;
+        const uint64_t handleValue    = static_cast<uint64_t>(imm);
+        if (((handleValue & 0xFFFF000000000000ULL) == debugHandleBit) &&
+            (((handleValue & ~debugHandleBit) & 0x7) == 0) &&
+            ((handleValue & ~debugHandleBit) >= handleBase))
+        {
+            NO_WAY("PPC64LE materialized an unresolved crossgen handle without a relocation");
+        }
+    }
+#endif
 
     auto signExtend16 = [](uint64_t value) -> ssize_t {
         ssize_t part = static_cast<ssize_t>(value & 0xFFFF);

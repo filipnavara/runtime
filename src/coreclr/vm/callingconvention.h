@@ -1867,6 +1867,22 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
     const bool isFloatHfa = thValueType.IsFloatHfa();
     const int cbArg = StackElemSize(argSize, isValueType, isFloatHfa);
 
+#ifdef TARGET_POWERPC64
+    auto consumePpc64leParameterSlots = [this](int slots) {
+        for (int i = 0; i < slots; i++)
+        {
+            if (m_idxGenReg < NUM_ARGUMENT_REGISTERS)
+            {
+                m_idxGenReg++;
+            }
+            else
+            {
+                m_ofsStack += TARGET_POINTER_SIZE;
+            }
+        }
+    };
+#endif
+
     if (cFPRegs > 0 && !this->IsVarArg())
     {
         // If there's enough free registers, pass according to hardware floating-point calling convention
@@ -1876,7 +1892,7 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
             assert(cFPRegs == 1);
             assert((info.flags & (FpStruct::OnlyOne | FpStruct::BothFloat)) == 0);
 
-            if ((1 + m_idxFPReg <= NUM_ARGUMENT_REGISTERS) && (1 + m_idxGenReg <= NUM_ARGUMENT_REGISTERS))
+            if ((1 + m_idxFPReg <= NUM_FLOAT_ARGUMENT_REGISTERS) && (1 + m_idxGenReg <= NUM_ARGUMENT_REGISTERS))
             {
                 m_argLocDescForStructInRegs.Init();
                 m_argLocDescForStructInRegs.m_idxFloatReg = m_idxFPReg;
@@ -1898,7 +1914,7 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
                 return argOfs;
             }
         }
-        else if (cFPRegs + m_idxFPReg <= NUM_ARGUMENT_REGISTERS)
+        else if (cFPRegs + m_idxFPReg <= NUM_FLOAT_ARGUMENT_REGISTERS)
         {
             int argOfs = TransitionBlock::GetOffsetOfFloatArgumentRegisters() + m_idxFPReg * FLOAT_REGISTER_SIZE;
             if (info.flags != FpStruct::UseIntCallConv)
@@ -1911,6 +1927,9 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
                 m_argLocDescForStructInRegs.m_structFields = info;
             }
             m_idxFPReg += cFPRegs;
+#ifdef TARGET_POWERPC64
+            consumePpc64leParameterSlots(ALIGN_UP(cbArg, TARGET_POINTER_SIZE) / TARGET_POINTER_SIZE);
+#endif
             return argOfs;
         }
     }

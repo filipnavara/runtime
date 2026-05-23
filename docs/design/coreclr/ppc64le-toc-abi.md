@@ -39,30 +39,35 @@ PPC64LE CoreCLR ReadyToRun uses the same managed ABI as CoreCLR JIT code:
 and at managed exit. R2R-to-JIT and JIT-to-R2R calls are ordinary managed calls
 and do not switch TOC domains.
 
-The current PPC64LE reloc-mode emitter uses `r2` for TOC-relative address
-materialization. NativeAOT can satisfy that contract through ELF linking, but
 CoreCLR ReadyToRun images are PE-format managed images. They must not use `r2`
 as an R2R-image TOC because that would conflict with the managed ABI's runtime
-TOC rule.
+TOC rule. PPC64LE CoreCLR R2R therefore uses PC-relative materialization for
+image-local addresses, import cells, and fixup cells.
 
-Until the PPC64LE emitter has a CoreCLR R2R relocation materialization strategy
-that does not consume `r2`, the JIT rejects PPC64LE CoreCLR R2R compilation
-instead of emitting code that would reinterpret `r2` as an image-local TOC.
+The compiler and object writer must reject PPC64LE R2R relocation forms that
+derive addresses from a TOC or GOT:
 
-A future CoreCLR R2R design must define all of the following before R2R can be
-enabled:
+- `PPC64_TOC16`
+- `PPC64_REL16_TOC`
+- `PPC64_GOT_TPREL16`
+- `PPC64_GOT16`
 
-- How R2R code materializes image-local addresses, import cells, and fixup
-  cells without using `r2`.
-- How generated R2R entrypoints verify or establish the runtime TOC when
-  entered from native transition stubs.
-- How R2R relocations represent the chosen non-TOC address materialization.
-- How cross-image managed calls preserve the runtime TOC.
-- How calls into CoreCLR runtime helpers preserve the runtime TOC on return.
-- How tailcall helpers establish the final target's expected TOC before
-  branching.
-- How reverse P/Invoke entries establish the runtime TOC before entering R2R
-  code, or which fallback thunk/JIT path owns reverse P/Invoke for R2R.
+R2R may use explicit non-TOC PPC64 relocations such as `PPC64_REL16` and
+`PPC64_REL24`. If additional R2R-specific relocation forms become necessary,
+they should be modeled as explicit PE/R2R file-format concepts rather than
+pretending the PE image has an ELF `.TOC.` symbol.
+
+R2R delay-load import thunks must not use managed argument registers for thunk
+metadata. On PPC64LE the thunk enters the delay-load helper with:
+
+- `r11`: the indirection cell, matching the managed call-site convention.
+- `r12`: the owning `Module*`.
+- `r0`: the import section index.
+
+The delay-load helper saves `r0` before creating the transition block, then
+establishes the runtime TOC locally before calling the VM worker. After the
+worker resolves the target, the helper restores the caller's runtime TOC before
+returning or tailcalling to managed code.
 
 ## Runtime Helpers
 

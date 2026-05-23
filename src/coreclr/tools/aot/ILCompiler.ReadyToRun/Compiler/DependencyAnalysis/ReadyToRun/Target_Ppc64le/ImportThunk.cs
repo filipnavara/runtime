@@ -38,12 +38,21 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                     // r11 contains the indirection cell on entry and is consumed by the
                     // delay-load assembly helpers as their first scratch argument.
 
-                    // r9 contains the import section index.
-                    instructionEncoder.EmitLI(Register.R9, _containingImportSection.IndexFromBeginningOfArray);
+                    // Set the helper target before loading the module. The module
+                    // load uses LR and r0 internally but preserves CTR.
+                    instructionEncoder.EmitLoadTargetAndSetCTR(_helperCell);
 
-                    // r10 contains Module*.
-                    instructionEncoder.EmitLD(Register.R10, factory.ModuleImport);
-                    break;
+                    // r12 contains Module*. The delay-load helpers establish their
+                    // own TOC from PC, so they do not require r12 to hold the entry
+                    // point on entry.
+                    instructionEncoder.EmitLD(Register.R12, factory.ModuleImport);
+
+                    // r0 contains the import section index. Keep this after the
+                    // PC-relative module load because address materialization uses
+                    // r0 to preserve LR.
+                    instructionEncoder.EmitLI(Register.R0, _containingImportSection.IndexFromBeginningOfArray);
+                    instructionEncoder.EmitBCTR();
+                    return;
 
                 case ImportThunkKind.Lazy:
                     // Lazy string helper expects Module* in the second argument register.

@@ -950,19 +950,19 @@ namespace ILCompiler.ObjectWriter
                         case RelocType.IMAGE_REL_BASED_RISCV64_PCREL_I:
                         case RelocType.IMAGE_REL_BASED_RISCV64_PCREL_S:
                         case RelocType.IMAGE_REL_BASED_PPC64_REL24:
-                        case RelocType.IMAGE_REL_BASED_PPC64_REL16_TOC:
+                        case RelocType.IMAGE_REL_BASED_PPC64_REL16:
                         {
                             long targetAddress = symbolImageOffset + addend;
                             long delta = targetAddress - (long)relocOffset;
                             Relocation.WriteValue(reloc.Type, pData, delta);
                             break;
                         }
+                        case RelocType.IMAGE_REL_BASED_PPC64_REL16_TOC:
                         case RelocType.IMAGE_REL_BASED_PPC64_TOC16:
                         case RelocType.IMAGE_REL_BASED_PPC64_TPREL16:
                         case RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16:
                         case RelocType.IMAGE_REL_BASED_PPC64_GOT16:
-                            Relocation.WriteValue(reloc.Type, pData, symbolImageOffset + addend);
-                            break;
+                            throw new NotSupportedException($"PPC64LE PE images must not use TOC/GOT relocation: {reloc.Type}");
                         default:
                             throw new NotSupportedException($"Unsupported relocation: {reloc.Type}");
                     }

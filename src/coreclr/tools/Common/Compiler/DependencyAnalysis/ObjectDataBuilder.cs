@@ -306,6 +306,7 @@ namespace ILCompiler.DependencyAnalysis
                 case RelocType.IMAGE_REL_BASED_RISCV64_PCREL_I:
                 case RelocType.IMAGE_REL_BASED_RISCV64_PCREL_S:
                 case RelocType.IMAGE_REL_BASED_PPC64_REL24:
+                case RelocType.IMAGE_REL_BASED_PPC64_REL16:
                 case RelocType.IMAGE_REL_BASED_PPC64_TOC16:
                 case RelocType.IMAGE_REL_BASED_PPC64_REL16_TOC:
                 case RelocType.IMAGE_REL_BASED_PPC64_TPREL16:

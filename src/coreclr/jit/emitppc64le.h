@@ -60,6 +60,7 @@ void emitIns_R_R_R(
 void emitIns_R_R_R_I(instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, regNumber reg3, ssize_t imm);
 void emitIns_R_R_R_I_I(
     instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, regNumber reg3, unsigned imm1, unsigned imm2);
+void emitIns_R_AI(instruction ins, emitAttr attr, regNumber reg, ssize_t addr);
 void emitIns_R_L(instruction ins, emitAttr attr, BasicBlock* dst, regNumber reg);
 void emitIns_R_L(instruction ins, emitAttr attr, insGroup* dst, regNumber reg);
 void emitIns_R_L(instruction ins, emitAttr attr, insGroup* dst, regNumber reg, regNumber baseReg);
@@ -102,6 +103,7 @@ void emitDispInsName(code_t code, const instrDesc* id);
 static emitter::code_t emitInsCode(instruction ins);
 unsigned emitOutput_Instr(BYTE* dst, code_t code) const;
 unsigned emitOutputLabelLoad(BYTE* dst, instrDesc* id);
+unsigned emitOutputRelocAddr(BYTE* dst, instrDesc* id);
 unsigned emitOutputConstAddr(BYTE* dst, instrDesc* id);
 unsigned emitOutputConstLoad(BYTE* dst, instrDesc* id);
 

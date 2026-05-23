@@ -61,7 +61,7 @@ extern PCODE GetPreStubEntryPoint();
 
 #define STACK_ALIGN_SIZE 16
 
-#define JUMP_ALLOCATE_SIZE              32
+#define JUMP_ALLOCATE_SIZE              40
 #define BACK_TO_BACK_JUMP_ALLOCATE_SIZE 40
 
 #define HAS_PINVOKE_IMPORT_PRECODE 1

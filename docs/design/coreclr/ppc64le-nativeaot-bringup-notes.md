@@ -329,6 +329,10 @@ The current port uses these TOC entry rules:
   helper stubs are therefore tailcall trampolines, not normal call wrappers.
   If the final helper target needs the `libcoreclr.so` TOC, the target must be a
   global-entry wrapper, not a raw local-entry assembly label.
+- R2R delay-load import thunks must preserve the managed argument registers.
+  PPC64LE thunks pass the indirection cell in `r11`, the owning `Module*` in
+  `r12`, and the import section index in `r0`; the assembly helper saves `r0`
+  before building the transition block.
 
 `[UnmanagedCallersOnly(EntryPoint = ...)]` exports point directly at the
 managed method body. The JIT emits the PPC64LE global-entry TOC setup in the
@@ -357,6 +361,11 @@ Older bring-up builds used compiler-generated `*_Ppc64leGlobalEntry` wrappers
 to enter these helpers from an unknown TOC domain; that model is obsolete and
 conflicts with the runtime-TOC-preserving ABI documented in
 `docs/design/coreclr/ppc64le-toc-abi.md`.
+
+CoreCLR R2R PE images must not use PPC64LE TOC/GOT relocation forms. The
+compiler uses PC-relative materialization for R2R addresses and the JIT, stub
+emitter, and PE writer all guard against producing `PPC64_TOC16`,
+`PPC64_REL16_TOC`, `PPC64_GOT_TPREL16`, or `PPC64_GOT16`.
 
 PPC64LE math `[RuntimeImport]` entries resolve to local `RhpPpc64leMath*`
 runtime wrappers. The wrappers live in `MathHelpers.cpp` and make the external

@@ -512,6 +512,13 @@ PhaseStatus Compiler::fgExpandThreadLocalAccess()
             false /* expand rarely run blocks for NativeAOT */);
     }
 
+#if defined(TARGET_POWERPC64)
+    // CoreCLR PPC64LE JIT code runs in a process where libcoreclr is loaded as
+    // a shared object. Keep thread-static access on the helper path until the
+    // JIT has a dynamic TLS sequence that is valid for this loading model.
+    return result;
+#endif
+
     if (opts.OptimizationDisabled())
     {
         JITDUMP("Optimizations aren't allowed - bail out.\n")

@@ -1445,7 +1445,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                                 Debug.Assert(cFPRegs == 1);
                                 Debug.Assert((info.flags & (FpStruct.OnlyOne | FpStruct.BothFloat)) == 0);
 
-                                if ((1 + _rvLa64IdxFPReg <= _transitionBlock.NumArgumentRegisters) && (1 + _rvLa64IdxGenReg <= _transitionBlock.NumArgumentRegisters))
+                                if ((1 + _rvLa64IdxFPReg <= _transitionBlock.NumFloatArgumentRegisters) && (1 + _rvLa64IdxGenReg <= _transitionBlock.NumArgumentRegisters))
                                 {
                                     _argLocDescForStructInRegs = new ArgLocDesc();
                                     _argLocDescForStructInRegs.m_idxFloatReg = _rvLa64IdxFPReg;
@@ -1467,7 +1467,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                                     return argOfsInner;
                                 }
                             }
-                            else if (cFPRegs + _rvLa64IdxFPReg <= _transitionBlock.NumArgumentRegisters)
+                            else if (cFPRegs + _rvLa64IdxFPReg <= _transitionBlock.NumFloatArgumentRegisters)
                             {
                                 int argOfsInner = _transitionBlock.OffsetOfFloatArgumentRegisters + _rvLa64IdxFPReg * _transitionBlock.FloatRegisterSize;
                                 if (info.flags != FpStruct.UseIntCallConv)
@@ -1480,6 +1480,21 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                                     _argLocDescForStructInRegs.m_structFields = info;
                                 }
                                 _rvLa64IdxFPReg += cFPRegs;
+                                if (_transitionBlock.IsPpc64le)
+                                {
+                                    int slots = ALIGN_UP(cbArg, _transitionBlock.PointerSize) / _transitionBlock.PointerSize;
+                                    for (int i = 0; i < slots; i++)
+                                    {
+                                        if (_rvLa64IdxGenReg < _transitionBlock.NumArgumentRegisters)
+                                        {
+                                            _rvLa64IdxGenReg++;
+                                        }
+                                        else
+                                        {
+                                            _rvLa64OfsStack += _transitionBlock.PointerSize;
+                                        }
+                                    }
+                                }
                                 return argOfsInner;
                             }
                         }

@@ -10551,6 +10551,25 @@ void emitter::emitRecordRelocation(void*        location,       /* IN */
     JITDUMP("recordRelocation: %p (rw: %p) => %p, type %u (%s), delta %d\n", dspPtr(location), dspPtr(locationRW),
             dspPtr(target), (unsigned)fRelocType, relocTypeName, addlDelta);
 
+#if defined(TARGET_POWERPC64)
+    if (m_compiler->IsReadyToRun())
+    {
+        switch (fRelocType)
+        {
+            case CorInfoReloc::PPC64_TOC16:
+                NO_WAY("PPC64LE CoreCLR ReadyToRun must not emit PPC64_TOC16 relocations");
+            case CorInfoReloc::PPC64_REL16_TOC:
+                NO_WAY("PPC64LE CoreCLR ReadyToRun must not emit PPC64_REL16_TOC relocations");
+            case CorInfoReloc::PPC64_GOT_TPREL16:
+                NO_WAY("PPC64LE CoreCLR ReadyToRun must not emit PPC64_GOT_TPREL16 relocations");
+            case CorInfoReloc::PPC64_GOT16:
+                NO_WAY("PPC64LE CoreCLR ReadyToRun must not emit PPC64_GOT16 relocations");
+            default:
+                break;
+        }
+    }
+#endif
+
     // If we're an unmatched altjit, don't tell the VM anything. We still record the relocation for
     // late disassembly; maybe we'll need it?
     if (m_compiler->info.compMatchedVM)

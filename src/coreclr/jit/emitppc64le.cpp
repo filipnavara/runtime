@@ -307,6 +307,16 @@ static ssize_t ppcUnsigned16(uint64_t value)
     return static_cast<ssize_t>(value & 0xFFFF);
 }
 
+static ssize_t ppcHighAdjusted16(ssize_t value)
+{
+    return ppcSignExtend16(static_cast<uint64_t>((value + 0x8000) >> 16));
+}
+
+static ssize_t ppcLow16(ssize_t value)
+{
+    return ppcSignExtend16(static_cast<uint64_t>(value));
+}
+
 static emitter::code_t ppcEncodeXForm(emitter::code_t code, regNumber rt, regNumber ra, regNumber rb)
 {
     return code | (ppcReg(rt) << 21) | (ppcReg(ra) << 16) | (ppcReg(rb) << 11);
@@ -412,6 +422,25 @@ static emitter::code_t ppcEncodeBFormBranch(emitter::code_t code, ssize_t dist)
     assert((dist & 0x3) == 0);
     assert((B_DIST_SMALL_MAX_NEG <= dist) && (dist <= B_DIST_SMALL_MAX_POS));
     return code | (static_cast<emitter::code_t>(dist) & 0x0000FFFC);
+}
+
+static emitter::code_t ppcEncodeBranchAndLinkToNext()
+{
+    constexpr unsigned BO_ALWAYS = 20;
+    constexpr unsigned BI_ZERO   = 31;
+    constexpr emitter::code_t BC = 0x40000000;
+
+    return ppcEncodeBFormBranch(BC | (BO_ALWAYS << 21) | (BI_ZERO << 16) | 1, sizeof(emitter::code_t));
+}
+
+static unsigned ppcAddressLoadInstructionCount(Compiler* compiler, bool isLoad)
+{
+    if (!compiler->opts.compReloc)
+    {
+        return isLoad ? 6 : 5;
+    }
+
+    return compiler->IsReadyToRun() ? 4 : (isLoad ? 3 : 2);
 }
 
 void emitter::emitIns(instruction ins)
@@ -543,13 +572,35 @@ void emitter::emitIns_R_R_R_I_I(
     emitIns_R_R_R_I(ins, attr, reg1, reg2, reg3, static_cast<ssize_t>(ppcPack2(imm1, imm2)));
 }
 
+void emitter::emitIns_R_AI(instruction ins, emitAttr attr, regNumber reg, ssize_t addr)
+{
+    assert(ins == INS_addi);
+    assert(EA_IS_CNS_RELOC(attr));
+    assert(isGeneralRegister(reg));
+
+    instrDesc* id = emitNewInstr(attr);
+    id->idIns(ins);
+    id->idInsOpt(INS_OPTS_RELOC);
+    id->idReg1(reg);
+    id->idCodeSize(4 * sizeof(code_t));
+    id->idAddr()->iiaAddr = reinterpret_cast<BYTE*>(addr);
+
+    dispIns(id);
+    appendToCurIG(id);
+}
+
 void emitter::emitIns_R_C(
     instruction ins, emitAttr attr, regNumber targetReg, regNumber addrReg, CORINFO_FIELD_HANDLE fldHnd)
 {
     assert(isFloatReg(targetReg) || isGeneralRegister(targetReg));
 
     const bool isAddressLoad = ins == INS_addi;
-    assert(!EA_IS_RELOC(attr) || (isAddressLoad && m_compiler->opts.compReloc));
+    if (m_compiler->IsReadyToRun())
+    {
+        attr = EA_SET_FLG(attr, EA_CNS_RELOC_FLG);
+    }
+
+    assert(!EA_IS_RELOC(attr) || (m_compiler->IsReadyToRun() || (isAddressLoad && m_compiler->opts.compReloc)));
     if (isAddressLoad)
     {
         assert(EA_SIZE(attr) == EA_PTRSIZE);
@@ -570,8 +621,7 @@ void emitter::emitIns_R_C(
     id->idInsOpt(INS_OPTS_RC);
     id->idReg1(targetReg);
     id->idReg2(isAddressLoad ? REG_R0 : addrReg);
-    id->idCodeSize((isAddressLoad ? (m_compiler->opts.compReloc ? 2 : 5) : (m_compiler->opts.compReloc ? 3 : 6)) *
-                   sizeof(code_t));
+    id->idCodeSize(ppcAddressLoadInstructionCount(m_compiler, !isAddressLoad) * sizeof(code_t));
     id->idSetIsBound();
     id->idAddr()->iiaFieldHnd = fldHnd;
 
@@ -589,7 +639,7 @@ void emitter::emitIns_R_L(instruction ins, emitAttr attr, BasicBlock* dst, regNu
     id->idIns(ins);
     id->idInsOpt(INS_OPTS_RL);
     id->idAddr()->iiaBBlabel = dst;
-    id->idCodeSize((m_compiler->opts.compReloc ? 2 : 5) * sizeof(code_t));
+    id->idCodeSize((m_compiler->opts.compReloc ? (m_compiler->IsReadyToRun() ? 4 : 2) : 5) * sizeof(code_t));
     id->idReg1(reg);
     id->idReg2(REG_R2);
 
@@ -621,7 +671,7 @@ void emitter::emitIns_R_L(instruction ins, emitAttr attr, insGroup* dst, regNumb
     id->idInsOpt(INS_OPTS_RL);
     id->idAddr()->iiaIGlabel = dst;
     id->idSetIsBound();
-    id->idCodeSize((m_compiler->opts.compReloc ? 2 : 5) * sizeof(code_t));
+    id->idCodeSize((m_compiler->opts.compReloc ? (m_compiler->IsReadyToRun() ? 4 : 2) : 5) * sizeof(code_t));
     id->idReg1(reg);
     id->idReg2(baseReg);
 
@@ -850,6 +900,12 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
     if (id->idInsOpt() == INS_OPTS_RC)
     {
         codeSize = (id->idIns() == INS_addi) ? emitOutputConstAddr(dst, id) : emitOutputConstLoad(dst, id);
+        goto UPDATE_GC_INFO;
+    }
+
+    if (id->idInsOpt() == INS_OPTS_RELOC)
+    {
+        codeSize = emitOutputRelocAddr(dst, id);
         goto UPDATE_GC_INFO;
     }
 
@@ -1237,6 +1293,33 @@ unsigned emitter::emitOutputLabelLoad(BYTE* dst, instrDesc* id)
 
     if (m_compiler->opts.compReloc)
     {
+        if (m_compiler->IsReadyToRun())
+        {
+            if (id->idReg2() == REG_R12)
+            {
+                NO_WAY("PPC64LE CoreCLR ReadyToRun reverse P/Invoke TOC prolog is unsupported");
+            }
+
+            assert(id->idCodeSize() == 4 * sizeof(code_t));
+
+            const ssize_t delta =
+                static_cast<ssize_t>(value) - static_cast<ssize_t>(reinterpret_cast<uintptr_t>(dst + sizeof(code_t)));
+
+            emitOutput_Instr(cur, ppcEncodeBranchAndLinkToNext());
+            cur += sizeof(code_t);
+
+            emitOutput_Instr(cur, ppcEncodeMfspr(emitInsCode(INS_mflr), reg, 8));
+            cur += sizeof(code_t);
+
+            emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), reg, reg, ppcHighAdjusted16(delta)));
+            cur += sizeof(code_t);
+
+            emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addi), reg, reg, ppcLow16(delta)));
+            cur += sizeof(code_t);
+
+            return static_cast<unsigned>(cur - dst);
+        }
+
         assert(id->idCodeSize() == 2 * sizeof(code_t));
 
         emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), reg, id->idReg2(), 0));
@@ -1255,6 +1338,13 @@ unsigned emitter::emitOutputLabelLoad(BYTE* dst, instrDesc* id)
         }
         return static_cast<unsigned>(cur - dst);
     }
+
+#ifdef DEBUG
+    if (m_compiler->IsAot() && ((value & 0xFFFF000000000000ULL) == 0x4000000000000000ULL))
+    {
+        NO_WAY("PPC64LE ReadyToRun label load materialized an unresolved crossgen handle");
+    }
+#endif
 
     assert(id->idCodeSize() == 5 * sizeof(code_t));
 
@@ -1282,6 +1372,34 @@ unsigned emitter::emitOutputLabelLoad(BYTE* dst, instrDesc* id)
     return static_cast<unsigned>(cur - dst);
 }
 
+unsigned emitter::emitOutputRelocAddr(BYTE* dst, instrDesc* id)
+{
+    assert(id->idInsOpt() == INS_OPTS_RELOC);
+    assert(id->idIns() == INS_addi);
+    assert(id->idCodeSize() == 4 * sizeof(code_t));
+    assert(isGeneralRegister(id->idReg1()));
+
+    const regNumber reg = id->idReg1();
+
+    BYTE* cur = dst;
+
+    emitOutput_Instr(cur, ppcEncodeBranchAndLinkToNext());
+    cur += sizeof(code_t);
+
+    emitOutput_Instr(cur, ppcEncodeMfspr(emitInsCode(INS_mflr), reg, 8));
+    cur += sizeof(code_t);
+
+    emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), reg, reg, 0));
+    cur += sizeof(code_t);
+
+    emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addi), reg, reg, 0));
+    cur += sizeof(code_t);
+
+    emitRecordRelocationWithAddlDelta(dst + (2 * sizeof(code_t)), id->idAddr()->iiaAddr, CorInfoReloc::PPC64_REL16,
+                                      sizeof(code_t));
+    return static_cast<unsigned>(cur - dst);
+}
+
 unsigned emitter::emitOutputConstAddr(BYTE* dst, instrDesc* id)
 {
     assert(id->idInsOpt() == INS_OPTS_RC);
@@ -1301,6 +1419,36 @@ unsigned emitter::emitOutputConstAddr(BYTE* dst, instrDesc* id)
 
     if (m_compiler->opts.compReloc)
     {
+        if (m_compiler->IsReadyToRun())
+        {
+            assert(id->idCodeSize() == 4 * sizeof(code_t));
+
+            const ssize_t delta = id->idIsReloc()
+                                      ? 0
+                                      : static_cast<ssize_t>(value) -
+                                            static_cast<ssize_t>(reinterpret_cast<uintptr_t>(dst + sizeof(code_t)));
+
+            emitOutput_Instr(cur, ppcEncodeBranchAndLinkToNext());
+            cur += sizeof(code_t);
+
+            emitOutput_Instr(cur, ppcEncodeMfspr(emitInsCode(INS_mflr), reg, 8));
+            cur += sizeof(code_t);
+
+            emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), reg, reg, ppcHighAdjusted16(delta)));
+            cur += sizeof(code_t);
+
+            emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addi), reg, reg, ppcLow16(delta)));
+            cur += sizeof(code_t);
+
+            if (id->idIsReloc())
+            {
+                emitRecordRelocationWithAddlDelta(dst + (2 * sizeof(code_t)), reinterpret_cast<void*>(value),
+                                                  CorInfoReloc::PPC64_REL16, sizeof(code_t));
+            }
+
+            return static_cast<unsigned>(cur - dst);
+        }
+
         assert(id->idCodeSize() == 2 * sizeof(code_t));
 
         emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), reg, REG_R2, 0));
@@ -1312,6 +1460,13 @@ unsigned emitter::emitOutputConstAddr(BYTE* dst, instrDesc* id)
         emitRecordRelocation(dst, reinterpret_cast<void*>(value), CorInfoReloc::PPC64_TOC16);
         return static_cast<unsigned>(cur - dst);
     }
+
+#ifdef DEBUG
+    if (m_compiler->IsAot() && ((value & 0xFFFF000000000000ULL) == 0x4000000000000000ULL))
+    {
+        NO_WAY("PPC64LE ReadyToRun const address materialized an unresolved crossgen handle");
+    }
+#endif
 
     assert(id->idCodeSize() == 5 * sizeof(code_t));
 
@@ -1360,6 +1515,36 @@ unsigned emitter::emitOutputConstLoad(BYTE* dst, instrDesc* id)
 
     if (m_compiler->opts.compReloc)
     {
+        if (m_compiler->IsReadyToRun())
+        {
+            assert(id->idCodeSize() == 4 * sizeof(code_t));
+
+            const ssize_t delta = id->idIsReloc()
+                                      ? 0
+                                      : static_cast<ssize_t>(addr) -
+                                            static_cast<ssize_t>(reinterpret_cast<uintptr_t>(dst + sizeof(code_t)));
+
+            emitOutput_Instr(cur, ppcEncodeBranchAndLinkToNext());
+            cur += sizeof(code_t);
+
+            emitOutput_Instr(cur, ppcEncodeMfspr(emitInsCode(INS_mflr), addrReg, 8));
+            cur += sizeof(code_t);
+
+            emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), addrReg, addrReg, ppcHighAdjusted16(delta)));
+            cur += sizeof(code_t);
+
+            emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(id->idIns()), id->idReg1(), addrReg, ppcLow16(delta)));
+            cur += sizeof(code_t);
+
+            if (id->idIsReloc())
+            {
+                emitRecordRelocationWithAddlDelta(dst + (2 * sizeof(code_t)), reinterpret_cast<void*>(addr),
+                                                  CorInfoReloc::PPC64_REL16, sizeof(code_t));
+            }
+
+            return static_cast<unsigned>(cur - dst);
+        }
+
         assert(id->idCodeSize() == 3 * sizeof(code_t));
 
         emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), addrReg, REG_R2, 0));
@@ -1374,6 +1559,13 @@ unsigned emitter::emitOutputConstLoad(BYTE* dst, instrDesc* id)
         emitRecordRelocation(dst, reinterpret_cast<void*>(addr), CorInfoReloc::PPC64_TOC16);
         return static_cast<unsigned>(cur - dst);
     }
+
+#ifdef DEBUG
+    if (m_compiler->IsAot() && ((value & 0xFFFF000000000000ULL) == 0x4000000000000000ULL))
+    {
+        NO_WAY("PPC64LE ReadyToRun const load materialized an unresolved crossgen handle");
+    }
+#endif
 
     assert(id->idCodeSize() == 6 * sizeof(code_t));
 

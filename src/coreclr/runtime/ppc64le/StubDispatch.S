@@ -23,16 +23,17 @@
 \name:
 .endm
 
-.macro CHECK_CACHE_ENTRY entry
-    ld 0, (OFFSETOF__InterfaceDispatchCache__m_rgEntries + (\entry * SIZEOF__InterfaceDispatchCacheEntry))(12)
+.macro CHECK_CACHE_ENTRY
+    ld 0, 0(9)
     cmpd 10, 0
     bne 0f
-    ld 12, (OFFSETOF__InterfaceDispatchCache__m_rgEntries + (\entry * SIZEOF__InterfaceDispatchCacheEntry) + 8)(12)
+    ld 12, 8(9)
     cmpdi 12, 0
     beq 0f
     mtctr 12
     bctr
 0:
+    addi 9, 9, SIZEOF__InterfaceDispatchCacheEntry
 .endm
 
 .macro DEFINE_INTERFACE_DISPATCH_STUB entries
@@ -50,11 +51,10 @@ DEFINE_FUNC RhpInterfaceDispatch\entries
 
 DEFINE_ALT_ENTRY RhpInterfaceDispatchAVLocation\entries
     ld 10, 0(3)
+    addi 9, 12, OFFSETOF__InterfaceDispatchCache__m_rgEntries
 
-    .set CurrentEntry, 0
     .rept \entries
-        CHECK_CACHE_ENTRY CurrentEntry
-        .set CurrentEntry, CurrentEntry + 1
+        CHECK_CACHE_ENTRY
     .endr
 
     b RhpInterfaceDispatchSlow

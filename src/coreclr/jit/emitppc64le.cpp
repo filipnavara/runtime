@@ -1404,13 +1404,13 @@ unsigned emitter::emitOutputConstLoad(BYTE* dst, instrDesc* id)
     return static_cast<unsigned>(cur - dst);
 }
 
-void emitter::emitIns_J(instruction ins, BasicBlock* dst)
+void emitter::emitIns_J(instruction ins, BasicBlock* dst, bool keepShort)
 {
     assert(emitIsUncondJump(ins) || emitIsCmpJump(ins));
-    emitIns_Jump(ins, dst);
+    emitIns_Jump(ins, dst, keepShort);
 }
 
-void emitter::emitIns_Jump(instruction ins, BasicBlock* dst)
+void emitter::emitIns_Jump(instruction ins, BasicBlock* dst, bool keepShort)
 {
     assert(dst != nullptr);
     assert(dst->HasFlag(BBF_HAS_LABEL));
@@ -1438,6 +1438,12 @@ void emitter::emitIns_Jump(instruction ins, BasicBlock* dst)
         id->idjKeepLong = true;
     }
 #endif // DEBUG
+
+    if (keepShort && emitIsCmpJump(id))
+    {
+        assert(!id->idjKeepLong);
+        emitSetShortJump(id);
+    }
 
     id->idjIG   = emitCurIG;
     id->idjOffs = emitCurIGsize;

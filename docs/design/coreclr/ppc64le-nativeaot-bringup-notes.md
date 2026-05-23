@@ -22,6 +22,16 @@ The baseline WSL flow is:
 ```sh
 ./build.sh clr -c Release -arch x64
 ./build.sh clr.tools+clr.nativeaotlibs -c Release -arch x64 /p:StripSymbols=false
+./build.sh clr.alljitscommunity -c Release -arch x64 --build /p:StripSymbols=false
+ROOTFS_DIR=/ ./build.sh clr.nativeaotruntime -c Release -arch ppc64le -cross --build /p:StripSymbols=false
+ROOTFS_DIR=/ ./build.sh clr.nativeaotlibs -c Release -arch ppc64le -cross --build /p:StripSymbols=false
+
+cp -p artifacts/bin/coreclr/linux.x64.Release/libclrjit_unix_ppc64le_x64.so* \
+    artifacts/bin/coreclr/linux.ppc64le.Release/x64/ilc/
+cp -p artifacts/bin/coreclr/linux.x64.Release/libjitinterface_x64.so \
+    artifacts/bin/coreclr/linux.ppc64le.Release/x64/ilc/
+cp -p artifacts/bin/coreclr/linux.x64.Release/libjitinterface_x64.so \
+    artifacts/bin/coreclr/linux.ppc64le.Release/x64/crossgen2/
 
 ROOTFS_DIR=/ ./src/tests/build.sh -release -ppc64le -cross -nativeaot \
     -tree:nativeaot/SmokeTests \
@@ -38,6 +48,15 @@ ROOTFS_DIR=/ ./src/tests/build.sh -release -ppc64le -cross -nativeaot \
 `-cross` sets up the native CMake cross build. Use `ROOTFS_DIR=/` for the
 multi-arch/builtin-binfmt flow where the PPC64LE libraries are installed on the
 WSL system instead of downloaded into a runtime rootfs.
+
+After rebasing, make sure the PPC64LE ILC folder has a matched x64-hosted
+PPC64LE JIT and `libjitinterface_x64.so`. Stale copies can look like real JIT
+or NativeAOT failures: the checked JIT may return `CodeGenerationFailed` before
+entering the JIT due to a JIT-interface GUID mismatch, and release ILC can trip
+stack-smash checks in the shim. If a combined PPC64LE cross build aborts in the
+`ILCompiler_publish` leg with `NETSDK1047` for `net11.0/linux-ppc64le`, rerun
+`clr.nativeaotruntime` and `clr.nativeaotlibs` separately and refresh the ILC
+copies above before judging test failures.
 
 Until the SDK knows `linux-ppc64le` as a NativeAOT-capable RID, locally patch
 `.dotnet/sdk/11.0.100-preview.5.26227.104/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.Sdk.FrameworkReferenceResolution.targets`

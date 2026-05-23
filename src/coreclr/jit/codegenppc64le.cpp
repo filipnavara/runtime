@@ -2672,7 +2672,7 @@ void CodeGen::genAsyncResumeInfo(GenTreeVal* treeNode)
 
 void CodeGen::genFtnEntry(GenTree* treeNode)
 {
-    GetEmitter()->emitIns_R_L(INS_addi, EA_PTRSIZE, GetEmitter()->emitPrologIG, treeNode->GetRegNum());
+    GetEmitter()->emitIns_R_L(INS_addi, EA_PTRSIZE, GetEmitter()->emitGetFirstPrologIG(), treeNode->GetRegNum());
     genProduceReg(treeNode);
 }
 
@@ -4030,7 +4030,7 @@ void CodeGen::genEstablishPpc64leTocForReversePInvoke()
     // entry address. Use the canonical two-instruction REL16 .TOC. sequence to
     // establish this method's TOC before the normal prolog can emit any
     // TOC-relative references.
-    emit->emitIns_R_L(INS_lea, EA_PTRSIZE, emit->emitPrologIG, REG_R2, REG_R12);
+    emit->emitIns_R_L(INS_lea, EA_PTRSIZE, emit->emitGetFirstPrologIG(), REG_R2, REG_R12);
 
     m_compiler->unwindPadding();
 }

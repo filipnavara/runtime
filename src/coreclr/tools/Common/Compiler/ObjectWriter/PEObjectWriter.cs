@@ -950,6 +950,7 @@ namespace ILCompiler.ObjectWriter
                         case RelocType.IMAGE_REL_BASED_RISCV64_PCREL_I:
                         case RelocType.IMAGE_REL_BASED_RISCV64_PCREL_S:
                         case RelocType.IMAGE_REL_BASED_PPC64_REL24:
+                        case RelocType.IMAGE_REL_BASED_PPC64_REL16_TOC:
                         {
                             long targetAddress = symbolImageOffset + addend;
                             long delta = targetAddress - (long)relocOffset;

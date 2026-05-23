@@ -24,27 +24,27 @@
 .endm
 
 .macro CHECK_CACHE_ENTRY entry
-    ld 0, (OFFSETOF__InterfaceDispatchCache__m_rgEntries + (\entry * SIZEOF__InterfaceDispatchCacheEntry))(11)
+    ld 0, (OFFSETOF__InterfaceDispatchCache__m_rgEntries + (\entry * SIZEOF__InterfaceDispatchCacheEntry))(12)
     cmpd 10, 0
     bne 0f
-    ld 11, (OFFSETOF__InterfaceDispatchCache__m_rgEntries + (\entry * SIZEOF__InterfaceDispatchCacheEntry) + 8)(11)
-    cmpdi 11, 0
+    ld 12, (OFFSETOF__InterfaceDispatchCache__m_rgEntries + (\entry * SIZEOF__InterfaceDispatchCacheEntry) + 8)(12)
+    cmpdi 12, 0
     beq 0f
-    mtctr 11
+    mtctr 12
     bctr
 0:
 .endm
 
 .macro DEFINE_INTERFACE_DISPATCH_STUB entries
 DEFINE_FUNC RhpInterfaceDispatch\entries
-    // r12 holds the indirection cell address. Keep it live for the slow path.
-    ld 11, OFFSETOF__InterfaceDispatchCell__m_pCache(12)
+    // r11 holds the indirection cell address. Keep it live for the slow path.
+    ld 12, OFFSETOF__InterfaceDispatchCell__m_pCache(11)
 
     // Retry through the cell if this stub observes a stale non-cache value or a
     // cache with a different entry count.
-    andi. 0, 11, IDC_CACHE_POINTER_MASK
+    andi. 0, 12, IDC_CACHE_POINTER_MASK
     bne .LRaceRetry_\entries
-    lwz 0, OFFSETOF__InterfaceDispatchCache__m_cEntries(11)
+    lwz 0, OFFSETOF__InterfaceDispatchCache__m_cEntries(12)
     cmpwi 0, \entries
     bne .LRaceRetry_\entries
 
@@ -60,8 +60,8 @@ DEFINE_ALT_ENTRY RhpInterfaceDispatchAVLocation\entries
     b RhpInterfaceDispatchSlow
 
 .LRaceRetry_\entries:
-    ld 11, 0(12)
-    mtctr 11
+    ld 12, 0(11)
+    mtctr 12
     bctr
 END_FUNC RhpInterfaceDispatch\entries
 .endm
@@ -83,8 +83,9 @@ DEFINE_ALT_ENTRY RhpInitialDynamicInterfaceDispatch
 END_FUNC RhpInitialInterfaceDispatch
 
 DEFINE_FUNC RhpInterfaceDispatchSlow
-    // r12 contains the interface dispatch cell. RhpUniversalTransitionTailCall
+    // r11 contains the interface dispatch cell. RhpUniversalTransitionTailCall
     // expects r11 to contain the resolver target and r12 to contain its argument.
+    mr 12, 11
     addis 11, 2, RhpCidResolve@toc@ha
     addi 11, 11, RhpCidResolve@toc@l
     b RhpUniversalTransitionTailCall

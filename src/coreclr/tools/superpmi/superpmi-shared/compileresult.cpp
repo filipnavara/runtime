@@ -702,6 +702,7 @@ const char* relocationTypeToString(CorInfoReloc fRelocType)
         ADD_CASE(PPC64_TPREL16);
         ADD_CASE(PPC64_GOT_TPREL16);
         ADD_CASE(PPC64_GOT16);
+        ADD_CASE(PPC64_REL16_TOC);
         default:
             return "UNKNOWN";
 #undef ADD_CASE

@@ -37,6 +37,7 @@ namespace ILCompiler.DependencyAnalysis
         IMAGE_REL_BASED_PPC64_TPREL16        = 0x23,   // PPC64: addis+addi thread-pointer-relative address
         IMAGE_REL_BASED_PPC64_GOT_TPREL16    = 0x24,   // PPC64: addis+ld+add GOT thread-pointer-relative access
         IMAGE_REL_BASED_PPC64_GOT16          = 0x25,   // PPC64: addis+ld GOT function address access
+        IMAGE_REL_BASED_PPC64_REL16_TOC      = 0x26,   // PPC64: addis+addi PC-relative TOC address for global entry
         IMAGE_REL_BASED_RELPTR32             = 0x7C,   // 32-bit relative address from byte starting reloc
                                                        // This is a special NGEN-specific relocation type
                                                        // for relative pointer (used to make NGen relocation
@@ -662,7 +663,7 @@ namespace ILCompiler.DependencyAnalysis
 
         public Relocation(RelocType relocType, int offset, ISymbolNode target)
         {
-            Debug.Assert(target != null);
+            Debug.Assert(target != null || relocType == RelocType.IMAGE_REL_BASED_PPC64_REL16_TOC);
             RelocType = relocType;
             Offset = offset;
             Target = target;
@@ -731,6 +732,7 @@ namespace ILCompiler.DependencyAnalysis
                     PutPpc64Rel24((uint*)location, value);
                     break;
                 case RelocType.IMAGE_REL_BASED_PPC64_TOC16:
+                case RelocType.IMAGE_REL_BASED_PPC64_REL16_TOC:
                 case RelocType.IMAGE_REL_BASED_PPC64_TPREL16:
                 case RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16:
                 case RelocType.IMAGE_REL_BASED_PPC64_GOT16:
@@ -794,6 +796,7 @@ namespace ILCompiler.DependencyAnalysis
                 RelocType.IMAGE_REL_BASED_RISCV64_PCREL_S => 8,
                 RelocType.IMAGE_REL_BASED_PPC64_REL24 => 4,
                 RelocType.IMAGE_REL_BASED_PPC64_TOC16 => 8,
+                RelocType.IMAGE_REL_BASED_PPC64_REL16_TOC => 8,
                 RelocType.IMAGE_REL_BASED_PPC64_TPREL16 => 8,
                 RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16 => 12,
                 RelocType.IMAGE_REL_BASED_PPC64_GOT16 => 8,
@@ -872,6 +875,7 @@ namespace ILCompiler.DependencyAnalysis
                 case RelocType.IMAGE_REL_BASED_PPC64_REL24:
                     return (long)GetPpc64Rel24((uint*)location);
                 case RelocType.IMAGE_REL_BASED_PPC64_TOC16:
+                case RelocType.IMAGE_REL_BASED_PPC64_REL16_TOC:
                 case RelocType.IMAGE_REL_BASED_PPC64_TPREL16:
                 case RelocType.IMAGE_REL_BASED_PPC64_GOT_TPREL16:
                 case RelocType.IMAGE_REL_BASED_PPC64_GOT16:

@@ -4027,11 +4027,10 @@ void CodeGen::genEstablishPpc64leTocForReversePInvoke()
 
     emitter* emit = GetEmitter();
     // PPC64 ELFv2 global entry points are entered with r12 holding the callee
-    // entry address. Use it to establish this method's TOC before the normal
-    // prolog can emit any TOC-relative references.
-    emit->emitIns_R_L(INS_lea, EA_PTRSIZE, emit->emitPrologIG, REG_R11, REG_R0);
-    emit->emitIns_R_R_R(INS_subf, EA_PTRSIZE, REG_R2, REG_R11, REG_R12);
-    instGen(INS_nop);
+    // entry address. Use the canonical two-instruction REL16 .TOC. sequence to
+    // establish this method's TOC before the normal prolog can emit any
+    // TOC-relative references.
+    emit->emitIns_R_L(INS_lea, EA_PTRSIZE, emit->emitPrologIG, REG_R2, REG_R12);
 
     m_compiler->unwindPadding();
 }

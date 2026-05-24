@@ -296,7 +296,17 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
                 break;
             }
 
-            genSetRegToConst(targetReg, targetType, treeNode);
+            if (varTypeIsGC(targetType))
+            {
+                GetEmitter()->emitDisableGC();
+                genSetRegToConst(targetReg, targetType, treeNode);
+                GetEmitter()->emitEnableGC();
+                genDefineTempLabel(genCreateTempLabel());
+            }
+            else
+            {
+                genSetRegToConst(targetReg, targetType, treeNode);
+            }
             genProduceReg(treeNode);
             break;
         }
@@ -1862,8 +1872,20 @@ void CodeGen::genCodeForIndir(GenTreeIndir* tree)
         instGen_MemoryBarrier(BARRIER_FULL);
     }
 
-    GetEmitter()->emitIns_R_AR(loadIns, emitActualTypeSize(targetType), targetReg, baseReg, static_cast<int>(offset));
+    const bool disableGcForOverwrittenAddress = varTypeIsGC(targetType) && (targetReg == baseReg);
+    if (disableGcForOverwrittenAddress)
+    {
+        GetEmitter()->emitDisableGC();
+    }
+
+    genInstrWithConstant(loadIns, emitActualTypeSize(targetType), targetReg, baseReg, offset, REG_NA);
     ppcEmitSignExtendSmallLoadIfNeeded(GetEmitter(), targetType, targetReg);
+
+    if (disableGcForOverwrittenAddress)
+    {
+        GetEmitter()->emitEnableGC();
+        genDefineTempLabel(genCreateTempLabel());
+    }
 
     if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
     {
@@ -3883,6 +3905,8 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
 
     genEmitCallWithCurrentGC(params);
 
+    genDefinePendingCallLabel(call);
+
     if (restoreTocAfterExternalCall)
     {
         GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_R2, REG_SPBASE, PPC_TOC_SAVE_OFFSET);
@@ -4800,6 +4824,12 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
                                      ssize_t   imm,
                                      insFlags flags DEBUGARG(size_t targetHandle) DEBUGARG(GenTreeFlags gtFlags))
 {
+    assert(genIsValidIntReg(reg));
+
+#if EMIT_GENERATE_GCINFO
+    gcInfo.gcMarkRegSetNpt(genRegMask(reg));
+#endif
+
     if (EA_IS_CNS_RELOC(size))
     {
         assert(m_compiler->opts.compReloc);

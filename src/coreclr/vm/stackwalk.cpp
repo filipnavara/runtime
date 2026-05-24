@@ -594,6 +594,9 @@ PCODE Thread::VirtualUnwindLeafCallFrame(T_CONTEXT* pContext)
 #elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
     uControlPc = TADDR(pContext->Ra);
 
+#elif defined(TARGET_POWERPC64)
+    uControlPc = TADDR(pContext->Link);
+
 #else
     PORTABILITY_ASSERT("Thread::VirtualUnwindLeafCallFrame");
     uControlPc = NULL;
@@ -2155,7 +2158,6 @@ StackWalkAction StackFrameIterator::NextRaw(void)
             m_crawl.isFrameless = true;
             m_crawl.codeInfo    = m_cachedCodeInfo;
             m_crawl.pFunc       = m_crawl.codeInfo.GetMethodDesc();
-
 
             PreProcessingForManagedFrames();
             goto Cleanup;

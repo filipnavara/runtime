@@ -566,7 +566,19 @@ inline void FillRegDisplay(const PREGDISPLAY pRD, PT_CONTEXT pctx, PT_CONTEXT pC
     pRD->volatileCurrContextPointers.T4 = &pctx->T4;
     pRD->volatileCurrContextPointers.T5 = &pctx->T5;
     pRD->volatileCurrContextPointers.T6 = &pctx->T6;
-#endif // TARGET_RISCV64
+#elif defined(TARGET_POWERPC64) // TARGET_RISCV64
+    pRD->volatileCurrContextPointers.R0  = &pctx->R0;
+    pRD->volatileCurrContextPointers.R3  = &pctx->R3;
+    pRD->volatileCurrContextPointers.R4  = &pctx->R4;
+    pRD->volatileCurrContextPointers.R5  = &pctx->R5;
+    pRD->volatileCurrContextPointers.R6  = &pctx->R6;
+    pRD->volatileCurrContextPointers.R7  = &pctx->R7;
+    pRD->volatileCurrContextPointers.R8  = &pctx->R8;
+    pRD->volatileCurrContextPointers.R9  = &pctx->R9;
+    pRD->volatileCurrContextPointers.R10 = &pctx->R10;
+    pRD->volatileCurrContextPointers.R11 = &pctx->R11;
+    pRD->volatileCurrContextPointers.R12 = &pctx->R12;
+#endif // TARGET_POWERPC64
 }
 
 // Initialize a new REGDISPLAY/CONTEXT pair from an existing valid REGDISPLAY.
@@ -647,5 +659,4 @@ inline void UpdateContextFromRegDisp(PREGDISPLAY pRegDisp, PT_CONTEXT pContext)
 
 
 #endif  // __REGDISP_H
-
 

@@ -1864,9 +1864,8 @@ static void UnwindContextToContext(unw_cursor_t *cursor, CONTEXT *winContext)
     unw_get_reg(cursor, UNW_S390X_R14, (unw_word_t *) &winContext->R14);
     TRACE("sp %p pc %p lr %p\n", winContext->R15, winContext->PSWAddr, winContext->R14);
 #elif defined(TARGET_POWERPC64)
-    //TODO
     unw_get_reg(cursor, UNW_REG_IP, (unw_word_t *) &winContext->Nip);
-    unw_get_reg(cursor, UNW_REG_SP, (unw_word_t *) &winContext->R31);
+    unw_get_reg(cursor, UNW_REG_SP, (unw_word_t *) &winContext->R1);
     unw_get_reg(cursor, UNW_PPC64_R14, (unw_word_t *) &winContext->R14);
     unw_get_reg(cursor, UNW_PPC64_R15, (unw_word_t *) &winContext->R15);
     unw_get_reg(cursor, UNW_PPC64_R16, (unw_word_t *) &winContext->R16);
@@ -1884,6 +1883,7 @@ static void UnwindContextToContext(unw_cursor_t *cursor, CONTEXT *winContext)
     unw_get_reg(cursor, UNW_PPC64_R28, (unw_word_t *) &winContext->R28);
     unw_get_reg(cursor, UNW_PPC64_R29, (unw_word_t *) &winContext->R29);
     unw_get_reg(cursor, UNW_PPC64_R30, (unw_word_t *) &winContext->R30);
+    unw_get_reg(cursor, UNW_PPC64_R31, (unw_word_t *) &winContext->R31);
 #elif defined(TARGET_RISCV64)
     unw_get_reg(cursor, UNW_REG_IP, (unw_word_t *) &winContext->Pc);
     unw_get_reg(cursor, UNW_REG_SP, (unw_word_t *) &winContext->Sp);
@@ -2018,7 +2018,7 @@ access_reg(unw_addr_space_t as, unw_regnum_t regnum, unw_word_t *valp, int write
     case UNW_S390X_R15:    *valp = (unw_word_t)winContext->R15; break;
     case UNW_S390X_IP:     *valp = (unw_word_t)winContext->PSWAddr; break;
 #elif defined(TARGET_POWERPC64)
-    //TODO
+    case UNW_PPC64_R1:     *valp = (unw_word_t)winContext->R1; break;
     case UNW_PPC64_R14:    *valp = (unw_word_t)winContext->R14; break;
     case UNW_PPC64_R15:    *valp = (unw_word_t)winContext->R15; break;
     case UNW_PPC64_R16:    *valp = (unw_word_t)winContext->R16; break;

@@ -3507,7 +3507,7 @@ void Thread::CommitGCStressInstructionUpdate()
         else
             *(DWORD*)destCodeWriterHolder.GetRW() = *(DWORD*)pbSrcCode;
 
-#elif defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 
         *(DWORD*)destCodeWriterHolder.GetRW() = *(DWORD*)pbSrcCode;
 

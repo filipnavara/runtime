@@ -2123,7 +2123,7 @@ void ComputeCallRefMap(MethodDesc* pMD,
 
     // Allocate a fake stack
     CQuickBytes qbFakeStack;
-    qbFakeStack.AllocThrows(sizeof(TransitionBlock) + nStackBytes);
+    qbFakeStack.AllocThrows(TransitionBlock::GetOffsetOfArgs() + nStackBytes);
     memset(qbFakeStack.Ptr(), 0, qbFakeStack.Size());
 
     BYTE * pFrame = (BYTE *)qbFakeStack.Ptr();
@@ -2143,7 +2143,7 @@ void ComputeCallRefMap(MethodDesc* pMD,
 
     nStackSlots = nStackBytes / sizeof(TADDR) + NUM_ARGUMENT_REGISTERS;
 #else
-    nStackSlots = (sizeof(TransitionBlock) + nStackBytes - TransitionBlock::GetOffsetOfFirstGCRefMapSlot()) / TARGET_POINTER_SIZE;
+    nStackSlots = (TransitionBlock::GetOffsetOfArgs() + nStackBytes - TransitionBlock::GetOffsetOfFirstGCRefMapSlot()) / TARGET_POINTER_SIZE;
 #endif
 
     for (UINT pos = 0; pos < nStackSlots; pos++)

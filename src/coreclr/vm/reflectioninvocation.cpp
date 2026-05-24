@@ -396,7 +396,7 @@ extern "C" void QCALLTYPE RuntimeMethodHandle_InvokeMethod(
     UINT nStackBytes = argit.SizeOfFrameArgumentArray();
 
     // Note that SizeOfFrameArgumentArray does overflow checks with sufficient margin to prevent overflows here
-    SIZE_T nAllocaSize = TransitionBlock::GetNegSpaceSize() + sizeof(TransitionBlock) + nStackBytes;
+    SIZE_T nAllocaSize = TransitionBlock::GetNegSpaceSize() + TransitionBlock::GetOffsetOfArgs() + nStackBytes;
 
     Thread * pThread = GET_THREAD();
 
@@ -406,7 +406,7 @@ extern "C" void QCALLTYPE RuntimeMethodHandle_InvokeMethod(
 
     CallDescrData callDescrData;
 
-    callDescrData.pSrc = pTransitionBlock + sizeof(TransitionBlock);
+    callDescrData.pSrc = pTransitionBlock + TransitionBlock::GetOffsetOfArgs();
     callDescrData.numStackSlots = ALIGN_UP(nStackBytes, TARGET_REGISTER_SIZE) / TARGET_REGISTER_SIZE;
 #ifdef CALLDESCR_ARGREGS
     callDescrData.pArgumentRegisters = (ArgumentRegisters*)(pTransitionBlock + TransitionBlock::GetOffsetOfArgumentRegisters());

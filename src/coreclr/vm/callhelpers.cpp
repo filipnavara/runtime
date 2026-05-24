@@ -338,7 +338,7 @@ void MethodDescCallSite::CallTargetWorker(const ARG_SLOT *pArguments, ARG_SLOT *
         // Create a fake FramedMethodFrame on the stack.
 
         // Note that SizeOfFrameArgumentArray does overflow checks with sufficient margin to prevent overflows here
-        DWORD dwAllocaSize = TransitionBlock::GetNegSpaceSize() + sizeof(TransitionBlock) + nStackBytes;
+        DWORD dwAllocaSize = TransitionBlock::GetNegSpaceSize() + TransitionBlock::GetOffsetOfArgs() + nStackBytes;
 
         LPBYTE pAlloc = (LPBYTE)_alloca(dwAllocaSize);
 
@@ -477,7 +477,7 @@ void MethodDescCallSite::CallTargetWorker(const ARG_SLOT *pArguments, ARG_SLOT *
 
     CallDescrData callDescrData;
 
-    callDescrData.pSrc = pTransitionBlock + sizeof(TransitionBlock);
+    callDescrData.pSrc = pTransitionBlock + TransitionBlock::GetOffsetOfArgs();
     _ASSERTE((nStackBytes % TARGET_POINTER_SIZE) == 0);
     callDescrData.numStackSlots = nStackBytes / TARGET_POINTER_SIZE;
 #ifdef CALLDESCR_ARGREGS

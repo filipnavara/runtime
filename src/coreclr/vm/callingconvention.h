@@ -273,12 +273,18 @@ struct TransitionBlock
     }
 #endif
 
-    static BYTE GetOffsetOfArgs()
+    static int GetOffsetOfArgs()
     {
         LIMITED_METHOD_CONTRACT;
 
         // Offset of the stack args (which are after the TransitionBlock)
+#ifdef TARGET_POWERPC64
+        // PPC64 ELFv2 keeps a caller-owned linkage and parameter-save area
+        // before the first stack argument.
+        return sizeof(TransitionBlock) + (12 * TARGET_POINTER_SIZE);
+#else
         return sizeof(TransitionBlock);
+#endif
     }
 
     static int GetOffsetOfArgumentRegisters()

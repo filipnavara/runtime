@@ -99,8 +99,9 @@ typedef DPTR(GCCoverageInfo) PTR_GCCoverageInfo; // see code:GCCoverageInfo::sav
 #define INTERRUPT_INSTR                 0x20000000  // unimp, fld
 
 #elif defined(TARGET_POWERPC64)
-// PPC64 trap instruction.
-#define INTERRUPT_INSTR                 0x7fe00008
+// PPC64 reserved instruction. This must raise SIGILL rather than SIGTRAP so it
+// is routed through the GC coverage exception path instead of breakpoint logic.
+#define INTERRUPT_INSTR                 0x00000000
 
 #endif // _TARGET_*
 

@@ -1065,6 +1065,12 @@ void GCHeap::Promote(Object** ppObject, ScanContext* sc, uint32_t flags)
 #ifdef _DEBUG
         if ((o != NULL) && !(flags & GC_CALL_INTERIOR))
         {
+#ifdef FEATURE_BASICFREEZE
+            if (g_theGCHeap->IsHeapPointer(o))
+            {
+                return;
+            }
+#endif
             ((CObjectHeader*)o)->Validate();
         }
 #endif //_DEBUG

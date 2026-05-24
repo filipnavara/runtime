@@ -296,17 +296,7 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
                 break;
             }
 
-            if (varTypeIsGC(targetType))
-            {
-                GetEmitter()->emitDisableGC();
-                genSetRegToConst(targetReg, targetType, treeNode);
-                GetEmitter()->emitEnableGC();
-                genDefineTempLabel(genCreateTempLabel());
-            }
-            else
-            {
-                genSetRegToConst(targetReg, targetType, treeNode);
-            }
+            genSetRegToConst(targetReg, targetType, treeNode);
             genProduceReg(treeNode);
             break;
         }
@@ -1824,14 +1814,6 @@ void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* lclNode)
             regNumber tmpReg  = internalRegisters.GetSingle(lclNode);
 
             genInstrWithConstant(storeIns, attr, dataReg, baseReg, offset, tmpReg);
-        }
-
-        if (varTypeIsGC(targetType) && data->OperIsLocalRead() &&
-            (data->AsLclVarCommon()->GetLclNum() == lclNode->GetLclNum()) && (varDsc->GetRegNum() == dataReg))
-        {
-            // The local's home is moving from its incoming register to its stack slot.
-            // Stop reporting the old register before future call safe points.
-            gcInfo.gcMarkRegSetNpt(genRegMask(dataReg));
         }
 
         genUpdateLife(lclNode);
@@ -4801,10 +4783,6 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
                                      insFlags flags DEBUGARG(size_t targetHandle) DEBUGARG(GenTreeFlags gtFlags))
 {
     assert(genIsValidIntReg(reg));
-
-#if EMIT_GENERATE_GCINFO
-    gcInfo.gcMarkRegSetNpt(genRegMask(reg));
-#endif
 
     if (EA_IS_CNS_RELOC(size))
     {

@@ -203,6 +203,49 @@ disabled:
   launching `ilasm`/`ildasm` from inside the emulated PPC64LE CoreCLR process,
   which is not a useful runtime signal in the current QEMU-user setup.
 
+## CoreCLR PPC64LE Disabled Code Paths
+
+These code paths are intentionally disabled by default while the PPC64LE port is
+still in bring-up. They should be treated as active follow-up work, not as
+permanent architecture limitations.
+
+- On-stack replacement is disabled for PPC64LE via `FEATURE_ON_STACK_REPLACEMENT`
+  and `Compiler::compCanHavePatchpoints()`. The JIT also defaults
+  `TC_OnStackReplacement=0`. PPC64LE OSR prolog/epilog, patchpoint frame layout,
+  and stack-walk interaction have not been validated enough for broad testing.
+- `TC_QuickJitForLoops` defaults to `0` on PPC64LE. Loop methods should not be
+  forced through quick Tier0/OSR paths until OSR is supported.
+- Tiered compilation remains enabled, but `TC_CallCounting` defaults to `0` on
+  PPC64LE. Forced call counting (`COMPlus_TC_CallCounting=1`) still reaches a
+  checked `LowLevelMonitor.Wait` owner assertion in broad R2R
+  `System.Runtime.Tests`; disabling only `TC_UseCallCountingStubs` does not avoid
+  the failure. This points at the tier promotion/call-counting path rather than
+  only the small PPC64LE call-counting thunk body.
+- Non-interruptible thread hijacking currently declines the PPC64LE case that
+  needs a saved link-register stack location. `KNONVOLATILE_CONTEXT_POINTERS`
+  does not expose a saved `Link` pointer yet, so `SWCB_GetExecutionState`
+  conservatively treats that stack-walk frame as not hijackable instead of
+  asserting in the portability fallback. Proper non-interruptible hijacking needs
+  PPC64LE unwind/context-pointer support for the saved link register.
+- CoreCLR R2R reverse P/Invoke remains unsupported. See
+  `docs/design/coreclr/ppc64le-toc-abi.md` for the runtime-TOC managed ABI and
+  the required entrypoint choices before enabling it.
+- CoreCLR R2R TOC/GOT relocation forms are guarded against. PPC64LE CoreCLR R2R
+  PE images must not produce `PPC64_TOC16`, `PPC64_REL16_TOC`,
+  `PPC64_GOT_TPREL16`, or `PPC64_GOT16`; use explicit non-TOC R2R relocation
+  concepts if new file-format support becomes necessary.
+
+Recent validation of those gates:
+
+- `System.Tests.EnumTests.GetValuesAsUnderlyingType_InvokeSByteEnum_ReturnsExpected`
+  passes after fixing PPC64LE signed small-value spill reloads.
+- `System.Runtime.Tests` with CoreCLR R2R enabled, default
+  `DOTNET_TieredCompilation`, `DOTNET_EnableWriteXorExecute=0`, and no explicit
+  `COMPlus_TC_*` overrides progressed under qemu/binfmt to the 180 second cap
+  without the previous `LowLevelMonitor.Wait` abort.
+- Forcing `COMPlus_TC_CallCounting=1` is still a useful targeted repro for the
+  unresolved tier promotion issue.
+
 ## Current System.Runtime Investigation
 
 System.Runtime NativeAOT Release tests can be built through the library project

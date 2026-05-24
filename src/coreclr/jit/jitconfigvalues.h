@@ -730,11 +730,11 @@ CONFIG_STRING(JitGuardedDevirtualizationRange, "JitGuardedDevirtualizationRange"
 CONFIG_INTEGER(JitRandomGuardedDevirtualization, "JitRandomGuardedDevirtualization", 0)
 
 // Enable insertion of patchpoints into Tier0 methods, switching to optimized where needed.
-#ifdef FEATURE_ON_STACK_REPLACEMENT
+#if defined(FEATURE_ON_STACK_REPLACEMENT) && !defined(TARGET_POWERPC64)
 RELEASE_CONFIG_INTEGER(TC_OnStackReplacement, "TC_OnStackReplacement", 1)
 #else
 RELEASE_CONFIG_INTEGER(TC_OnStackReplacement, "TC_OnStackReplacement", 0)
-#endif // FEATURE_ON_STACK_REPLACEMENT
+#endif // FEATURE_ON_STACK_REPLACEMENT && !TARGET_POWERPC64
 
 // Initial patchpoint counter value used by jitted code
 RELEASE_CONFIG_INTEGER(TC_OnStackReplacement_InitialCounter, "TC_OnStackReplacement_InitialCounter", 1000)

@@ -916,17 +916,9 @@ void CodeGen::genSetRegToConst(regNumber targetReg, var_types targetType, GenTre
             }
 
 #ifdef DEBUG
-            if (m_compiler->IsReadyToRun() && !EA_IS_CNS_RELOC(attr))
+            if (m_compiler->IsReadyToRun() && con->IsIconHandle() && !EA_IS_CNS_RELOC(attr))
             {
-                const uint64_t debugHandleBit = 0x4000000000000000ULL;
-                const uint64_t handleBase     = 0x420000;
-                const uint64_t handleValue    = static_cast<uint64_t>(cnsVal);
-                if (((handleValue & 0xFFFF000000000000ULL) == debugHandleBit) &&
-                    (((handleValue & ~debugHandleBit) & 0x7) == 0) &&
-                    ((handleValue & ~debugHandleBit) >= handleBase))
-                {
-                    NO_WAY("PPC64LE ReadyToRun materialized an unresolved crossgen handle without a relocation");
-                }
+                NO_WAY("PPC64LE ReadyToRun materialized an icon handle without a relocation");
             }
 #endif
 
@@ -4060,9 +4052,10 @@ void CodeGen::genAllocLclFrame(unsigned frameSize, regNumber initReg, bool* pIni
         unsigned linkRegisterOffset = framePointerOffset + framePointerSaveSize;
         unsigned calleeSaveOffset   = linkRegisterOffset + PPC_LINK_REGISTER_SAVE_SIZE;
 
-        if (!emitter::isValidSimm16(calleeSaveOffset) || (calleeSaveOffset > 2047))
+        if ((regSet.rsMaskCalleeSaved != RBM_NONE) &&
+            (!emitter::isValidSimm16(calleeSaveOffset) || (calleeSaveOffset > PPC_MAX_UNWIND_SAVE_OFFSET)))
         {
-            NYI_POWERPC64("large link register save offset");
+            NYI_POWERPC64("large callee-saved register offset");
         }
 
         if (isFramePointerUsed())
@@ -4314,7 +4307,8 @@ void CodeGen::genFuncletProlog(BasicBlock* block)
         calleeSavedOffset -= static_cast<int>(deferredFrameSize);
     }
 
-    if (!emitter::isValidSimm16(calleeSavedOffset) || (calleeSavedOffset > 2047))
+    if ((maskSaveRegs != RBM_NONE) &&
+        (!emitter::isValidSimm16(calleeSavedOffset) || (calleeSavedOffset > PPC_MAX_UNWIND_SAVE_OFFSET)))
     {
         NYI_POWERPC64("large funclet callee-saved offset");
     }
@@ -4370,7 +4364,8 @@ void CodeGen::genFuncletEpilog(BasicBlock* block)
         calleeSavedOffset -= static_cast<int>(deferredFrameSize);
     }
 
-    if (!emitter::isValidSimm16(calleeSavedOffset) || (calleeSavedOffset > 2047))
+    if ((maskSaveRegs != RBM_NONE) &&
+        (!emitter::isValidSimm16(calleeSavedOffset) || (calleeSavedOffset > PPC_MAX_UNWIND_SAVE_OFFSET)))
     {
         NYI_POWERPC64("large funclet callee-saved offset");
     }
@@ -4840,20 +4835,6 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
         GetEmitter()->emitIns_R_R_I(INS_addi, relocAttr, reg, reg, imm);
         return;
     }
-
-#ifdef DEBUG
-    {
-        const uint64_t debugHandleBit = 0x4000000000000000ULL;
-        const uint64_t handleBase     = 0x420000;
-        const uint64_t handleValue    = static_cast<uint64_t>(imm);
-        if (((handleValue & 0xFFFF000000000000ULL) == debugHandleBit) &&
-            (((handleValue & ~debugHandleBit) & 0x7) == 0) &&
-            ((handleValue & ~debugHandleBit) >= handleBase))
-        {
-            NO_WAY("PPC64LE materialized an unresolved crossgen handle without a relocation");
-        }
-    }
-#endif
 
     auto signExtend16 = [](uint64_t value) -> ssize_t {
         ssize_t part = static_cast<ssize_t>(value & 0xFFFF);

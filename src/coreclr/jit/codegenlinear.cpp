@@ -21,6 +21,20 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 class WasmInterval;
 #endif
 
+#if defined(TARGET_POWERPC64)
+static void genPpc64SignExtendSmallLoadIfNeeded(emitter* emit, var_types type, regNumber reg)
+{
+    if (type == TYP_BYTE)
+    {
+        emit->emitIns_R_R(INS_extsb, EA_PTRSIZE, reg, reg);
+    }
+    else if (type == TYP_SHORT)
+    {
+        emit->emitIns_R_R(INS_extsh, EA_PTRSIZE, reg, reg);
+    }
+}
+#endif // TARGET_POWERPC64
+
 //------------------------------------------------------------------------
 // genInitializeRegisterState: Initialize the register state contained in 'regSet'.
 //
@@ -1154,6 +1168,9 @@ void CodeGen::genUnspillLocal(
     inst_set_SV_var(lclNode);
     instruction ins = ins_Load(type, m_compiler->isSIMDTypeLocalAligned(varNum));
     GetEmitter()->emitIns_R_S(ins, emitTypeSize(type), regNum, varNum, 0);
+#if defined(TARGET_POWERPC64)
+    genPpc64SignExtendSmallLoadIfNeeded(GetEmitter(), type, regNum);
+#endif
 
     // TODO-Review: We would like to call:
     //      genUpdateRegLife(varDsc, /*isBorn*/ true, /*isDying*/ false DEBUGARG(tree));
@@ -1267,6 +1284,9 @@ void CodeGen::genUnspillRegIfNeeded(GenTree* tree, unsigned multiRegIndex)
         TempDsc*  t              = regSet.rsUnspillInPlace(unspillTree, unspillTreeReg, multiRegIndex);
         emitAttr  emitType       = emitActualTypeSize(dstType);
         GetEmitter()->emitIns_R_S(ins_Load(dstType), emitType, dstReg, t->tdTempNum(), 0);
+#if defined(TARGET_POWERPC64)
+        genPpc64SignExtendSmallLoadIfNeeded(GetEmitter(), dstType, dstReg);
+#endif
         regSet.tmpRlsTemp(t);
         gcInfo.gcMarkRegPtrVal(dstReg, dstType);
     }
@@ -1392,6 +1412,9 @@ void CodeGen::genUnspillRegIfNeeded(GenTree* tree)
             // Reload into the register specified by 'tree' which may be a GT_RELOAD.
             regNumber dstReg = tree->GetRegNum();
             GetEmitter()->emitIns_R_S(ins_Load(unspillTree->gtType), emitType, dstReg, t->tdTempNum(), 0);
+#if defined(TARGET_POWERPC64)
+            genPpc64SignExtendSmallLoadIfNeeded(GetEmitter(), unspillTree->TypeGet(), dstReg);
+#endif
             regSet.tmpRlsTemp(t);
 
             unspillTree->gtFlags &= ~GTF_SPILLED;

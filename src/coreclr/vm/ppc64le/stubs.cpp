@@ -304,7 +304,69 @@ PTR_CONTEXT GetCONTEXTFromRedirectedStubStackFrame(T_CONTEXT* pContext)
 BOOL AdjustContextForVirtualStub(EXCEPTION_RECORD* pExceptionRecord, CONTEXT* pContext)
 {
     LIMITED_METHOD_CONTRACT;
-    return FALSE;
+
+    Thread* pThread = GetThreadNULLOk();
+
+    // We may not have a managed thread object. Example is an AV on the helper thread.
+    // (perhaps during StubManager::IsStub)
+    if (pThread == NULL)
+    {
+        return FALSE;
+    }
+
+    PCODE f_IP = GetIP(pContext);
+
+    bool isVirtualStubNullCheck = false;
+#ifdef FEATURE_CACHED_INTERFACE_DISPATCH
+    if (VirtualCallStubManager::isCachedInterfaceDispatchStubAVLocation(f_IP))
+    {
+        isVirtualStubNullCheck = true;
+    }
+#endif // FEATURE_CACHED_INTERFACE_DISPATCH
+#ifdef FEATURE_VIRTUAL_STUB_DISPATCH
+    if (!isVirtualStubNullCheck)
+    {
+        StubCodeBlockKind sk = RangeSectionStubManager::GetStubKind(f_IP);
+
+        if (sk == STUB_CODE_BLOCK_VSD_DISPATCH_STUB)
+        {
+            if (*PTR_DWORD(f_IP) != DISPATCH_STUB_FIRST_DWORD)
+            {
+                _ASSERTE(!"AV in DispatchStub at unknown instruction");
+            }
+            else
+            {
+                isVirtualStubNullCheck = true;
+            }
+        }
+        else if (sk == STUB_CODE_BLOCK_VSD_VTABLE_STUB)
+        {
+            if (*PTR_DWORD(f_IP) != VTABLECALL_STUB_FIRST_DWORD)
+            {
+                _ASSERTE(!"AV in VTableCallStub at unknown instruction");
+            }
+            else
+            {
+                isVirtualStubNullCheck = true;
+            }
+        }
+    }
+#endif // FEATURE_VIRTUAL_STUB_DISPATCH
+
+    if (!isVirtualStubNullCheck)
+    {
+        return FALSE;
+    }
+
+    PCODE callsite = GetAdjustedCallAddress(GetRA(pContext));
+
+    if (pExceptionRecord != NULL)
+    {
+        pExceptionRecord->ExceptionAddress = (PVOID)callsite;
+    }
+
+    SetIP(pContext, callsite);
+    return TRUE;
 }
 
 VOID ResetCurrentContext()
@@ -896,6 +958,12 @@ static unsigned Ppc64ShuffleGetStackSlot(UINT16 ofs)
     return ofs;
 }
 
+static int Ppc64ShuffleGetStackOffset(UINT16 ofs)
+{
+    constexpr int firstArgStackOffset = 12 * TARGET_POINTER_SIZE;
+    return firstArgStackOffset + (Ppc64ShuffleGetStackSlot(ofs) * sizeof(void*));
+}
+
 VOID StubLinkerCPU::EmitShuffleThunk(ShuffleEntry* pShuffleEntryArray)
 {
     constexpr int targetReg = 12;
@@ -921,16 +989,15 @@ VOID StubLinkerCPU::EmitShuffleThunk(ShuffleEntry* pShuffleEntryArray)
             _ASSERTE(!Ppc64ShuffleInRegister(entry->srcofs));
             _ASSERTE(!Ppc64ShuffleIsFloating(entry->dstofs));
 
-            Ppc64EmitLoad(this, Ppc64ShuffleGetRegister(entry->dstofs), 1,
-                          Ppc64ShuffleGetStackSlot(entry->srcofs) * sizeof(void*));
+            Ppc64EmitLoad(this, Ppc64ShuffleGetRegister(entry->dstofs), 1, Ppc64ShuffleGetStackOffset(entry->srcofs));
         }
         else
         {
             _ASSERTE(!Ppc64ShuffleInRegister(entry->srcofs));
             _ASSERTE(!Ppc64ShuffleInRegister(entry->dstofs));
 
-            Ppc64EmitLoad(this, tempReg, 1, Ppc64ShuffleGetStackSlot(entry->srcofs) * sizeof(void*));
-            Ppc64EmitStore(this, tempReg, 1, Ppc64ShuffleGetStackSlot(entry->dstofs) * sizeof(void*));
+            Ppc64EmitLoad(this, tempReg, 1, Ppc64ShuffleGetStackOffset(entry->srcofs));
+            Ppc64EmitStore(this, tempReg, 1, Ppc64ShuffleGetStackOffset(entry->dstofs));
         }
     }
 

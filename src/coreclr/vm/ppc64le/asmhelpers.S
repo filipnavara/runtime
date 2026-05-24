@@ -306,6 +306,7 @@ NESTED_ENTRY ThePreStub, _TEXT, NoHandler
     nop
 
     mr 12, 3
+    ld 2, PPC64_CALL_FRAME_TOC_SAVE(1)
     RESTORE_TRANSITION_BLOCK_FOR_TAILCALL 1
     addi 1, 1, PPC64_PRESTUB_STACK_FRAME_SIZE
     .cfi_adjust_cfa_offset -PPC64_PRESTUB_STACK_FRAME_SIZE
@@ -572,6 +573,7 @@ NESTED_ENTRY ResolveWorkerAsmStub, _TEXT, NoHandler
     nop
 
     mr 12, 3
+    ld 2, PPC64_CALL_FRAME_TOC_SAVE(1)
     RESTORE_TRANSITION_BLOCK_FOR_TAILCALL 1
     addi 1, 1, PPC64_PRESTUB_STACK_FRAME_SIZE
     .cfi_adjust_cfa_offset -PPC64_PRESTUB_STACK_FRAME_SIZE
@@ -834,6 +836,7 @@ NESTED_ENTRY OnCallCountThresholdReachedStub, _TEXT, NoHandler
     nop
 
     mr 12, 3
+    ld 2, PPC64_CALL_FRAME_TOC_SAVE(1)
     RESTORE_TRANSITION_BLOCK_FOR_TAILCALL 1
     addi 1, 1, PPC64_PRESTUB_STACK_FRAME_SIZE
     .cfi_adjust_cfa_offset -PPC64_PRESTUB_STACK_FRAME_SIZE

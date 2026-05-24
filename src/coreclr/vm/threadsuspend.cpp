@@ -4738,6 +4738,10 @@ StackWalkAction SWCB_GetExecutionState(CrawlFrame *pCF, VOID *pData)
                     action = SWA_CONTINUE;
 #elif defined(TARGET_AMD64)
                     pES->m_ppvRetAddrPtr = (void **) (EECodeManager::GetCallerSp(pRDT) - sizeof(void*));
+#elif defined(TARGET_POWERPC64)
+                    // PPC64LE does not currently report a saved link-register location in
+                    // KNONVOLATILE_CONTEXT_POINTERS, so conservatively avoid hijacking here.
+                    notJittedCase = true;
 #else // TARGET_X86 || TARGET_AMD64
                     PORTABILITY_ASSERT("Platform NYI");
 #endif // _TARGET_???_

@@ -4553,17 +4553,6 @@ void Compiler::lvaFixVirtualFrameOffsets()
             }
 #endif
 
-#if defined(TARGET_POWERPC64)
-            if (varDsc->lvIsParam && (lclNum < info.compArgsCount) &&
-                lvaGetParameterABIInfo(lclNum).IsSplitAcrossRegistersAndStack() && codeGen->isFramePointerUsed())
-            {
-                // PPC64 split parameters are reassembled in a local stack home.
-                // The virtual offset is already FP-relative; applying the fixed save-area
-                // delta moves the home into the callee-saved register save slots.
-                localDelta = 0;
-            }
-#endif
-
             if (frameLocalsDelta != 0 && varDsc->GetStackOffset() < frameBoundary)
             {
                 localDelta += frameLocalsDelta;

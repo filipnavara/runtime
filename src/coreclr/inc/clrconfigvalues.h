@@ -495,11 +495,7 @@ RETAIL_CONFIG_DWORD_INFO(EXTERNAL_TC_CallCountingDelayMs, W("TC_CallCountingDela
 
 RETAIL_CONFIG_DWORD_INFO(INTERNAL_TC_BackgroundWorkerTimeoutMs, W("TC_BackgroundWorkerTimeoutMs"), TC_BackgroundWorkerTimeoutMs, "How long in milliseconds the background worker thread may remain idle before exiting.")
 RETAIL_CONFIG_DWORD_INFO(INTERNAL_TC_DelaySingleProcMultiplier, W("TC_DelaySingleProcMultiplier"), TC_DelaySingleProcMultiplier, "Multiplier for TC_CallCountingDelayMs that is applied on a single-processor machine or when the process is affinitized to a single processor.")
-#if defined(TARGET_POWERPC64)
-RETAIL_CONFIG_DWORD_INFO(INTERNAL_TC_CallCounting, W("TC_CallCounting"), 0, "Enabled by default (only activates when TieredCompilation is also enabled). If disabled immediately backpatches prestub, and likely prevents any promotion to higher tiers")
-#else
 RETAIL_CONFIG_DWORD_INFO(INTERNAL_TC_CallCounting, W("TC_CallCounting"), 1, "Enabled by default (only activates when TieredCompilation is also enabled). If disabled immediately backpatches prestub, and likely prevents any promotion to higher tiers")
-#endif
 RETAIL_CONFIG_DWORD_INFO(INTERNAL_TC_UseCallCountingStubs, W("TC_UseCallCountingStubs"), 1, "Uses call counting stubs for faster call counting.")
 RETAIL_CONFIG_DWORD_INFO(INTERNAL_TC_DeleteCallCountingStubsAfter, W("TC_DeleteCallCountingStubsAfter"), 0, "Deletes call counting stubs after this many have completed. Zero to disable deleting.")
 #undef TC_BackgroundWorkerTimeoutMs
@@ -643,11 +639,11 @@ RETAIL_CONFIG_STRING_INFO(INTERNAL_LTTngConfig, W("LTTngConfig"), "Configuration
 // Executable code
 //
 // TODO: https://github.com/dotnet/runtime/issues/103465
-#ifdef TARGET_RISCV64
+#if defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 RETAIL_CONFIG_DWORD_INFO(EXTERNAL_EnableWriteXorExecute, W("EnableWriteXorExecute"), 0, "Enable W^X for executable memory.");
 #else
 RETAIL_CONFIG_DWORD_INFO(EXTERNAL_EnableWriteXorExecute, W("EnableWriteXorExecute"), 1, "Enable W^X for executable memory.");
-#endif // TARGET_RISCV64
+#endif // TARGET_RISCV64 || TARGET_POWERPC64
 
 #ifdef FEATURE_GDBJIT
 ///

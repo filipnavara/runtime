@@ -67,7 +67,7 @@ ASMCONSTANTS_C_ASSERT(CallDescrData__returnValue          == offsetof(CallDescrD
 #define FpStruct__BothFloat 0b10
 ASMCONSTANTS_C_ASSERT(FpStruct__BothFloat == (int)FpStruct::BothFloat)
 
-#define METHODDESC_REGISTER 12
+#define METHODDESC_REGISTER 11
 
 #define StubPrecodeData__SecretParam 0x00
 #define StubPrecodeData__Target      0x08

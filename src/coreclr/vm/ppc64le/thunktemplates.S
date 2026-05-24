@@ -16,20 +16,23 @@ LOCAL_LABEL(GetPc):
     addi 11, 11, 0x3ff8
 
     // CallCountingStubData: RemainingCallCountCell, TargetForMethod, TargetForThresholdReached.
-    ld 12, 0(11)
-    lhz 0, 0(12)
+    // Keep the threshold token in r11; r12 carries the branch target at the next entry.
+    mtctr 11
+    ld 11, 0(11)
+    lhz 0, 0(11)
     addic. 0, 0, -1
-    sth 0, 0(12)
+    sth 0, 0(11)
     beq LOCAL_LABEL(CountReachedZero)
 
-    ld 12, 8(11)
+    mfctr 12
+    ld 12, 8(12)
     mtctr 12
     bctr
 
 LOCAL_LABEL(CountReachedZero):
-    ld 12, 0(11)
-    ld 0, 16(11)
-    mtctr 0
+    mfctr 12
+    ld 12, 16(12)
+    mtctr 12
     bctr
 LEAF_END_MARKED CallCountingStubCode, _TEXT
 #endif

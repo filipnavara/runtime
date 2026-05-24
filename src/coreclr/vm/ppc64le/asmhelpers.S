@@ -512,12 +512,12 @@ LEAF_ENTRY StubPrecodeCode, _TEXT
     mflr 0
     bcl 20, 31, LOCAL_LABEL(StubPrecodeGetPc)
 LOCAL_LABEL(StubPrecodeGetPc):
-    mflr 11
+    mflr 12
     mtlr 0
-    addi 11, 11, PPC64_STUB_PRECODE_DATA_DELTA
-    ld 12, StubPrecodeData__SecretParam(11)
-    ld 11, StubPrecodeData__Target(11)
-    mtctr 11
+    addi 12, 12, PPC64_STUB_PRECODE_DATA_DELTA
+    ld 11, StubPrecodeData__SecretParam(12)
+    ld 12, StubPrecodeData__Target(12)
+    mtctr 12
     bctr
     trap
 LEAF_END_MARKED StubPrecodeCode, _TEXT
@@ -541,12 +541,12 @@ LOCAL_LABEL(FixupPrecodeSlowPath):
     mflr 0
     bcl 20, 31, LOCAL_LABEL(FixupPrecodeSlowGetPc)
 LOCAL_LABEL(FixupPrecodeSlowGetPc):
-    mflr 11
+    mflr 12
     mtlr 0
-    addi 11, 11, PPC64_FIXUP_PRECODE_SLOW_DATA_DELTA
-    ld 12, FixupPrecodeData__MethodDesc(11)
-    ld 11, FixupPrecodeData__PrecodeFixupThunk(11)
-    mtctr 11
+    addi 12, 12, PPC64_FIXUP_PRECODE_SLOW_DATA_DELTA
+    ld 11, FixupPrecodeData__MethodDesc(12)
+    ld 12, FixupPrecodeData__PrecodeFixupThunk(12)
+    mtctr 12
     bctr
     trap
 LEAF_END_MARKED FixupPrecodeCode, _TEXT
@@ -831,7 +831,7 @@ NESTED_ENTRY OnCallCountThresholdReachedStub, _TEXT, NoHandler
     ESTABLISH_TOC_FROM_PC LOCAL_LABEL(OnCallCountThresholdReachedStubGetPc)
 
     addi 3, 1, PPC64_PRESTUB_TRANSITION_BLOCK
-    mr 4, 12
+    mr 4, 11
     bl C_FUNC(OnCallCountThresholdReached)
     nop
 

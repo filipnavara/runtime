@@ -215,12 +215,12 @@ permanent architecture limitations.
   and stack-walk interaction have not been validated enough for broad testing.
 - `TC_QuickJitForLoops` defaults to `0` on PPC64LE. Loop methods should not be
   forced through quick Tier0/OSR paths until OSR is supported.
-- Tiered compilation remains enabled, but `TC_CallCounting` defaults to `0` on
-  PPC64LE. Forced call counting (`COMPlus_TC_CallCounting=1`) still reaches a
-  checked `LowLevelMonitor.Wait` owner assertion in broad R2R
-  `System.Runtime.Tests`; disabling only `TC_UseCallCountingStubs` does not avoid
-  the failure. This points at the tier promotion/call-counting path rather than
-  only the small PPC64LE call-counting thunk body.
+- `EnableWriteXorExecute` defaults to `0` on PPC64LE during bring-up. Under
+  qemu/binfmt, `System.Runtime.Tests` discovery reproducibly hit SIGILL in
+  dynamic reflection invoke stubs with W^X enabled; the faulting IP landed in
+  unwind/metadata bytes after the generated method body. Running the same path
+  with `DOTNET_EnableWriteXorExecute=0` completed discovery and started the test
+  run, matching the existing RISC-V bring-up guard for executable memory.
 - Non-interruptible thread hijacking currently declines the PPC64LE case that
   needs a saved link-register stack location. `KNONVOLATILE_CONTEXT_POINTERS`
   does not expose a saved `Link` pointer yet, so `SWCB_GetExecutionState`
@@ -239,12 +239,27 @@ Recent validation of those gates:
 
 - `System.Tests.EnumTests.GetValuesAsUnderlyingType_InvokeSByteEnum_ReturnsExpected`
   passes after fixing PPC64LE signed small-value spill reloads.
+- Tiered compilation remains enabled and `TC_CallCounting` now uses the normal
+  default. The PPC64LE precode and call-counting stubs reserve `r12` for the
+  next branch target and carry the secret stub parameter or call-counting token
+  in `r11`; this avoids clobbering the ELFv2 global-entry target register.
+- `System.Runtime.Tests` should be run with `DOTNET_REMOTEEXECUTOR_SUPPORTED=0`
+  under qemu/binfmt for now. RemoteExecutor child processes currently fail with
+  `ENOENT` even when the target executable exists; a small `Process.Start`
+  repro shows the same behavior for `corerun`, `/usr/bin/qemu-ppc64le`, and a
+  trivial native PPC64LE child, so this is tracked separately from call-counting.
 - `System.Runtime.Tests` with CoreCLR R2R enabled, default
   `DOTNET_TieredCompilation`, `DOTNET_EnableWriteXorExecute=0`, and no explicit
   `COMPlus_TC_*` overrides progressed under qemu/binfmt to the 180 second cap
   without the previous `LowLevelMonitor.Wait` abort.
-- Forcing `COMPlus_TC_CallCounting=1` is still a useful targeted repro for the
-  unresolved tier promotion issue.
+- With CoreCLR R2R disabled, RemoteExecutor disabled, tiering enabled, and
+  `COMPlus_TC_CallCounting=1`, `System.Runtime.Tests` reaches normal test
+  execution without the previous call-counting assert or SIGILL. A forced
+  threshold run (`COMPlus_TC_CallCountThreshold=1`,
+  `COMPlus_TC_CallCountingDelayMs=0`) reached the qemu time cap in
+  `System.Text.Unicode.Tests.Utf8Tests.ToBytes_AllPossibleScalarValues` without
+  call-counting failures. `System.Tests.TimeOnlyTests.AllCulturesTest` and the
+  full `System.Tests.TimeOnlyTests` class pass with forced call counting.
 
 ## Current System.Runtime Investigation
 
@@ -726,6 +741,12 @@ instantiating method stubs: shuffle GPR arguments, materialize the hidden
 instantiation argument, adjust boxed `this` for unboxing stubs, and tailcall the
 target through `r12`. This is required for generic delegate/reflection paths
 used by the libraries xUnit runner.
+
+Precode and call-counting stubs keep the secret stub parameter or stub token in
+`r11`, not `r12`. Other architectures can use their existing secret parameter
+registers because they do not also require that register to hold the native
+branch target. On PPC64LE, `r12` is reserved for the next target before `bctr`
+or `bctrl`, so `REG_SECRET_STUB_PARAM`/`METHODDESC_REGISTER` use `r11`.
 
 Small call descriptors store the live callee-saved GC register mask in
 `idReg1`/`idReg2`, not just physical register numbers. PPC64LE has 17 integer

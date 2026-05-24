@@ -844,6 +844,26 @@ void emitter::emitIns_R_ARR(instruction ins, emitAttr attr, regNumber ireg, regN
     emitIns_R_S(ins, attr, ireg, PPC_STACK_BASE_VAR, disp);
 }
 
+void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataReg, GenTreeIndir* indir)
+{
+    assert(emitInsIsLoadOrStore(ins));
+
+    GenTree* addr = indir->Addr();
+    assert(!addr->isContained());
+
+    ssize_t   offset  = indir->Offset();
+    regNumber baseReg = addr->GetRegNum();
+    regNumber tmpReg  = REG_NA;
+
+    if (!ppcOffsetFitsInstruction(ins, offset))
+    {
+        tmpReg = codeGen->internalRegisters.GetSingle(indir);
+        noway_assert(emitInsIsLoad(ins) || (tmpReg != dataReg));
+    }
+
+    codeGen->genInstrWithConstant(ins, attr, dataReg, baseReg, offset, tmpReg);
+}
+
 void emitter::emitIns_Mov(
     instruction ins, emitAttr attr, regNumber dstReg, regNumber srcReg, bool canSkip, insOpts opt)
 {

@@ -1849,43 +1849,19 @@ void CodeGen::genCodeForIndir(GenTreeIndir* tree)
     assert(tree->OperIs(GT_IND));
     NYI_IF(tree->TypeIs(TYP_STRUCT), "GT_IND: struct load not supported");
 
-    GenTree* addr = tree->Addr();
-    assert(!addr->isContained());
-
-    ssize_t    offset     = tree->Offset();
-    regNumber  baseReg    = genConsumeReg(addr);
     var_types  targetType = tree->TypeGet();
     regNumber  targetReg  = tree->GetRegNum();
     instruction loadIns    = ins_Load(targetType);
 
-    if (!ppcOffsetFitsInstruction(loadIns, offset))
-    {
-        regNumber tempReg = internalRegisters.GetSingle(tree);
-        instGen_Set_Reg_To_Imm(EA_PTRSIZE, tempReg, offset);
-        GetEmitter()->emitIns_R_R_R(INS_add, EA_PTRSIZE, tempReg, baseReg, tempReg);
-        baseReg = tempReg;
-        offset  = 0;
-    }
+    genConsumeAddress(tree->Addr());
 
     if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
     {
         instGen_MemoryBarrier(BARRIER_FULL);
     }
 
-    const bool disableGcForOverwrittenAddress = varTypeIsGC(targetType) && (targetReg == baseReg);
-    if (disableGcForOverwrittenAddress)
-    {
-        GetEmitter()->emitDisableGC();
-    }
-
-    genInstrWithConstant(loadIns, emitActualTypeSize(targetType), targetReg, baseReg, offset, REG_NA);
+    GetEmitter()->emitInsLoadStoreOp(loadIns, emitActualTypeSize(targetType), targetReg, tree);
     ppcEmitSignExtendSmallLoadIfNeeded(GetEmitter(), targetType, targetReg);
-
-    if (disableGcForOverwrittenAddress)
-    {
-        GetEmitter()->emitEnableGC();
-        genDefineTempLabel(genCreateTempLabel());
-    }
 
     if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
     {

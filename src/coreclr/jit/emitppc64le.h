@@ -70,6 +70,7 @@ void emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int varx, int o
 void emitIns_R_S_I(
     instruction ins, emitAttr attr, regNumber ireg, int varx, int offs, int ival, insOpts opt = INS_OPTS_NONE);
 void emitIns_S_R(instruction ins, emitAttr attr, regNumber ireg, int varx, int offs);
+void emitIns_S_R(instruction ins, emitAttr attr, regNumber ireg, int varx, int offs, regNumber tmpReg);
 void emitIns_S_R_I(instruction ins, emitAttr attr, int varx, int offs, regNumber ireg, int ival);
 void emitIns_R_AR(instruction ins, emitAttr attr, regNumber ireg, regNumber reg, int offs);
 void emitIns_AR_R(instruction ins, emitAttr attr, regNumber ireg, regNumber reg, int offs);

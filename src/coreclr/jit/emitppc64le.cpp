@@ -761,6 +761,11 @@ void emitter::emitIns_R_S_I(
 
 void emitter::emitIns_S_R(instruction ins, emitAttr attr, regNumber ireg, int varx, int offs)
 {
+    emitIns_S_R(ins, attr, ireg, varx, offs, REG_NA);
+}
+
+void emitter::emitIns_S_R(instruction ins, emitAttr attr, regNumber ireg, int varx, int offs, regNumber tmpReg)
+{
     ssize_t imm = offs;
     bool    FPbased = false;
 
@@ -770,16 +775,31 @@ void emitter::emitIns_S_R(instruction ins, emitAttr attr, regNumber ireg, int va
         imm      = base + offs;
     }
 
+    bool useTmpReg = false;
     if (!ppcOffsetFitsInstruction(ins, imm))
     {
-        NYI_POWERPC64("large stack local offset");
+        if (tmpReg == REG_NA)
+        {
+            NYI_POWERPC64("large stack local offset");
+        }
+
+        assert(isGeneralRegister(tmpReg));
+        assert(tmpReg != ireg);
+        assert(tmpReg != (FPbased ? REG_FPBASE : REG_SPBASE));
+
+        codeGen->instGen_Set_Reg_To_Imm(EA_PTRSIZE, tmpReg, imm);
+        codeGen->regSet.verifyRegUsed(tmpReg);
+        emitIns_R_R_R(INS_add, EA_PTRSIZE, tmpReg, FPbased ? REG_FPBASE : REG_SPBASE, tmpReg);
+
+        imm       = 0;
+        useTmpReg = true;
     }
 
     instrDesc* id = emitNewInstrCns(attr, imm);
 
     id->idIns(ins);
     id->idReg1(ireg);
-    id->idReg2(FPbased ? REG_FPBASE : REG_SPBASE);
+    id->idReg2(useTmpReg ? tmpReg : (FPbased ? REG_FPBASE : REG_SPBASE));
     id->idCodeSize(sizeof(code_t));
 
     if (varx != PPC_STACK_BASE_VAR)

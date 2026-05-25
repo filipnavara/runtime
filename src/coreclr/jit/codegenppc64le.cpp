@@ -1892,11 +1892,12 @@ void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
 
     GenTree* addr = tree->Addr();
     GenTree* data = tree->Data();
-    assert(!addr->isContained());
 
     GCInfo::WriteBarrierForm writeBarrierForm = gcInfo.gcIsWriteBarrierCandidate(tree);
     if (writeBarrierForm != GCInfo::WBF_NoBarrier)
     {
+        assert(!addr->isContained());
+
         if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
         {
             instGen_MemoryBarrier(BARRIER_FULL);
@@ -1935,20 +1936,10 @@ void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
         return;
     }
 
-    ssize_t   offset  = tree->Offset();
-    regNumber baseReg = genConsumeReg(addr);
     var_types type    = tree->TypeGet();
     instruction storeIns = ins_Store(type);
 
-    if (!ppcOffsetFitsInstruction(storeIns, offset))
-    {
-        regNumber tempReg = internalRegisters.GetSingle(tree);
-        instGen_Set_Reg_To_Imm(EA_PTRSIZE, tempReg, offset);
-        GetEmitter()->emitIns_R_R_R(INS_add, EA_PTRSIZE, tempReg, baseReg, tempReg);
-        baseReg = tempReg;
-        offset  = 0;
-    }
-
+    genConsumeAddress(addr);
     genConsumeRegs(data);
 
     regNumber dataReg = REG_NA;
@@ -1972,7 +1963,7 @@ void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
         instGen_MemoryBarrier(BARRIER_FULL);
     }
 
-    GetEmitter()->emitIns_AR_R(storeIns, emitActualTypeSize(type), dataReg, baseReg, static_cast<int>(offset));
+    GetEmitter()->emitInsLoadStoreOp(storeIns, emitActualTypeSize(type), dataReg, tree);
 
     if ((tree->gtFlags & GTF_IND_VOLATILE) != 0)
     {

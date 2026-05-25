@@ -14,6 +14,18 @@
 
 void Lowering::ContainCheckStoreIndir(GenTreeStoreInd* node)
 {
+    GenTree* src = node->Data();
+    if (!varTypeIsFloating(src->TypeGet()) && src->IsIntegralConst(0))
+    {
+        MakeSrcContained(node, src);
+    }
+
+    // Keep GC ref stores on the existing explicit-address path for now. The PPC64LE write-barrier
+    // code consumes the destination address from a register.
+    if (!varTypeIsGC(src->TypeGet()))
+    {
+        ContainCheckIndir(node);
+    }
 }
 
 void Lowering::ContainCheckIndir(GenTreeIndir* node)
@@ -46,7 +58,21 @@ bool Lowering::IsCallTargetInRange(void* addr)
 
 bool Lowering::IsContainableImmed(GenTree* parentNode, GenTree* childNode) const
 {
-    return false;
+    if (!childNode->IsCnsIntOrI() || childNode->AsIntCon()->ImmedValNeedsReloc(m_compiler))
+    {
+        return false;
+    }
+
+    switch (parentNode->OperGet())
+    {
+        case GT_STOREIND:
+        case GT_STORE_LCL_VAR:
+        case GT_STORE_LCL_FLD:
+            return childNode->IsIntegralConst(0);
+
+        default:
+            return false;
+    }
 }
 
 GenTree* Lowering::LowerJTrue(GenTreeOp* jtrue)
@@ -333,6 +359,13 @@ void Lowering::ContainCheckShiftRotate(GenTreeOp* node)
 
 void Lowering::ContainCheckStoreLoc(GenTreeLclVarCommon* storeLoc) const
 {
+    assert(storeLoc->OperIsLocalStore());
+
+    GenTree* op1 = storeLoc->gtGetOp1();
+    if (IsContainableImmed(storeLoc, op1))
+    {
+        MakeSrcContained(storeLoc, op1);
+    }
 }
 
 void Lowering::ContainCheckCast(GenTreeCast* node)

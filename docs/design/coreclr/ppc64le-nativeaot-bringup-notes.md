@@ -597,21 +597,3 @@ by useful validation.
   the file-format contract is explicit.
 - Inline TLS access sequences need continued validation; the glibc static-TLS
   tunable is only a test-environment workaround.
-
-Lowering and containment follow-up:
-
-- Store indirection containment needs the same level of review as simple load
-  indirection containment.
-- `ContainCheckStoreIndir` is minimal compared with RISC-V; revisit zero-store
-  containment and shared `ContainCheckIndir` use.
-- `IsContainableImmed` rejects all immediates. PPC64LE needs opcode-specific
-  rules based on D-form signed 16-bit immediates and supported logical-immediate
-  forms.
-- `ContainCheckBinary`, `ContainCheckCompare`, `ContainCheckBoundsChk`, and
-  `ContainCheckStoreLoc` are mostly empty.
-- Shift/rotate containment currently only contains constant rotates; check
-  codegen expectations before enabling contained immediate shifts more broadly.
-- Do not mirror RISC-V-specific Zba/Zbb/Zbs transforms directly. Introduce
-  PPC64LE-specific IR only when there is a real ISA/codegen equivalent.
-- Any new contained form must be supported by lowering, LSRA, codegen, and the
-  emitter before it is enabled.

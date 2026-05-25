@@ -42,6 +42,10 @@ static bool ppc64leNeedsLclOffsetTemp(Compiler* compiler, instruction ins, GenTr
 {
     bool fpBased = false;
     int  offset  = compiler->lvaFrameAddress(lclNode->GetLclNum(), &fpBased) + lclNode->GetLclOffs();
+    if (lclNode->GetLclNum() == compiler->lvaOutgoingArgSpaceVar)
+    {
+        offset += FIRST_ARG_STACK_OFFS;
+    }
     return !ppc64leOffsetFitsInstruction(ins, offset);
 }
 
@@ -365,7 +369,9 @@ int LinearScan::BuildNode(GenTree* tree)
         case GT_BSWAP:
         case GT_BSWAP16:
         {
-            int srcCount = BuildOperandUses(tree->gtGetOp1());
+            RefPosition* use      = BuildUse(tree->gtGetOp1());
+            int          srcCount = 1;
+            setDelayFree(use);
             buildInternalIntRegisterDefForNode(tree);
             buildInternalRegisterUses();
             BuildDef(tree);
@@ -625,7 +631,10 @@ int LinearScan::BuildIndir(GenTreeIndir* indirTree)
         ins = m_compiler->codeGen->ins_Load(indirTree->TypeGet());
     }
 
-    if (!ppc64leOffsetFitsInstruction(ins, indirTree->Offset()))
+    GenTree*       addr       = indirTree->Addr();
+    const unsigned accessSize = indirTree->OperIs(GT_NULLCHECK) ? 1 : genTypeSize(indirTree);
+    if ((addr->isContained() && ppc64leContainedAddrNeedsLargeOffsetTemp(m_compiler, addr, accessSize)) ||
+        (!addr->isContained() && !ppc64leOffsetFitsInstruction(ins, indirTree->Offset())))
     {
         buildInternalIntRegisterDefForNode(indirTree);
     }
@@ -787,8 +796,7 @@ int LinearScan::BuildPutArgStk(GenTreePutArgStk* argNode)
         if (src->OperIs(GT_FIELD_LIST))
         {
             assert(src->isContained());
-            const bool addPpc64leStackArgBias = !argNode->isSplitStackArg();
-            bool       needsOffsetTmp         = false;
+            bool needsOffsetTmp = false;
 
             for (GenTreeFieldList::Use& use : src->AsFieldList()->Uses())
             {
@@ -797,11 +805,7 @@ int LinearScan::BuildPutArgStk(GenTreePutArgStk* argNode)
 
                 bool fpBased = false;
                 int  offset  = m_compiler->lvaFrameAddress(m_compiler->lvaOutgoingArgSpaceVar, &fpBased) +
-                              static_cast<int>(argNode->getArgOffset() + use.GetOffset());
-                if (addPpc64leStackArgBias)
-                {
-                    offset += FIRST_ARG_STACK_OFFS;
-                }
+                              static_cast<int>(argNode->getArgOffset() + use.GetOffset() + FIRST_ARG_STACK_OFFS);
 
                 instruction storeIns = m_compiler->codeGen->ins_Store(use.GetType());
                 if (!ppc64leOffsetFitsInstruction(storeIns, offset))
@@ -835,11 +839,7 @@ int LinearScan::BuildPutArgStk(GenTreePutArgStk* argNode)
     {
         bool fpBased = false;
         int  offset = m_compiler->lvaFrameAddress(m_compiler->lvaOutgoingArgSpaceVar, &fpBased) +
-                     static_cast<int>(argNode->getArgOffset());
-        if (!argNode->isSplitStackArg())
-        {
-            offset += FIRST_ARG_STACK_OFFS;
-        }
+                     static_cast<int>(argNode->getArgOffset() + FIRST_ARG_STACK_OFFS);
         instruction storeIns = m_compiler->codeGen->ins_Store(genActualType(src));
         emitAttr    storeAttr = emitTypeSize(genActualType(src));
 

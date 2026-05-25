@@ -1094,7 +1094,7 @@ void CodeGen::genCodeForDivMod(GenTreeOp* tree)
     ExceptionSetFlags exceptions = tree->OperExceptions(m_compiler);
     if ((exceptions & ExceptionSetFlags::DivideByZeroException) != ExceptionSetFlags::None)
     {
-        genJumpToThrowHlpBlk_la(SCK_DIV_BY_ZERO, INS_beq, divisorReg);
+        genJumpToThrowHlpBlk_la(SCK_DIV_BY_ZERO, INS_beq, divisorReg, nullptr, REG_R0, attr);
     }
 
     regNumber tempReg = REG_NA;
@@ -2687,18 +2687,19 @@ void CodeGen::genJumpToThrowHlpBlk_la(SpecialCodeKind codeKind,
                                       instruction     ins,
                                       regNumber       reg1,
                                       BasicBlock*     failBlk,
-                                      regNumber       reg2)
+                                      regNumber       reg2,
+                                      emitAttr        cmpAttr)
 {
     assert((ins == INS_beq) || (ins == INS_bne) || (ins == INS_blt) || (ins == INS_bge) || (ins == INS_bgt) ||
            (ins == INS_ble));
 
     if ((reg2 == REG_NA) || (reg2 == REG_R0))
     {
-        instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, 0);
+        instGen_Set_Reg_To_Imm(cmpAttr, REG_R0, 0);
         reg2 = REG_R0;
     }
 
-    GetEmitter()->emitIns_R_R(INS_cmpd, EA_PTRSIZE, reg1, reg2);
+    GetEmitter()->emitIns_R_R((cmpAttr == EA_4BYTE) ? INS_cmpw : INS_cmpd, cmpAttr, reg1, reg2);
 
     if (m_compiler->fgUseThrowHelperBlocks())
     {
@@ -3427,10 +3428,14 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
     unsigned argOffsetMax = m_compiler->lvaOutgoingArgSpaceSize;
     GenTree* source       = treeNode->gtGetOp1();
 
-    auto getOutgoingArgStoreOffset = [treeNode](unsigned offset) {
-        // Full stack arguments live past the caller linkage and parameter-save area.
-        // Split arguments already use ABI stack offsets for their stack segments.
-        return offset + (treeNode->isSplitStackArg() ? 0 : FIRST_ARG_STACK_OFFS);
+    auto storeOutgoingArg = [this, varNumOut](instruction storeIns,
+                                             emitAttr    attr,
+                                             regNumber   dataReg,
+                                             unsigned    offset,
+                                             regNumber   tmpReg) {
+        regNumber baseReg     = REG_NA;
+        int       frameOffset = ppcGetLclFrameOffset(m_compiler, varNumOut, offset, &baseReg);
+        genInstrWithConstant(storeIns, attr, dataReg, baseReg, frameOffset, tmpReg);
     };
 
     if (!source->TypeIs(TYP_STRUCT))
@@ -3451,13 +3456,18 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
             assert(source->AsIntConCommon()->IconValue() == 0);
 
             instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, 0);
-            GetEmitter()->emitIns_S_R(storeIns, storeAttr, REG_R0, varNumOut, getOutgoingArgStoreOffset(argOffsetOut));
+            regNumber tmpReg = ppcLclOffsetFitsInstruction(m_compiler, storeIns, varNumOut, argOffsetOut)
+                                   ? REG_NA
+                                   : internalRegisters.GetSingle(treeNode);
+            storeOutgoingArg(storeIns, storeAttr, REG_R0, argOffsetOut, tmpReg);
         }
         else
         {
             genConsumeReg(source);
-            GetEmitter()->emitIns_S_R(storeIns, storeAttr, source->GetRegNum(), varNumOut,
-                                      getOutgoingArgStoreOffset(argOffsetOut));
+            regNumber tmpReg = ppcLclOffsetFitsInstruction(m_compiler, storeIns, varNumOut, argOffsetOut)
+                                   ? REG_NA
+                                   : internalRegisters.GetSingle(treeNode);
+            storeOutgoingArg(storeIns, storeAttr, source->GetRegNum(), argOffsetOut, tmpReg);
         }
 
         argOffsetOut += EA_SIZE_IN_BYTES(storeAttr);
@@ -3482,14 +3492,18 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
             unsigned  offset = argOffset + use.GetOffset();
 
             instruction storeIns = ins_Store(type);
-            GetEmitter()->emitIns_S_R(storeIns, attr, reg, varNumOut, getOutgoingArgStoreOffset(offset));
+            regNumber tmpReg = ppcLclOffsetFitsInstruction(m_compiler, storeIns, varNumOut, offset)
+                                   ? REG_NA
+                                   : internalRegisters.GetSingle(treeNode);
+            storeOutgoingArg(storeIns, attr, reg, offset, tmpReg);
         }
         return;
     }
 
     noway_assert(source->OperIsLocalRead() || source->OperIs(GT_BLK));
 
-    regNumber loReg = internalRegisters.Extract(treeNode);
+    regNumber loReg       = internalRegisters.Extract(treeNode);
+    regNumber storeTmpReg = internalRegisters.Extract(treeNode);
 
     GenTreeLclVarCommon* srcLclNode = nullptr;
     regNumber            addrReg    = REG_NA;
@@ -3575,7 +3589,7 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
             genInstrWithConstant(loadIns, attr, loReg, addrReg, structOffset, loReg);
         }
 
-        GetEmitter()->emitIns_S_R(ins_Store(type), attr, loReg, varNumOut, getOutgoingArgStoreOffset(argOffsetOut));
+        storeOutgoingArg(ins_Store(type), attr, loReg, argOffsetOut, storeTmpReg);
 
         argOffsetOut += moveSize;
         assert(argOffsetOut <= argOffsetMax);
@@ -3683,6 +3697,16 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
         {
             params.retSize       = emitTypeSize(retTypeDesc->GetReturnRegType(0));
             params.secondRetSize = emitTypeSize(retTypeDesc->GetReturnRegType(1));
+
+            if (retTypeDesc->GetABIReturnReg(1, call->GetUnmanagedCallConv()) == REG_INTRET)
+            {
+                // If the second return register is REG_INTRET, then the first return is in a floating register.
+                // The emitter tracks GC return values in REG_INTRET/REG_INTRET_1 order, so move the GC type to
+                // the slot that corresponds to REG_INTRET.
+                assert(!EA_IS_GCREF_OR_BYREF(params.retSize));
+                params.retSize       = params.secondRetSize;
+                params.secondRetSize = EA_UNKNOWN;
+            }
         }
         else if (call->TypeIs(TYP_REF))
         {

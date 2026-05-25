@@ -36,7 +36,10 @@ Ppc64leClassifier::Ppc64leClassifier(const ClassifierInfo& info)
     , m_intRegs(intArgRegs, ArrLen(intArgRegs))
     , m_floatRegs(fltArgRegs, ArrLen(fltArgRegs))
 {
-    assert(!m_info.IsVarArgs); // TODO-PPC64LE: varargs support.
+    if (m_info.IsVarArgs)
+    {
+        NYI_POWERPC64("PPC64LE varargs support");
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -143,6 +146,10 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
     {
         const unsigned numSegments = roundUp(passedSize, TARGET_POINTER_SIZE) / TARGET_POINTER_SIZE;
         assert(numSegments <= MAX_ARG_REG_COUNT);
+        if ((numSegments > 2) && (m_intRegs.Count() < numSegments))
+        {
+            NYI_POWERPC64("PPC64LE unmanaged struct arguments with multiple stack segments");
+        }
 
         ABIPassingInformation info(comp, numSegments);
         for (unsigned i = 0; i < numSegments; i++)

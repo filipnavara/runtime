@@ -288,13 +288,8 @@ static bool ppcOffsetFitsInstruction(instruction ins, ssize_t offset)
     {
         case INS_ld:
         case INS_std:
-            return (offset & 0x3) == 0;
-
         case INS_lwa:
-            // Codegen handles unaligned signed-16 displacements as lwz+extsw,
-            // so a separate address temporary is only needed when the
-            // displacement does not fit the D-form signed-16 field at all.
-            return true;
+            return (offset & 0x3) == 0;
 
         default:
             return true;
@@ -1230,8 +1225,14 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
                     reversedBranch        = ppcEncodeBFormBranch(reversedBranch, 2 * sizeof(code_t));
                     emitOutput_Instr(dst, reversedBranch);
 
+                    ssize_t branchDistance = emitOutputInstrJumpDistance(dstAfterOne, ig, jmp);
+                    if ((branchDistance < J_DIST_SMALL_MAX_NEG) || (branchDistance > J_DIST_SMALL_MAX_POS))
+                    {
+                        NO_WAY("PPC64LE conditional branch target is out of range");
+                    }
+
                     code_t branch = emitInsCode(INS_b);
-                    branch = ppcEncodeIFormBranch(branch, emitOutputInstrJumpDistance(dstAfterOne, ig, jmp));
+                    branch = ppcEncodeIFormBranch(branch, branchDistance);
                     emitOutput_Instr(dstAfterOne, branch);
 
                     goto UPDATE_GC_INFO;

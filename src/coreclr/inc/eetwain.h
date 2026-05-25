@@ -190,9 +190,9 @@ virtual void EnsureCallerContextIsValid(PREGDISPLAY pRD, EECodeInfo * pCodeInfo 
 virtual bool IsGcSafe(EECodeInfo     *pCodeInfo,
                       DWORD           dwRelOffset) = 0;
 
-#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 virtual bool HasTailCalls(EECodeInfo *pCodeInfo) = 0;
-#endif // TARGET_ARM || TARGET_ARM64 || TARGET_LOONGARCH64 || TARGET_RISCV64
+#endif // TARGET_ARM || TARGET_ARM64 || TARGET_LOONGARCH64 || TARGET_RISCV64 || TARGET_POWERPC64
 
 /*
     Enumerate all live object references in that function using
@@ -383,10 +383,10 @@ virtual
 bool IsGcSafe(  EECodeInfo     *pCodeInfo,
                 DWORD           dwRelOffset);
 
-#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 virtual
 bool HasTailCalls(EECodeInfo *pCodeInfo);
-#endif // TARGET_ARM || TARGET_ARM64 || TARGET_LOONGARCH64 || defined(TARGET_RISCV64)
+#endif // TARGET_ARM || TARGET_ARM64 || TARGET_LOONGARCH64 || TARGET_RISCV64 || TARGET_POWERPC64
 
 /*
     Enumerate all live object references in that function using
@@ -573,14 +573,14 @@ virtual
 bool IsGcSafe(  EECodeInfo     *pCodeInfo,
                 DWORD           dwRelOffset);
 
-#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 virtual
 bool HasTailCalls(EECodeInfo *pCodeInfo)
 {
     _ASSERTE(FALSE);
     return false;
 }
-#endif // TARGET_ARM || TARGET_ARM64 || TARGET_LOONGARCH64 || defined(TARGET_RISCV64)
+#endif // TARGET_ARM || TARGET_ARM64 || TARGET_LOONGARCH64 || TARGET_RISCV64 || TARGET_POWERPC64
 
 virtual
 bool EnumGcRefs(PREGDISPLAY     pContext,

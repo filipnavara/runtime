@@ -284,8 +284,13 @@ static void UnwindPpc64leJitFrame(
             DWORD offset  = ReadUnwindByte(code) * sizeof(DWORD64);
             code += 1;
 
-            context->Link = ReadStackQword(context->R1 + offset);
-            restoredLink  = true;
+            DWORD64 linkAddress = context->R1 + offset;
+            context->Link       = ReadStackQword(linkAddress);
+            if (contextPointers != nullptr)
+            {
+                contextPointers->Link = (PDWORD64)linkAddress;
+            }
+            restoredLink = true;
         }
         else
         {
@@ -297,6 +302,10 @@ static void UnwindPpc64leJitFrame(
     {
         DWORD64 linkAddress = context->R1 - ((savedIntegerCalleeCount + 1) * sizeof(DWORD64));
         context->Link       = ReadStackQword(linkAddress);
+        if (contextPointers != nullptr)
+        {
+            contextPointers->Link = (PDWORD64)linkAddress;
+        }
     }
 
     context->Nip = context->Link;
@@ -344,6 +353,7 @@ BOOL DacUnwindStackFrame(T_CONTEXT* pContext, T_KNONVOLATILE_CONTEXT_POINTERS* p
         pContextPointers->R29 = &pContext->R29;
         pContextPointers->R30 = &pContext->R30;
         pContextPointers->R31 = &pContext->R31;
+        pContextPointers->Link = &pContext->Link;
     }
 
     return res;
@@ -380,6 +390,10 @@ RtlVirtualUnwind(
     else
     {
         ContextRecord->Nip = ContextRecord->Link;
+        if (ARGUMENT_PRESENT(ContextPointers))
+        {
+            ContextPointers->Link = &ContextRecord->Link;
+        }
     }
 
     return nullptr;

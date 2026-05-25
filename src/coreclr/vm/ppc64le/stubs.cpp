@@ -54,6 +54,7 @@ void UpdateRegDisplayFromCalleeSavedRegisters(REGDISPLAY* pRD, CalleeSavedRegist
     pRD->pCurrentContext->R30  = pCalleeSaved->r30;
 
     pRD->pCurrentContextPointers->R31 = (PDWORD64)&pCalleeSaved->r31;
+    pRD->pCurrentContextPointers->Link = (PDWORD64)&pCalleeSaved->link;
     pRD->pCurrentContextPointers->R14 = (PDWORD64)&pCalleeSaved->r14;
     pRD->pCurrentContextPointers->R15 = (PDWORD64)&pCalleeSaved->r15;
     pRD->pCurrentContextPointers->R16 = (PDWORD64)&pCalleeSaved->r16;
@@ -124,6 +125,7 @@ void FaultingExceptionFrame::UpdateRegDisplay_Impl(const PREGDISPLAY pRD, bool u
     pRD->pCurrentContextPointers->R29 = &pContext->R29;
     pRD->pCurrentContextPointers->R30 = &pContext->R30;
     pRD->pCurrentContextPointers->R31 = &pContext->R31;
+    pRD->pCurrentContextPointers->Link = &pContext->Link;
 
     ClearRegDisplayArgumentAndScratchRegisters(pRD);
 
@@ -211,6 +213,7 @@ void ResumableFrame::UpdateRegDisplay_Impl(const PREGDISPLAY pRD, bool updateFlo
     pRD->pCurrentContextPointers->R29 = &m_Regs->R29;
     pRD->pCurrentContextPointers->R30 = &m_Regs->R30;
     pRD->pCurrentContextPointers->R31 = &m_Regs->R31;
+    pRD->pCurrentContextPointers->Link = &m_Regs->Link;
 
     pRD->volatileCurrContextPointers.R0  = &m_Regs->R0;
     pRD->volatileCurrContextPointers.R3  = &m_Regs->R3;
@@ -289,6 +292,7 @@ void HijackFrame::UpdateRegDisplay_Impl(const PREGDISPLAY pRD, bool updateFloats
     pRD->pCurrentContextPointers->R28 = &m_Args->R28;
     pRD->pCurrentContextPointers->R29 = &m_Args->R29;
     pRD->pCurrentContextPointers->R30 = &m_Args->R30;
+    pRD->pCurrentContextPointers->Link = &m_Args->Link;
 
     SyncRegDisplayToCurrentContext(pRD);
 }

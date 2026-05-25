@@ -221,12 +221,11 @@ permanent architecture limitations.
   unwind/metadata bytes after the generated method body. Running the same path
   with `DOTNET_EnableWriteXorExecute=0` completed discovery and started the test
   run, matching the existing RISC-V bring-up guard for executable memory.
-- Non-interruptible thread hijacking currently declines the PPC64LE case that
-  needs a saved link-register stack location. `KNONVOLATILE_CONTEXT_POINTERS`
-  does not expose a saved `Link` pointer yet, so `SWCB_GetExecutionState`
-  conservatively treats that stack-walk frame as not hijackable instead of
-  asserting in the portability fallback. Proper non-interruptible hijacking needs
-  PPC64LE unwind/context-pointer support for the saved link register.
+- Non-interruptible thread hijacking can now use saved PPC64LE link-register
+  stack locations exposed through `KNONVOLATILE_CONTEXT_POINTERS::Link`. The
+  path still declines frames when unwind data only points `Link` at the copied
+  context value, when no saved link location is available, or when the frame has
+  tailcalls.
 - CoreCLR R2R reverse P/Invoke remains unsupported. See
   `docs/design/coreclr/ppc64le-toc-abi.md` for the runtime-TOC managed ABI and
   the required entrypoint choices before enabling it.

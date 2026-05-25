@@ -4668,7 +4668,7 @@ StackWalkAction SWCB_GetExecutionState(CrawlFrame *pCF, VOID *pData)
                 {
                         // We already have the caller context available at this point
                     _ASSERTE(pRDT->IsCallerContextValid);
-#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64) || defined(TARGET_RISCV64)
 
                     // Why do we use CallerContextPointers below?
                     //
@@ -4689,6 +4689,9 @@ StackWalkAction SWCB_GetExecutionState(CrawlFrame *pCF, VOID *pData)
 
 #if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
                     if (pRDT->pCallerContextPointers->Ra == &pRDT->pContext->Ra)
+#elif defined(TARGET_POWERPC64)
+                    if ((pRDT->pCallerContextPointers->Link == nullptr) ||
+                        (pRDT->pCallerContextPointers->Link == &pRDT->pContext->Link))
 #else
                     if(pRDT->pCallerContextPointers->Lr == &pRDT->pContext->Lr)
 #endif
@@ -4728,6 +4731,8 @@ StackWalkAction SWCB_GetExecutionState(CrawlFrame *pCF, VOID *pData)
                         // in the caller of the current non-interruptible frame.
 #if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
                         pES->m_ppvRetAddrPtr = (void **) pRDT->pCallerContextPointers->Ra;
+#elif defined(TARGET_POWERPC64)
+                        pES->m_ppvRetAddrPtr = (void **) pRDT->pCallerContextPointers->Link;
 #else
                         pES->m_ppvRetAddrPtr = (void **) pRDT->pCallerContextPointers->Lr;
 #endif
@@ -4738,10 +4743,6 @@ StackWalkAction SWCB_GetExecutionState(CrawlFrame *pCF, VOID *pData)
                     action = SWA_CONTINUE;
 #elif defined(TARGET_AMD64)
                     pES->m_ppvRetAddrPtr = (void **) (EECodeManager::GetCallerSp(pRDT) - sizeof(void*));
-#elif defined(TARGET_POWERPC64)
-                    // PPC64LE does not currently report a saved link-register location in
-                    // KNONVOLATILE_CONTEXT_POINTERS, so conservatively avoid hijacking here.
-                    notJittedCase = true;
 #else // TARGET_X86 || TARGET_AMD64
                     PORTABILITY_ASSERT("Platform NYI");
 #endif // _TARGET_???_

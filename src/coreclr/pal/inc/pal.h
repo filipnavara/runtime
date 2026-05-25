@@ -2145,6 +2145,7 @@ typedef struct _KNONVOLATILE_CONTEXT_POINTERS {
     PDWORD64 R29;
     PDWORD64 R30;
     PDWORD64 R31;
+    PDWORD64 Link;
 
     //
     // Need to add Floating point non-volatile registers.

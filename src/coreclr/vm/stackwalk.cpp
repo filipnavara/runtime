@@ -241,7 +241,7 @@ bool CrawlFrame::IsGcSafe()
     return GetCodeManager()->IsGcSafe(&codeInfo, GetRelOffset());
 }
 
-#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 bool CrawlFrame::HasTailCalls()
 {
     CONTRACTL {
@@ -252,7 +252,7 @@ bool CrawlFrame::HasTailCalls()
 
     return GetCodeManager()->HasTailCalls(&codeInfo);
 }
-#endif // TARGET_ARM || TARGET_ARM64 || TARGET_LOONGARCH64 || TARGET_RISCV64
+#endif // TARGET_ARM || TARGET_ARM64 || TARGET_LOONGARCH64 || TARGET_RISCV64 || TARGET_POWERPC64
 
 inline void CrawlFrame::GotoNextFrame()
 {

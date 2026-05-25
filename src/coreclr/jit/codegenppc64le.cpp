@@ -3887,6 +3887,7 @@ void CodeGen::genPopCalleeSavedRegisters(bool jmpEpilog)
                 instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_TMP_0, spToFPDelta);
                 GetEmitter()->emitIns_R_R_R(INS_subf, EA_PTRSIZE, REG_SPBASE, REG_TMP_0, REG_FPBASE);
             }
+            m_compiler->unwindSetFrameReg(REG_FPBASE, spToFPDelta);
         }
 
         linkRegisterOffset = framePointerOffset + PPC_FRAME_POINTER_SAVE_SIZE;

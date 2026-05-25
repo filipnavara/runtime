@@ -287,9 +287,14 @@ static bool ppcOffsetFitsInstruction(instruction ins, ssize_t offset)
     switch (ins)
     {
         case INS_ld:
-        case INS_lwa:
         case INS_std:
             return (offset & 0x3) == 0;
+
+        case INS_lwa:
+            // Codegen handles unaligned signed-16 displacements as lwz+extsw,
+            // so a separate address temporary is only needed when the
+            // displacement does not fit the D-form signed-16 field at all.
+            return true;
 
         default:
             return true;
@@ -849,7 +854,45 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
     assert(emitInsIsLoadOrStore(ins));
 
     GenTree* addr = indir->Addr();
-    assert(!addr->isContained());
+
+    if (addr->isContained())
+    {
+        assert(addr->OperIs(GT_LCL_ADDR, GT_LEA));
+
+        if (addr->OperIs(GT_LCL_ADDR))
+        {
+            GenTreeLclVarCommon* varNode = addr->AsLclVarCommon();
+            unsigned             lclNum  = varNode->GetLclNum();
+            unsigned             lclOffs = varNode->GetLclOffs();
+
+            if (emitInsIsStore(ins))
+            {
+                emitIns_S_R(ins, attr, dataReg, lclNum, lclOffs);
+            }
+            else
+            {
+                emitIns_R_S(ins, attr, dataReg, lclNum, lclOffs);
+            }
+
+            return;
+        }
+
+        assert(addr->AsAddrMode()->HasBase());
+        assert(!addr->AsAddrMode()->HasIndex());
+
+        ssize_t   offset  = indir->Offset();
+        regNumber baseReg = indir->Base()->GetRegNum();
+        regNumber tmpReg  = REG_NA;
+
+        if (!ppcOffsetFitsInstruction(ins, offset))
+        {
+            tmpReg = codeGen->internalRegisters.GetSingle(indir);
+            noway_assert(emitInsIsLoad(ins) || (tmpReg != dataReg));
+        }
+
+        codeGen->genInstrWithConstant(ins, attr, dataReg, baseReg, offset, tmpReg);
+        return;
+    }
 
     ssize_t   offset  = indir->Offset();
     regNumber baseReg = addr->GetRegNum();
@@ -1549,6 +1592,7 @@ unsigned emitter::emitOutputConstLoad(BYTE* dst, instrDesc* id)
 
             emitOutput_Instr(cur, ppcEncodeMfspr(emitInsCode(INS_mflr), addrReg, 8));
             cur += sizeof(code_t);
+            emitGCregDeadUpd(addrReg, cur);
 
             emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), addrReg, addrReg, ppcHighAdjusted16(delta)));
             cur += sizeof(code_t);
@@ -1569,6 +1613,7 @@ unsigned emitter::emitOutputConstLoad(BYTE* dst, instrDesc* id)
 
         emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), addrReg, REG_R2, 0));
         cur += sizeof(code_t);
+        emitGCregDeadUpd(addrReg, cur);
 
         emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addi), addrReg, addrReg, 0));
         cur += sizeof(code_t);
@@ -1591,6 +1636,7 @@ unsigned emitter::emitOutputConstLoad(BYTE* dst, instrDesc* id)
 
     emitOutput_Instr(cur, ppcEncodeDForm(emitInsCode(INS_addis), addrReg, REG_R0, ppcSignExtend16(value >> 48)));
     cur += sizeof(code_t);
+    emitGCregDeadUpd(addrReg, cur);
 
     emitOutput_Instr(cur,
                      emitInsCode(INS_ori) | (ppcReg(addrReg) << 21) | (ppcReg(addrReg) << 16) |

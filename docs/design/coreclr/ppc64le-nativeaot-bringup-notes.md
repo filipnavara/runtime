@@ -577,6 +577,140 @@ Recent qemu-user builds commonly write files named like
 reliable than live debugger sessions for SIGSEGV/SIGABRT triage. Still, SIG34
 stops are usually hijacking noise, not the failing condition.
 
+For CoreCLR GC stress failures, capture enough information in the crashing run to
+map the bad root back to a managed method before changing JIT GC reporting. Use a
+checked runtime/JIT when possible, keep ReadyToRun disabled while isolating JIT
+codegen, and start with tiering disabled unless the bug is specifically in
+tiered paths:
+
+```sh
+ulimit -c unlimited
+rm -f /tmp/perf-*.map
+
+CORE_ROOT=$PWD/artifacts/tests/coreclr/linux.ppc64le.Checked/Tests/Core_Root \
+DOTNET_ReadyToRun=0 \
+DOTNET_TieredCompilation=0 \
+DOTNET_GCStress=0x4 \
+DOTNET_PerfMapEnabled=1 \
+DOTNET_StressLog=1 \
+DOTNET_StressLogSize=1048576 \
+DOTNET_TotalStressLogSize=67108864 \
+DOTNET_LogLevel=9 \
+COMPlus_PerfMapEnabled=1 \
+COMPlus_StressLog=1 \
+COMPlus_StressLogSize=1048576 \
+COMPlus_TotalStressLogSize=67108864 \
+COMPlus_LogLevel=9 \
+$CORE_ROOT/corerun <test-or-repro>.dll
+```
+
+The useful artifacts are the qemu `.core` file, `/tmp/perf-<pid>.map`, the exact
+command/environment, and matching `.dbg` files. `PerfMapEnabled=1` maps managed
+code and stub ranges, which quickly distinguishes object references from code
+pointers such as `ReportStubBlock<MethodCallThunk>`. The stress log usually gives
+the managed frame in records like `Scanning Frameless method %pM ControlPC = %p`;
+map the `ControlPC` through the perf map, and inspect the `MethodDesc` in GDB if
+the method name is not obvious from the log.
+
+For a native stack from a qemu core, load the core with `gdb-multiarch` and map
+`libcoreclr.so` PCs through the matching debug image:
+
+```sh
+gdb-multiarch -nx -nh -q \
+    -iex 'set pagination off' \
+    -iex 'set debug-file-directory /tmp/no-debug-files' \
+    -iex 'set debuginfod enabled off' \
+    -iex 'set auto-solib-add off' \
+    $CORE_ROOT/corerun qemu_corerun_*.core
+
+addr2line -Cfipe $CORE_ROOT/libcoreclr.so.dbg <libcoreclr-offset>
+```
+
+If the top stack is in `TGcInfoDecoder<PowerPC64GcInfoEncoding>` and
+`Object::ValidateInner`, identify the reported register or stack slot, its value,
+and the `REGDISPLAY` IP. A bad value that is a small integer, stack address, code
+address, or fill pattern points to a different class of bug than a stale object
+pointer. When GDB can resolve stress-log types, use the debugger stress-log
+chunk dumper; otherwise find `StressLog::theLog` with `nm`, dump the current
+thread's `StressLogChunk` memory, and decode records using the layout in
+`src/coreclr/inc/stresslog.h`.
+
+After the offending method is known, make a focused checked JIT dump before
+editing codegen:
+
+```sh
+CORE_ROOT=$PWD/artifacts/tests/coreclr/linux.ppc64le.Checked/Tests/Core_Root \
+DOTNET_ReadyToRun=0 \
+DOTNET_TieredCompilation=0 \
+DOTNET_JitDump='<method-pattern>' \
+DOTNET_JitGCDump='<method-pattern>' \
+DOTNET_JitDisasm='<method-pattern>' \
+DOTNET_JitDisasmWithGC=1 \
+DOTNET_JitDisasmWithAddress=1 \
+DOTNET_JitStdOutFile=/tmp/ppc-jitdump.log \
+$CORE_ROOT/corerun <repro>.dll
+```
+
+Check the live range transitions, GC register/slot ids, interruptible ranges,
+and the native instruction shape at the stopped IP. Then cross-check the same
+pattern against x64/ARM64/RISC-V: either run the host JIT dump for the same
+managed method or compare the lowering/codegen source. Other architectures often
+avoid PPC-only symptoms through ordinary containment, call-target handling, or
+GC-state updates; prefer matching those shapes over adding PPC-only GC masking.
+
+Recent GC stress findings from the `System.Gen2GcCallback.Finalize` focused
+repro:
+
+- PPC64LE originally materialized a delegate invoke target address as
+  `LEA(base+offset)` into the same register that still held the delegate object,
+  then loaded through that address. The JIT dump showed the register becoming a
+  short-lived GC ref for the address shape, unlike x64 where the memory operand
+  stayed folded. Adding simple load-indirection containment for
+  `GT_LEA(base+offset)` and `GT_LCL_ADDR` gives PPC64LE the same effective
+  shape for this case.
+- After that was fixed, the remaining failure moved to `Gen2Repro.Main`.
+  StressLog identified the failing frame and the JIT dump showed a
+  `CNS_INT(h) ref` becoming live after the second instruction of a multi-
+  instruction PPC64LE constant materialization. The reported value was the
+  partial high half (`0x1017`), not an object. PPC64LE now keeps GC/byref
+  attributes off intermediate immediate-materialization instructions and only
+  marks the final instruction as producing the GC value, matching the RISC-V
+  load-immediate descriptor model.
+- The containment change exposed one more lowering/LSRA/emitter contract issue:
+  `lwa` with an unaligned signed-16 displacement is handled by codegen as
+  `lwz` plus `extsw`, so LSRA must not reserve an address temporary for it and
+  the emitter-side containment predicate must agree.
+- A later `System.Diagnostics.StackTraceSymbols.GetSourceLineInfo` failure
+  under `DOTNET_GCStress=0x4` looked at first like bad callee GC info, but the
+  checked JIT dump showed `r15`/`r16`/`r17` were incoming stack-passed `out`
+  byrefs. The real hole was in the caller:
+  `StackFrameHelper.InitializeSourceInfo` stored byref outgoing arguments with
+  raw `SP+offset` PPC stores, unlike RISC-V/ARM64 which use symbolic
+  outgoing-arg local stores. That skipped the emitter's fixed-out-arg GC
+  records, so a GC between caller and callee could move the arrays and leave the
+  callee with stale interior pointers. PPC64LE stack argument stores now keep the
+  outgoing-arg pseudo-local in the instruction descriptor while folding in the
+  PPC64LE ABI `FIRST_ARG_STACK_OFFS`; the JIT dump now shows byref stack slots
+  at `sp+0x70`, `sp+0x78`, and `sp+0x80`, and the focused repro completed 20
+  `GCStress=0x4` runs without the previous qemu core.
+- The next `GC/GC` failure under `DOTNET_GCStress=0x4` crashed while validating
+  `System.Environment.GetEnvironmentVariables`. The bad root was `r3 = 0xfff`
+  at an interruptible point after `CORINFO_HELP_NEWSFAST` had returned a
+  `Hashtable` in `r3` and codegen had copied it to `r14`. Codegen's logical GC
+  state killed `r3`, but final GC info kept it live until the later constructor
+  call. The JIT dump and qemu core showed the intervening instruction sequence
+  was a PPC64LE emitter-expanded constant-data load for `double 1.0`: the
+  hidden address scratch register was `idReg2 == r3`, while the logical
+  instruction was an FP load whose target was `idReg1 == f1`. The shared emitter
+  GC update only considered `idReg1`, so the hidden scratch clobber never
+  produced a `r3` dead transition. `emitOutputConstLoad` now records
+  `emitGCregDeadUpd(addrReg, ...)` immediately after the synthesized instruction
+  that first writes the address register. A checked JIT dump for method hash
+  `c4d6bb9d` now shows `r3` live at `0x184`, `r14` live at `0x188`, and `r3`
+  dead at `0x18c` before the partial constant value can be reported. With
+  `DOTNET_ReadyToRun=0`, `DOTNET_TieredCompilation=0`, and
+  `DOTNET_GCStress=0x4`, the full `GC/GC` wrapper completed successfully.
+
 Core dumps are most useful when every run writes into its own directory with the
 command line and environment saved beside the core. For qemu-user NativeAOT
 smokes, save at least:
@@ -860,6 +994,35 @@ list current as the bring-up matures:
 - PPC64LE lowering is intentionally conservative: many containment hooks are
   empty, target intrinsics return false, and optimized write barriers are not
   emitted. These are mostly code quality gaps once correctness is stable.
+
+Lowering audit follow-up, compared primarily with RISC-V and spot-checked
+against LoongArch64/ARM64:
+
+- Address containment is the most correctness-sensitive gap. PPC64LE now has
+  partial load-indirection containment for simple `GT_LEA(base+offset)` and
+  `GT_LCL_ADDR`, but store indirection containment still needs the same review.
+  Avoid local GC-state workarounds for loads/stores until the corresponding
+  lowering and emitter address-mode support has been checked.
+- `ContainCheckStoreIndir` is still minimal compared with RISC-V. Revisit zero
+  store containment and shared `ContainCheckIndir` use so stores and loads have
+  consistent address shapes.
+- `IsContainableImmed` currently rejects all immediates. RISC-V has
+  opcode-specific rules for arithmetic, compares, atomics, local stores, and
+  branches. PPC64LE needs its own rules based on D-form signed 16-bit immediates
+  and any supported logical-immediate forms; do not copy RISC-V's 12-bit rules.
+- `ContainCheckBinary`, `ContainCheckCompare`, `ContainCheckBoundsChk`, and
+  `ContainCheckStoreLoc` are still mostly empty. These are mainly code-quality
+  and register-pressure issues, but extra materialized constants can obscure GC
+  stress failures by changing short-lived reference/address lifetimes.
+- Shift/rotate containment differs from RISC-V: PPC64LE only contains constant
+  rotates today. Check PPC64LE codegen expectations before enabling contained
+  immediate shifts more broadly.
+- RISC-V-specific Zba/Zbb/Zbs transforms such as `GT_SH*ADD*`, `GT_ADD_UW`,
+  `GT_SLLI_UW`, and `GT_BIT_*` should not be mirrored directly. PPC64LE should
+  only introduce analogous IR when there is a real ISA/codegen equivalent.
+- Any expansion of containment must be paired with LSRA and emitter support for
+  the exact contained form. If the emitter cannot consume a contained address
+  safely, leave it uncontained rather than adding a one-off codegen workaround.
 
 `RhpGcProbeHijack` is entered by overwriting a return address during thread
 hijacking. It must preserve any valid return values and avoid clobbering

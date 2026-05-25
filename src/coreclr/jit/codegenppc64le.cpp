@@ -1857,23 +1857,9 @@ void CodeGen::genCodeForNullCheck(GenTreeIndir* tree)
 {
     assert(tree->OperIs(GT_NULLCHECK));
 
-    GenTree* addr = tree->Addr();
-    assert(!addr->isContained());
-
-    ssize_t    offset  = tree->Offset();
-    regNumber  baseReg = genConsumeReg(addr);
     instruction loadIns = ins_Load(tree->TypeGet());
-
-    if (!ppcOffsetFitsInstruction(loadIns, offset))
-    {
-        regNumber tempReg = internalRegisters.GetSingle(tree);
-        instGen_Set_Reg_To_Imm(EA_PTRSIZE, tempReg, offset);
-        GetEmitter()->emitIns_R_R_R(INS_add, EA_PTRSIZE, tempReg, baseReg, tempReg);
-        baseReg = tempReg;
-        offset  = 0;
-    }
-
-    GetEmitter()->emitIns_R_AR(loadIns, emitActualTypeSize(tree), REG_R0, baseReg, static_cast<int>(offset));
+    genConsumeAddress(tree->Addr());
+    GetEmitter()->emitInsLoadStoreOp(loadIns, emitActualTypeSize(tree), REG_R0, tree);
 }
 
 //---------------------------------------------------------------------
@@ -3450,6 +3436,12 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
     unsigned argOffsetMax = m_compiler->lvaOutgoingArgSpaceSize;
     GenTree* source       = treeNode->gtGetOp1();
 
+    auto getOutgoingArgStoreOffset = [treeNode](unsigned offset) {
+        // Full stack arguments live past the caller linkage and parameter-save area.
+        // Split arguments already use ABI stack offsets for their stack segments.
+        return offset + (treeNode->isSplitStackArg() ? 0 : FIRST_ARG_STACK_OFFS);
+    };
+
     if (!source->TypeIs(TYP_STRUCT))
     {
         var_types   slotType  = genActualType(source);
@@ -3468,28 +3460,13 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
             assert(source->AsIntConCommon()->IconValue() == 0);
 
             instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, 0);
-
-            regNumber baseReg = REG_NA;
-            int       offset  = ppcGetLclFrameOffset(m_compiler, varNumOut, argOffsetOut, &baseReg);
-            if (treeNode->isSplitStackArg())
-            {
-                offset -= FIRST_ARG_STACK_OFFS;
-            }
-            regNumber tmpReg  = ppcOffsetFitsInstruction(storeIns, offset) ? REG_NA : internalRegisters.GetSingle(treeNode);
-            genInstrWithConstant(storeIns, storeAttr, REG_R0, baseReg, offset, tmpReg);
+            GetEmitter()->emitIns_S_R(storeIns, storeAttr, REG_R0, varNumOut, getOutgoingArgStoreOffset(argOffsetOut));
         }
         else
         {
             genConsumeReg(source);
-
-            regNumber baseReg = REG_NA;
-            int       offset  = ppcGetLclFrameOffset(m_compiler, varNumOut, argOffsetOut, &baseReg);
-            if (treeNode->isSplitStackArg())
-            {
-                offset -= FIRST_ARG_STACK_OFFS;
-            }
-            regNumber tmpReg  = ppcOffsetFitsInstruction(storeIns, offset) ? REG_NA : internalRegisters.GetSingle(treeNode);
-            genInstrWithConstant(storeIns, storeAttr, source->GetRegNum(), baseReg, offset, tmpReg);
+            GetEmitter()->emitIns_S_R(storeIns, storeAttr, source->GetRegNum(), varNumOut,
+                                      getOutgoingArgStoreOffset(argOffsetOut));
         }
 
         argOffsetOut += EA_SIZE_IN_BYTES(storeAttr);
@@ -3502,10 +3479,6 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
     if (source->OperIs(GT_FIELD_LIST))
     {
         const unsigned argOffset = treeNode->getArgOffset();
-        // Split arguments use ABI stack offsets directly for their stack segments.
-        // Full stack arguments live past the caller linkage and parameter-save area.
-        const bool addPpc64leStackArgBias = !treeNode->isSplitStackArg();
-        regNumber  tmpReg                 = REG_NA;
 
         for (GenTreeFieldList::Use& use : source->AsFieldList()->Uses())
         {
@@ -3518,23 +3491,7 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
             unsigned  offset = argOffset + use.GetOffset();
 
             instruction storeIns = ins_Store(type);
-            bool        fpBased  = false;
-            int         frameOff = m_compiler->lvaFrameAddress(varNumOut, &fpBased) + static_cast<int>(offset);
-            if (addPpc64leStackArgBias)
-            {
-                frameOff += FIRST_ARG_STACK_OFFS;
-            }
-
-            if (!ppcOffsetFitsInstruction(storeIns, frameOff))
-            {
-                if (tmpReg == REG_NA)
-                {
-                    tmpReg = internalRegisters.GetSingle(treeNode);
-                }
-            }
-
-            regNumber baseReg = fpBased ? REG_FPBASE : REG_SPBASE;
-            genInstrWithConstant(storeIns, attr, reg, baseReg, frameOff, tmpReg);
+            GetEmitter()->emitIns_S_R(storeIns, attr, reg, varNumOut, getOutgoingArgStoreOffset(offset));
         }
         return;
     }
@@ -3580,15 +3537,6 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
     int      remainingSize = srcSize;
     unsigned structOffset  = 0;
     unsigned lclOffset     = (srcLclNode != nullptr) ? srcLclNode->GetLclOffs() : 0;
-
-    regNumber dstTmpReg = REG_NA;
-    {
-        regNumber baseReg             = REG_NA;
-        int       initialDstOffset    = ppcGetLclFrameOffset(m_compiler, varNumOut, argOffsetOut, &baseReg);
-        bool      dstOffsetRangeFits  = ppcOffsetRangeFitsSimm16(initialDstOffset, srcSize) &&
-                                        ppcOffsetFitsInstruction(INS_std, initialDstOffset);
-        dstTmpReg = dstOffsetRangeFits ? REG_NA : internalRegisters.Extract(treeNode);
-    }
 
     while (remainingSize > 0)
     {
@@ -3636,9 +3584,7 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
             genInstrWithConstant(loadIns, attr, loReg, addrReg, structOffset, loReg);
         }
 
-        regNumber baseReg = REG_NA;
-        int       offset  = ppcGetLclFrameOffset(m_compiler, varNumOut, argOffsetOut, &baseReg);
-        genInstrWithConstant(ins_Store(type), attr, loReg, baseReg, offset, dstTmpReg);
+        GetEmitter()->emitIns_S_R(ins_Store(type), attr, loReg, varNumOut, getOutgoingArgStoreOffset(argOffsetOut));
 
         argOffsetOut += moveSize;
         assert(argOffsetOut <= argOffsetMax);
@@ -4784,12 +4730,18 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
 {
     assert(genIsValidIntReg(reg));
 
+    const emitAttr nonGcSize = EA_REMOVE_FLG(size, EA_GCREF_FLG | EA_BYREF_FLG);
+
     if (EA_IS_CNS_RELOC(size))
     {
         assert(m_compiler->opts.compReloc);
         assert(reg != REG_R2);
 
         emitAttr relocAttr = EA_HANDLE_CNS_RELOC;
+        if (EA_IS_GCREF(size))
+        {
+            relocAttr = EA_SET_FLG(relocAttr, EA_GCREF_FLG);
+        }
         if (EA_IS_CNS_TLSGD_RELOC(size))
         {
             if (m_compiler->IsReadyToRun())
@@ -4798,8 +4750,9 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
             }
 
             relocAttr = EA_SET_FLG(relocAttr, EA_CNS_TLSGD_RELOC);
-            GetEmitter()->emitIns_R_R_I(INS_addis, relocAttr, reg, REG_R2, imm);
-            GetEmitter()->emitIns_R_R_I(INS_ld, relocAttr, reg, reg, imm);
+            emitAttr nonGcRelocAttr = EA_REMOVE_FLG(relocAttr, EA_GCREF_FLG | EA_BYREF_FLG);
+            GetEmitter()->emitIns_R_R_I(INS_addis, nonGcRelocAttr, reg, REG_R2, imm);
+            GetEmitter()->emitIns_R_R_I(INS_ld, nonGcRelocAttr, reg, reg, imm);
             GetEmitter()->emitIns_R_R_R_I(INS_add, relocAttr, reg, reg, REG_TP, imm);
             return;
         }
@@ -4815,7 +4768,8 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
             return;
         }
 
-        GetEmitter()->emitIns_R_R_I(INS_addis, relocAttr, reg, REG_R2, imm);
+        GetEmitter()->emitIns_R_R_I(INS_addis, EA_REMOVE_FLG(relocAttr, EA_GCREF_FLG | EA_BYREF_FLG), reg, REG_R2,
+                                    imm);
         GetEmitter()->emitIns_R_R_I(INS_addi, relocAttr, reg, reg, imm);
         return;
     }
@@ -4842,7 +4796,7 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
         ssize_t hi = signExtend16(value >> 16);
         ssize_t lo = unsigned16(value);
 
-        GetEmitter()->emitIns_R_R_I(INS_addis, size, reg, REG_R0, hi);
+        GetEmitter()->emitIns_R_R_I(INS_addis, (lo == 0) ? size : nonGcSize, reg, REG_R0, hi);
         if (lo != 0)
         {
             GetEmitter()->emitIns_R_R_I(INS_ori, size, reg, reg, lo);
@@ -4852,13 +4806,13 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
 
     if ((imm >= 0) && (value <= UINT32_MAX))
     {
-        GetEmitter()->emitIns_R_R_I(INS_addi, size, reg, REG_R0, 0);
+        GetEmitter()->emitIns_R_R_I(INS_addi, (value == 0) ? size : nonGcSize, reg, REG_R0, 0);
 
         ssize_t hi = unsigned16(value >> 16);
         ssize_t lo = unsigned16(value);
         if (hi != 0)
         {
-            GetEmitter()->emitIns_R_R_I(INS_oris, size, reg, reg, hi);
+            GetEmitter()->emitIns_R_R_I(INS_oris, (lo == 0) ? size : nonGcSize, reg, reg, hi);
         }
         if (lo != 0)
         {
@@ -4869,14 +4823,13 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
 
     if ((imm >= -(1LL << 47)) && (imm < (1LL << 47)))
     {
-        GetEmitter()->emitIns_R_R_I(INS_addi, size, reg, REG_R0, signExtend16(value >> 32));
-        GetEmitter()->emitIns_R_R_I(INS_sldi, size, reg, reg, 32);
-
         ssize_t hi = unsigned16(value >> 16);
         ssize_t lo = unsigned16(value);
+        GetEmitter()->emitIns_R_R_I(INS_addi, nonGcSize, reg, REG_R0, signExtend16(value >> 32));
+        GetEmitter()->emitIns_R_R_I(INS_sldi, ((hi == 0) && (lo == 0)) ? size : nonGcSize, reg, reg, 32);
         if (hi != 0)
         {
-            GetEmitter()->emitIns_R_R_I(INS_oris, size, reg, reg, hi);
+            GetEmitter()->emitIns_R_R_I(INS_oris, (lo == 0) ? size : nonGcSize, reg, reg, hi);
         }
         if (lo != 0)
         {
@@ -4885,21 +4838,20 @@ void CodeGen::instGen_Set_Reg_To_Imm(emitAttr  size,
         return;
     }
 
-    GetEmitter()->emitIns_R_R_I(INS_addis, size, reg, REG_R0, signExtend16(value >> 48));
+    GetEmitter()->emitIns_R_R_I(INS_addis, nonGcSize, reg, REG_R0, signExtend16(value >> 48));
 
     ssize_t next = unsigned16(value >> 32);
     if (next != 0)
     {
-        GetEmitter()->emitIns_R_R_I(INS_ori, size, reg, reg, next);
+        GetEmitter()->emitIns_R_R_I(INS_ori, nonGcSize, reg, reg, next);
     }
-
-    GetEmitter()->emitIns_R_R_I(INS_sldi, size, reg, reg, 32);
 
     ssize_t hi = unsigned16(value >> 16);
     ssize_t lo = unsigned16(value);
+    GetEmitter()->emitIns_R_R_I(INS_sldi, ((hi == 0) && (lo == 0)) ? size : nonGcSize, reg, reg, 32);
     if (hi != 0)
     {
-        GetEmitter()->emitIns_R_R_I(INS_oris, size, reg, reg, hi);
+        GetEmitter()->emitIns_R_R_I(INS_oris, (lo == 0) ? size : nonGcSize, reg, reg, hi);
     }
     if (lo != 0)
     {

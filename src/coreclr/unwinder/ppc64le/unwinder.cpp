@@ -361,6 +361,8 @@ RtlVirtualUnwind(
     OUT PULONG64 EstablisherFrame,
     IN OUT PT_KNONVOLATILE_CONTEXT_POINTERS ContextPointers OPTIONAL)
 {
+    ContextRecord->ContextFlags |= CONTEXT_UNWOUND_TO_CALL;
+
     if (ARGUMENT_PRESENT(EstablisherFrame))
     {
         *EstablisherFrame = ContextRecord->R1;
@@ -369,11 +371,6 @@ RtlVirtualUnwind(
     if (ARGUMENT_PRESENT(HandlerData))
     {
         *HandlerData = nullptr;
-    }
-
-    if (ARGUMENT_PRESENT(ContextPointers))
-    {
-        memset(ContextPointers, 0, sizeof(*ContextPointers));
     }
 
     if (FunctionEntry != nullptr)

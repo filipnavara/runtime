@@ -18,6 +18,21 @@ void Lowering::ContainCheckStoreIndir(GenTreeStoreInd* node)
 
 void Lowering::ContainCheckIndir(GenTreeIndir* node)
 {
+    if (node->TypeIs(TYP_STRUCT))
+    {
+        return;
+    }
+
+    GenTree* addr = node->Addr();
+    if (addr->OperIs(GT_LEA) && !addr->AsAddrMode()->HasIndex() && IsSafeToContainMem(node, addr))
+    {
+        MakeSrcContained(node, addr);
+    }
+    else if (addr->OperIs(GT_LCL_ADDR) && !node->OperIs(GT_NULLCHECK) &&
+             IsContainableLclAddr(addr->AsLclFld(), node->Size()))
+    {
+        MakeSrcContained(node, addr);
+    }
 }
 
 void Lowering::ContainCheckBoundsChk(GenTreeBoundsChk* node)

@@ -280,7 +280,6 @@ typedef int __ptrace_request;
     ASSIGN_REG(Link) \
     ASSIGN_REG(Xer) \
     ASSIGN_REG(Ccr) \
-    ASSIGN_REG(R31) \
 
 #define ASSIGN_INTEGER_REGS \
     ASSIGN_REG(R0)      \
@@ -288,7 +287,6 @@ typedef int __ptrace_request;
     ASSIGN_REG(R2)      \
     ASSIGN_REG(R3)      \
     ASSIGN_REG(R4)      \
-    ASSIGN_REG(R5)      \
     ASSIGN_REG(R5)      \
     ASSIGN_REG(R6)      \
     ASSIGN_REG(R7)      \
@@ -314,7 +312,8 @@ typedef int __ptrace_request;
     ASSIGN_REG(R27)     \
     ASSIGN_REG(R28)     \
     ASSIGN_REG(R29)     \
-    ASSIGN_REG(R30)
+    ASSIGN_REG(R30)     \
+    ASSIGN_REG(R31)
 
 #elif defined(HOST_WASM)
 #define ASSIGN_CONTROL_REGS  \
@@ -1351,7 +1350,7 @@ LPVOID GetNativeContextSP(const native_context_t *context)
 #elif defined(HOST_S390X)
     return (LPVOID) MCREG_R15(context->uc_mcontext);
 #elif defined(HOST_POWERPC64)
-    return (LPVOID) MCREG_R31(context->uc_mcontext);
+    return (LPVOID) MCREG_R1(context->uc_mcontext);
 #else
     return (LPVOID) MCREG_Sp(context->uc_mcontext);
 #endif

@@ -3453,17 +3453,6 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
     unsigned argOffsetMax = m_compiler->lvaOutgoingArgSpaceSize;
     GenTree* source       = treeNode->gtGetOp1();
 
-    auto storeOutgoingArg = [this, varNumOut](instruction storeIns,
-                                             emitAttr    attr,
-                                             regNumber   dataReg,
-                                             unsigned    offset,
-                                             regNumber   tmpReg) {
-        // Keep outgoing GC arg stores visible to the emitter as local stores so it can publish
-        // the matching rpdARG_PUSH entries. PPC64LE stack arguments start after the ELFv2
-        // linkage/parameter-save area, so include that bias in both the store and GC slot offset.
-        GetEmitter()->emitIns_S_R(storeIns, attr, dataReg, varNumOut, offset + FIRST_ARG_STACK_OFFS, tmpReg);
-    };
-
     if (!source->TypeIs(TYP_STRUCT))
     {
         var_types   slotType  = genActualType(source);
@@ -3485,7 +3474,8 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
             regNumber tmpReg = ppcLclOffsetFitsInstruction(m_compiler, storeIns, varNumOut, argOffsetOut)
                                    ? REG_NA
                                    : internalRegisters.GetSingle(treeNode);
-            storeOutgoingArg(storeIns, storeAttr, REG_R0, argOffsetOut, tmpReg);
+            GetEmitter()->emitIns_S_R(storeIns, storeAttr, REG_R0, varNumOut, argOffsetOut + FIRST_ARG_STACK_OFFS,
+                                      tmpReg);
         }
         else
         {
@@ -3493,7 +3483,8 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
             regNumber tmpReg = ppcLclOffsetFitsInstruction(m_compiler, storeIns, varNumOut, argOffsetOut)
                                    ? REG_NA
                                    : internalRegisters.GetSingle(treeNode);
-            storeOutgoingArg(storeIns, storeAttr, source->GetRegNum(), argOffsetOut, tmpReg);
+            GetEmitter()->emitIns_S_R(storeIns, storeAttr, source->GetRegNum(), varNumOut,
+                                      argOffsetOut + FIRST_ARG_STACK_OFFS, tmpReg);
         }
 
         argOffsetOut += EA_SIZE_IN_BYTES(storeAttr);
@@ -3521,7 +3512,7 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
             regNumber tmpReg = ppcLclOffsetFitsInstruction(m_compiler, storeIns, varNumOut, offset)
                                    ? REG_NA
                                    : internalRegisters.GetSingle(treeNode);
-            storeOutgoingArg(storeIns, attr, reg, offset, tmpReg);
+            GetEmitter()->emitIns_S_R(storeIns, attr, reg, varNumOut, offset + FIRST_ARG_STACK_OFFS, tmpReg);
         }
         return;
     }
@@ -3615,7 +3606,8 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
             genInstrWithConstant(loadIns, attr, loReg, addrReg, structOffset, loReg);
         }
 
-        storeOutgoingArg(ins_Store(type), attr, loReg, argOffsetOut, storeTmpReg);
+        GetEmitter()->emitIns_S_R(ins_Store(type), attr, loReg, varNumOut, argOffsetOut + FIRST_ARG_STACK_OFFS,
+                                  storeTmpReg);
 
         argOffsetOut += moveSize;
         assert(argOffsetOut <= argOffsetMax);

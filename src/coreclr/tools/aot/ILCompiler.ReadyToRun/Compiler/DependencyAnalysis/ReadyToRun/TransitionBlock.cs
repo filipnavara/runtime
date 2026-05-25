@@ -144,7 +144,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
         /// The transition block should define everything pushed by callee. The code assumes in number of places that
         /// end of the transition block is caller's stack pointer.
         /// </summary>
-        public int OffsetOfArgs => SizeOfTransitionBlock;
+        public virtual int OffsetOfArgs => SizeOfTransitionBlock;
 
         public bool IsStackArgumentOffset(int offset)
         {
@@ -772,6 +772,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
             public override int SizeOfTransitionBlock => SizeOfCalleeSavedRegisters + PointerSize + SizeOfArgumentRegisters;
             public override int OffsetOfFirstGCRefMapSlot => SizeOfCalleeSavedRegisters + PointerSize;
             public override int OffsetOfArgumentRegisters => OffsetOfFirstGCRefMapSlot;
+            public override int OffsetOfArgs => SizeOfTransitionBlock + 12 * PointerSize;
 
             // f1 .. f13
             public override int NumFloatArgumentRegisters => 13;

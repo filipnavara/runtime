@@ -130,7 +130,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
             int nStackBytes = argit.SizeOfFrameArgumentArray();
 
             // Allocate a fake stack
-            CORCOMPILE_GCREFMAP_TOKENS[] fakeStack = new CORCOMPILE_GCREFMAP_TOKENS[transitionBlock.SizeOfTransitionBlock + nStackBytes];
+            CORCOMPILE_GCREFMAP_TOKENS[] fakeStack = new CORCOMPILE_GCREFMAP_TOKENS[transitionBlock.OffsetOfArgs + nStackBytes];
 
             // Fill it in
             FakeGcScanRoots(method, argit, fakeStack, isUnboxingStub);
@@ -146,7 +146,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
             }
             else
             {
-                nStackSlots = (uint)((transitionBlock.SizeOfTransitionBlock + nStackBytes - _transitionBlock.OffsetOfFirstGCRefMapSlot) / _target.PointerSize);
+                nStackSlots = (uint)((transitionBlock.OffsetOfArgs + nStackBytes - _transitionBlock.OffsetOfFirstGCRefMapSlot) / _target.PointerSize);
             }
 
             for (uint pos = 0; pos < nStackSlots; pos++)

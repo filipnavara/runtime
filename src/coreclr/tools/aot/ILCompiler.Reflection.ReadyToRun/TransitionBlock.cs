@@ -34,6 +34,9 @@ namespace ILCompiler.Reflection.ReadyToRun
                 case Machine.LoongArch64:
                     return LoongArch64TransitionBlock.Instance;
 
+                case Machine.PowerPC:
+                    return Ppc64leTransitionBlock.Instance;
+
                 case Machine.RiscV64:
                     return RiscV64TransitionBlock.Instance;
 
@@ -74,7 +77,7 @@ namespace ILCompiler.Reflection.ReadyToRun
         /// The transition block should define everything pushed by callee. The code assumes in number of places that
         /// end of the transition block is caller's stack pointer.
         /// </summary>
-        public int OffsetOfArgs => SizeOfTransitionBlock;
+        public virtual int OffsetOfArgs => SizeOfTransitionBlock;
 
         private sealed class X86TransitionBlock : TransitionBlock
         {
@@ -186,6 +189,22 @@ namespace ILCompiler.Reflection.ReadyToRun
             public override int SizeOfTransitionBlock => SizeOfCalleeSavedRegisters + SizeOfArgumentRegisters;
             public override int OffsetOfFirstGCRefMapSlot => SizeOfCalleeSavedRegisters;
             public override int OffsetOfArgumentRegisters => OffsetOfFirstGCRefMapSlot;
+        }
+
+        private sealed class Ppc64leTransitionBlock : TransitionBlock
+        {
+            public static readonly TransitionBlock Instance = new Ppc64leTransitionBlock();
+
+            public override int PointerSize => 8;
+            // r3 .. r10
+            public override int NumArgumentRegisters => 8;
+            // r31, lr, r14 .. r30
+            public override int NumCalleeSavedRegisters => 19;
+            // Callee-saves, padding, argument registers
+            public override int SizeOfTransitionBlock => SizeOfCalleeSavedRegisters + PointerSize + SizeOfArgumentRegisters;
+            public override int OffsetOfFirstGCRefMapSlot => SizeOfCalleeSavedRegisters + PointerSize;
+            public override int OffsetOfArgumentRegisters => OffsetOfFirstGCRefMapSlot;
+            public override int OffsetOfArgs => SizeOfTransitionBlock + 12 * PointerSize;
         }
         
     }

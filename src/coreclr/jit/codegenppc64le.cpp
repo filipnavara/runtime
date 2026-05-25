@@ -3926,7 +3926,9 @@ void CodeGen::genPopCalleeSavedRegisters(bool jmpEpilog)
     }
 
     GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_R0, REG_SPBASE, linkRegisterOffset);
+    m_compiler->unwindNop();
     GetEmitter()->emitIns_R_R(INS_mtlr, EA_PTRSIZE, REG_R0, REG_R0);
+    m_compiler->unwindSaveLinkRegister(linkRegisterOffset);
 
     if (isFramePointerUsed())
     {
@@ -4009,6 +4011,7 @@ void CodeGen::genAllocLclFrame(unsigned frameSize, regNumber initReg, bool* pIni
         }
 
         GetEmitter()->emitIns_R_R(INS_mflr, EA_PTRSIZE, REG_R0, REG_R0);
+        m_compiler->unwindNop();
         GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R0, REG_SPBASE, static_cast<int>(linkRegisterOffset));
         m_compiler->unwindSaveLinkRegister(static_cast<int>(linkRegisterOffset));
 
@@ -4262,6 +4265,7 @@ void CodeGen::genFuncletProlog(BasicBlock* block)
     m_compiler->unwindSaveReg(REG_FPBASE, framePointerOffset);
 
     GetEmitter()->emitIns_R_R(INS_mflr, EA_PTRSIZE, REG_R0, REG_R0);
+    m_compiler->unwindNop();
     GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_R0, REG_SPBASE, linkRegisterOffset);
     m_compiler->unwindSaveLinkRegister(linkRegisterOffset);
 
@@ -4316,7 +4320,9 @@ void CodeGen::genFuncletEpilog(BasicBlock* block)
     genRestoreCalleeSavedRegistersHelp(maskSaveRegs, REG_SPBASE, calleeSavedOffset, /* reportUnwindData */ true);
 
     GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_R0, REG_SPBASE, linkRegisterOffset);
+    m_compiler->unwindNop();
     GetEmitter()->emitIns_R_R(INS_mtlr, EA_PTRSIZE, REG_R0, REG_R0);
+    m_compiler->unwindSaveLinkRegister(linkRegisterOffset);
 
     GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_FPBASE, REG_SPBASE, framePointerOffset);
     m_compiler->unwindSaveReg(REG_FPBASE, framePointerOffset);

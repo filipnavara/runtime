@@ -7,6 +7,8 @@
 
 #include "unwinder.h"
 
+#define WORDS_TO_HALFWORDS(value) ((value) << 1)
+
 static bool IsEndCode(BYTE opcode)
 {
     return (opcode & 0xFE) == 0xE4;
@@ -194,8 +196,32 @@ static unsigned GetUnwindCodeSize(BYTE opcode)
     return 1;
 }
 
+static DWORD ComputeScopeSize(ULONG_PTR code, ULONG_PTR codeEnd, bool isEpilog)
+{
+    DWORD scopeSize = 0;
+    while (code < codeEnd)
+    {
+        BYTE opcode = ReadUnwindByte(code);
+        if (IsEndCode(opcode))
+        {
+            break;
+        }
+
+        code += GetUnwindCodeSize(opcode);
+        scopeSize++;
+    }
+
+    if (isEpilog)
+    {
+        scopeSize++;
+    }
+
+    return scopeSize;
+}
+
 static void UnwindPpc64leJitFrame(
     ULONG64 imageBase,
+    ULONG64 controlPc,
     PCONTEXT context,
     PT_RUNTIME_FUNCTION functionEntry,
     PULONG64 establisherFrame,
@@ -208,6 +234,8 @@ static void UnwindPpc64leJitFrame(
     DWORD codeWords   = (header >> 27) & 0x1F;
     DWORD epilogCount = (header >> 22) & 0x1F;
     DWORD eBit        = (header >> 21) & 0x01;
+    DWORD functionLength = header & 0x3FFFF;
+    DWORD offsetInFunction = (controlPc - imageBase - functionEntry->BeginAddress) / 2;
 
     if ((codeWords == 0) && (epilogCount == 0))
     {
@@ -217,16 +245,79 @@ static void UnwindPpc64leJitFrame(
         epilogCount = extended & 0xFFFF;
     }
 
-    if (eBit == 0)
+    DWORD unwindIndex = 0;
+    if (eBit != 0)
     {
-        unwindData += epilogCount * sizeof(DWORD);
+        unwindIndex = epilogCount;
+        epilogCount = 0;
     }
 
-    ULONG_PTR code    = unwindData;
-    ULONG_PTR codeEnd = unwindData + (codeWords * sizeof(DWORD));
+    ULONG_PTR epilogScopes = unwindData;
+    ULONG_PTR code         = unwindData + (epilogCount * sizeof(DWORD));
+    ULONG_PTR codeEnd      = code + (codeWords * sizeof(DWORD));
 
-    DWORD savedIntegerCalleeCount = 0;
-    bool  restoredLink            = false;
+    DWORD skipHalfWords = 0;
+
+    if (offsetInFunction < WORDS_TO_HALFWORDS(4 * codeWords))
+    {
+        DWORD scopeSize = WORDS_TO_HALFWORDS(ComputeScopeSize(code, codeEnd, false));
+        if (offsetInFunction < scopeSize)
+        {
+            skipHalfWords = scopeSize - offsetInFunction;
+            goto ExecuteCodes;
+        }
+    }
+
+    if (eBit != 0)
+    {
+        if (offsetInFunction + WORDS_TO_HALFWORDS(4 * codeWords - unwindIndex) >= functionLength)
+        {
+            DWORD scopeSize = WORDS_TO_HALFWORDS(ComputeScopeSize(code + unwindIndex, codeEnd, true));
+            DWORD scopeStart = functionLength - scopeSize;
+            if (offsetInFunction >= scopeStart)
+            {
+                code += unwindIndex;
+                skipHalfWords = offsetInFunction - scopeStart;
+            }
+        }
+    }
+    else
+    {
+        for (DWORD scope = 0; scope < epilogCount; scope++)
+        {
+            DWORD epilogScope = ReadUnwindDword(epilogScopes + (scope * sizeof(DWORD)));
+            DWORD scopeStart = epilogScope & 0x3FFFF;
+            if (offsetInFunction < scopeStart)
+            {
+                break;
+            }
+
+            unwindIndex = epilogScope >> 22;
+            if (offsetInFunction < scopeStart + WORDS_TO_HALFWORDS(4 * codeWords - unwindIndex))
+            {
+                DWORD scopeSize = WORDS_TO_HALFWORDS(ComputeScopeSize(code + unwindIndex, codeEnd, true));
+                if (offsetInFunction < scopeStart + scopeSize)
+                {
+                    code += unwindIndex;
+                    skipHalfWords = offsetInFunction - scopeStart;
+                    break;
+                }
+            }
+        }
+    }
+
+ExecuteCodes:
+    while ((code < codeEnd) && (skipHalfWords > 0))
+    {
+        BYTE opcode = ReadUnwindByte(code);
+        if (IsEndCode(opcode))
+        {
+            break;
+        }
+
+        code += GetUnwindCodeSize(opcode);
+        skipHalfWords -= 2;
+    }
 
     while (code < codeEnd)
     {
@@ -254,10 +345,6 @@ static void UnwindPpc64leJitFrame(
 
             RestoreIntegerRegister(context, contextPointers, reg, context->R1 + offset);
 
-            if ((reg >= 14) && (reg <= 30))
-            {
-                savedIntegerCalleeCount++;
-            }
         }
         else if ((opcode & 0xFE) == 0xDC)
         {
@@ -290,21 +377,10 @@ static void UnwindPpc64leJitFrame(
             {
                 contextPointers->Link = (PDWORD64)linkAddress;
             }
-            restoredLink = true;
         }
         else
         {
             code += GetUnwindCodeSize(opcode) - 1;
-        }
-    }
-
-    if (!restoredLink)
-    {
-        DWORD64 linkAddress = context->R1 - ((savedIntegerCalleeCount + 1) * sizeof(DWORD64));
-        context->Link       = ReadStackQword(linkAddress);
-        if (contextPointers != nullptr)
-        {
-            contextPointers->Link = (PDWORD64)linkAddress;
         }
     }
 
@@ -385,7 +461,7 @@ RtlVirtualUnwind(
 
     if (FunctionEntry != nullptr)
     {
-        UnwindPpc64leJitFrame(ImageBase, ContextRecord, FunctionEntry, EstablisherFrame, ContextPointers);
+        UnwindPpc64leJitFrame(ImageBase, ControlPc, ContextRecord, FunctionEntry, EstablisherFrame, ContextPointers);
     }
     else
     {

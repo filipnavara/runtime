@@ -457,6 +457,7 @@ inline void FillContextPointers(PT_KNONVOLATILE_CONTEXT_POINTERS pCtxPtrs, PT_CO
     pCtxPtrs->R29 = &pCtx->R29;
     pCtxPtrs->R30 = &pCtx->R30;
     pCtxPtrs->R31 = &pCtx->R31;
+    pCtxPtrs->Link = &pCtx->Link;
 #elif defined(TARGET_WASM)
     // Wasm doesn't have registers
 #else // TARGET_WASM
@@ -659,4 +660,3 @@ inline void UpdateContextFromRegDisp(PREGDISPLAY pRegDisp, PT_CONTEXT pContext)
 
 
 #endif  // __REGDISP_H
-

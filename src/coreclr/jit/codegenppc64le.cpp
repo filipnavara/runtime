@@ -1195,30 +1195,40 @@ void CodeGen::genLockedInstructions(GenTreeOp* treeNode)
     genConsumeAddress(addr);
     genConsumeRegs(data);
 
-    emitAttr attr = emitActualTypeSize(treeNode);
-    attr          = (EA_SIZE(attr) == EA_4BYTE) ? EA_4BYTE : EA_8BYTE;
+    emitAttr attr       = emitActualTypeSize(treeNode);
+    emitAttr atomicAttr = (EA_SIZE(attr) == EA_4BYTE) ? EA_4BYTE : EA_8BYTE;
 
     // genConsumeAddress assumes the address dies at the first instruction. The
     // reservation loop reuses it until the conditional store succeeds.
     gcInfo.gcMarkRegPtrVal(addrReg, addr->TypeGet());
+
+    const bool reportLoadedGcValue = treeNode->OperIs(GT_XCHG) && varTypeIsGC(treeNode);
 
     instGen_MemoryBarrier(BARRIER_FULL);
 
     BasicBlock* retryLabel = genCreateTempLabel();
     genDefineTempLabel(retryLabel);
 
-    GetEmitter()->emitIns_R_R_R(ppcLoadReserveIns(attr), attr, loadReg, REG_R0, addrReg);
+    GetEmitter()->emitIns_R_R_R(ppcLoadReserveIns(atomicAttr), reportLoadedGcValue ? attr : atomicAttr, loadReg,
+                                REG_R0, addrReg);
+    if (reportLoadedGcValue)
+    {
+        // GC stress can stop inside the load-reserve/store-conditional loop.
+        // Once the old value is loaded, it is the XCHG result and must be
+        // reported even before the node reaches its normal produce point.
+        gcInfo.gcMarkRegPtrVal(loadReg, treeNode->TypeGet());
+    }
 
     switch (treeNode->OperGet())
     {
         case GT_XADD:
-            GetEmitter()->emitIns_R_R_R(INS_add, attr, storeDataReg, loadReg, dataReg);
+            GetEmitter()->emitIns_R_R_R(INS_add, atomicAttr, storeDataReg, loadReg, dataReg);
             break;
         case GT_XAND:
-            GetEmitter()->emitIns_R_R_R(INS_and, attr, storeDataReg, loadReg, dataReg);
+            GetEmitter()->emitIns_R_R_R(INS_and, atomicAttr, storeDataReg, loadReg, dataReg);
             break;
         case GT_XORR:
-            GetEmitter()->emitIns_R_R_R(INS_or, attr, storeDataReg, loadReg, dataReg);
+            GetEmitter()->emitIns_R_R_R(INS_or, atomicAttr, storeDataReg, loadReg, dataReg);
             break;
         case GT_XCHG:
             assert(storeDataReg == dataReg);
@@ -1227,7 +1237,7 @@ void CodeGen::genLockedInstructions(GenTreeOp* treeNode)
             unreached();
     }
 
-    GetEmitter()->emitIns_R_R_R(ppcStoreConditionalIns(attr), attr, storeDataReg, REG_R0, addrReg);
+    GetEmitter()->emitIns_R_R_R(ppcStoreConditionalIns(atomicAttr), atomicAttr, storeDataReg, REG_R0, addrReg);
     GetEmitter()->emitIns_J(INS_bne, retryLabel);
 
     instGen_MemoryBarrier(BARRIER_FULL);
@@ -1237,6 +1247,10 @@ void CodeGen::genLockedInstructions(GenTreeOp* treeNode)
     if (targetReg != REG_NA)
     {
         genProduceReg(treeNode);
+    }
+    else if (reportLoadedGcValue)
+    {
+        gcInfo.gcMarkRegSetNpt(genRegMask(loadReg));
     }
 }
 
@@ -1272,8 +1286,8 @@ void CodeGen::genCodeForCmpXchg(GenTreeCmpXchg* treeNode)
     genConsumeRegs(data);
     genConsumeRegs(comparand);
 
-    emitAttr attr = emitActualTypeSize(treeNode);
-    attr          = (EA_SIZE(attr) == EA_4BYTE) ? EA_4BYTE : EA_8BYTE;
+    emitAttr attr       = emitActualTypeSize(treeNode);
+    emitAttr atomicAttr = (EA_SIZE(attr) == EA_4BYTE) ? EA_4BYTE : EA_8BYTE;
 
     gcInfo.gcMarkRegPtrVal(addrReg, addr->TypeGet());
 
@@ -1284,10 +1298,21 @@ void CodeGen::genCodeForCmpXchg(GenTreeCmpXchg* treeNode)
 
     genDefineTempLabel(retryLabel);
 
-    GetEmitter()->emitIns_R_R_R(ppcLoadReserveIns(attr), attr, targetReg, REG_R0, addrReg);
-    GetEmitter()->emitIns_R_R((EA_SIZE(attr) == EA_4BYTE) ? INS_cmpw : INS_cmpd, attr, targetReg, comparandReg);
+    const bool reportLoadedGcValue = varTypeIsGC(treeNode);
+
+    GetEmitter()->emitIns_R_R_R(ppcLoadReserveIns(atomicAttr), reportLoadedGcValue ? attr : atomicAttr, targetReg,
+                                REG_R0, addrReg);
+    if (reportLoadedGcValue)
+    {
+        // The loaded value is the CMPXCHG result on both the success and
+        // compare-fail paths. Keep it visible to GC stress between the
+        // load-reserve and the normal node produce point.
+        gcInfo.gcMarkRegPtrVal(targetReg, treeNode->TypeGet());
+    }
+    GetEmitter()->emitIns_R_R((EA_SIZE(atomicAttr) == EA_4BYTE) ? INS_cmpw : INS_cmpd, atomicAttr, targetReg,
+                              comparandReg);
     GetEmitter()->emitIns_J(INS_bne, doneLabel);
-    GetEmitter()->emitIns_R_R_R(ppcStoreConditionalIns(attr), attr, dataReg, REG_R0, addrReg);
+    GetEmitter()->emitIns_R_R_R(ppcStoreConditionalIns(atomicAttr), atomicAttr, dataReg, REG_R0, addrReg);
     GetEmitter()->emitIns_J(INS_bne, retryLabel);
 
     genDefineTempLabel(doneLabel);

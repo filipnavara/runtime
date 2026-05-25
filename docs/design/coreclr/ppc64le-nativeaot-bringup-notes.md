@@ -1,38 +1,125 @@
-# PPC64LE NativeAOT Bring-up Notes
+# PPC64LE CoreCLR And NativeAOT Bring-up Notes
 
-This note tracks the current PPC64LE NativeAOT implementation state and the
-debugging workflows that are useful when changing it.
+This note is a practical guide for the PPC64LE port. Keep it focused on how to
+build, test, debug known classes of failures, and understand current design
+decisions and open gaps. Resolved investigations belong in commit history, not
+here.
 
-## Workspace And Build Flow
+## Workspace
 
-The active bring-up checkout lives directly inside WSL at
-`/home/filip/runtime-ppc64le-wsl`. Do not maintain a second synchronized
-checkout and do not prefix local commands with `wsl`; run the build, test,
-debugger, and qemu/binfmt commands directly from this tree.
+The active checkout lives directly inside WSL:
 
-## NativeAOT Build And Smoke Flow
+```sh
+cd /home/filip/runtime-ppc64le-wsl
+```
+
+Do not maintain a second synchronized checkout and do not prefix local commands
+with `wsl`; run build, test, debugger, and qemu/binfmt commands directly from
+this tree.
+
+Use `ROOTFS_DIR=/` for the current multi-arch/builtin-binfmt setup where the
+PPC64LE libraries are installed on the WSL system instead of downloaded into a
+separate rootfs.
+
+## CoreCLR Build Flow
+
+Checked builds are preferred while bring-up issues are active because JIT and
+runtime assertions catch many ABI and GC-info mistakes before they turn into
+silent corruption.
+
+```sh
+ROOTFS_DIR=/ ./build.sh clr.runtime -rc Checked -lc Debug -arch ppc64le -cross --build
+```
+
+Generate or refresh the Core_Root layout when test binaries or runtime bits are
+stale:
+
+```sh
+ROOTFS_DIR=/ ./src/tests/build.sh ppc64le Checked -generatelayoutonly
+```
+
+The checked Core_Root normally lives at:
+
+```sh
+artifacts/tests/coreclr/linux.ppc64le.Checked/Tests/Core_Root
+```
+
+## CoreCLR Test Flow
+
+For first-pass CoreCLR JIT debugging, keep ReadyToRun disabled and start with
+tiered compilation disabled:
+
+```sh
+export CORE_ROOT=$PWD/artifacts/tests/coreclr/linux.ppc64le.Checked/Tests/Core_Root
+export DOTNET_ReadyToRun=0
+export DOTNET_TieredCompilation=0
+export DOTNET_EnableWriteXorExecute=0
+```
+
+`DOTNET_EnableWriteXorExecute=0` avoids a qemu/binfmt SIGILL mode seen in
+dynamic reflection invoke stubs. Re-enable it only when specifically testing
+W^X behavior.
+
+Run CodeGenBringUpTests:
+
+```sh
+for t in d r ro do; do
+    CORE_ROOT=$PWD/artifacts/tests/coreclr/linux.ppc64le.Checked/Tests/Core_Root \
+    DOTNET_ReadyToRun=0 \
+    DOTNET_TieredCompilation=0 \
+    DOTNET_EnableWriteXorExecute=0 \
+    artifacts/tests/coreclr/linux.ppc64le.Checked/JIT/CodeGenBringUpTests/JIT.CodeGenBringUpTests_$t/JIT.CodeGenBringUpTests_$t.sh
+done
+```
+
+Skip tests that depend on launching `ilasm`/`ildasm` inside the emulated
+PPC64LE CoreCLR process for now. That path is not a useful runtime signal in
+the current qemu-user setup.
+
+For broad `System.Runtime.Tests` CoreCLR runs under qemu/binfmt, disable
+RemoteExecutor tests unless the process-launch behavior is the thing being
+tested:
+
+```sh
+export DOTNET_REMOTEEXECUTOR_SUPPORTED=0
+```
+
+RemoteExecutor failures that report `ENOENT` for an existing PPC64LE executable
+are usually qemu/binfmt process-launch issues, not CoreCLR codegen failures.
+
+## NativeAOT Build Flow
 
 Do not build a PPC64LE host runtime for the bring-up flow. Build x64 host tools
-and cross-compile the PPC64LE NativeAOT runtime pack and tests. The SDK pack
-selection should use the normal local-pack switches rather than appending
-`linux-ppc64le` to existing `Known*Pack` items in `eng/targetingpacks.targets`.
-
-The baseline WSL flow is:
+and cross-compile the PPC64LE NativeAOT runtime pack and tests.
 
 ```sh
 ./build.sh clr -c Release -arch x64
 ./build.sh clr.tools+clr.nativeaotlibs -c Release -arch x64 /p:StripSymbols=false
 ./build.sh clr.alljitscommunity -c Release -arch x64 --build /p:StripSymbols=false
+
 ROOTFS_DIR=/ ./build.sh clr.nativeaotruntime -c Release -arch ppc64le -cross --build /p:StripSymbols=false
 ROOTFS_DIR=/ ./build.sh clr.nativeaotlibs -c Release -arch ppc64le -cross --build /p:StripSymbols=false
+```
 
+After rebuilding host tools, make sure the PPC64LE ILC layout has a matched
+x64-hosted PPC64LE JIT and `libjitinterface_x64.so`:
+
+```sh
 cp -p artifacts/bin/coreclr/linux.x64.Release/libclrjit_unix_ppc64le_x64.so* \
     artifacts/bin/coreclr/linux.ppc64le.Release/x64/ilc/
 cp -p artifacts/bin/coreclr/linux.x64.Release/libjitinterface_x64.so \
     artifacts/bin/coreclr/linux.ppc64le.Release/x64/ilc/
 cp -p artifacts/bin/coreclr/linux.x64.Release/libjitinterface_x64.so \
     artifacts/bin/coreclr/linux.ppc64le.Release/x64/crossgen2/
+```
 
+Stale copies can look like real JIT or NativeAOT failures. A checked JIT may
+return `CodeGenerationFailed` before entering the JIT due to a JIT-interface
+GUID mismatch; release ILC can trip stack-smash checks in the shim.
+
+Build NativeAOT smoke tests:
+
+```sh
 ROOTFS_DIR=/ ./src/tests/build.sh -release -ppc64le -cross -nativeaot \
     -tree:nativeaot/SmokeTests \
     -log:NativeAOTSmoke \
@@ -44,46 +131,24 @@ ROOTFS_DIR=/ ./src/tests/build.sh -release -ppc64le -cross -nativeaot \
     /p:StripSymbols=false
 ```
 
-`-ppc64le` and `-cross` are both required. `-ppc64le` selects the target RID;
-`-cross` sets up the native CMake cross build. Use `ROOTFS_DIR=/` for the
-multi-arch/builtin-binfmt flow where the PPC64LE libraries are installed on the
-WSL system instead of downloaded into a runtime rootfs.
+`-ppc64le` selects the target RID. `-cross` selects the native CMake cross
+build. The SDK pack selection should use normal local-pack switches rather than
+adding `linux-ppc64le` to existing `Known*Pack` items in
+`eng/targetingpacks.targets`.
 
-After rebasing, make sure the PPC64LE ILC folder has a matched x64-hosted
-PPC64LE JIT and `libjitinterface_x64.so`. Stale copies can look like real JIT
-or NativeAOT failures: the checked JIT may return `CodeGenerationFailed` before
-entering the JIT due to a JIT-interface GUID mismatch, and release ILC can trip
-stack-smash checks in the shim. If a combined PPC64LE cross build aborts in the
-`ILCompiler_publish` leg with `NETSDK1047` for `net11.0/linux-ppc64le`, rerun
-`clr.nativeaotruntime` and `clr.nativeaotlibs` separately and refresh the ILC
-copies above before judging test failures.
+Until the SDK knows `linux-ppc64le` as a NativeAOT-capable RID, local SDK
+patches may be needed so `ProcessFrameworkReferences` receives
+`PublishAot=false` for `RuntimeIdentifier=linux-ppc64le`. This only bypasses
+the SDK support gate; the tests must still use the in-tree NativeAOT compiler,
+targets, runtime pack, and local packs.
 
-Until the SDK knows `linux-ppc64le` as a NativeAOT-capable RID, locally patch
-`.dotnet/sdk/11.0.100-preview.5.26227.104/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.Sdk.FrameworkReferenceResolution.targets`
-so `ProcessFrameworkReferences` receives `PublishAot=false` for
-`RuntimeIdentifier=linux-ppc64le`:
+The NativeAOT Unix build targets must map `linux-ppc64le` to
+`powerpc64le-linux-gnu`. If generated targets use `--target=ppc64le-linux-gnu`,
+refresh the local runtime pack; Clang will otherwise miss the cross GCC startup
+files and `libgcc`.
 
-```xml
-<_ProcessFrameworkReferencesPublishAot>$(PublishAot)</_ProcessFrameworkReferencesPublishAot>
-<_ProcessFrameworkReferencesPublishAot Condition="'$(RuntimeIdentifier)' == 'linux-ppc64le'">false</_ProcessFrameworkReferencesPublishAot>
-...
-PublishAot="$(_ProcessFrameworkReferencesPublishAot)"
-```
-
-This only bypasses the SDK's NativeAOT support gate. The test build still uses
-the in-tree NativeAOT compiler, build targets, runtime pack, and local packs.
-`IsXUnitLogCheckerSupported=false` avoids publishing the host-side
-`XUnitLogChecker` as `linux-ppc64le`, which would require a regular CoreCLR
-runtime pack that does not exist during bring-up.
-
-The NativeAOT Unix build targets must map `linux-ppc64le` to the GNU toolchain
-triple `powerpc64le-linux-gnu`. If a stale local runtime pack still generates
-`--target=ppc64le-linux-gnu`, rebuild the NativeAOT runtime pack or refresh the
-generated `Microsoft.NETCore.Native.Unix.targets`; otherwise Clang will not find
-the cross GCC startup files and `libgcc`.
-
-Run the rebuilt smoke scripts directly under the existing qemu-user/binfmt
-setup. `DwarfDump` is currently ignored in this flow:
+Run smoke scripts directly under qemu-user/binfmt. `DwarfDump` can be skipped
+when the goal is managed runtime validation:
 
 ```sh
 export CORE_ROOT=$PWD/artifacts/tests/coreclr/linux.ppc64le.Release/Tests/Core_Root
@@ -97,173 +162,13 @@ while IFS= read -r script; do
 done
 ```
 
-When the build is only compiling an individual smoke test, pass the same
-`BuildNativeAOTRuntimePack` and local-pack properties through MSBuild. The local
-PPC64LE pack must be built because there are no upstream PPC64LE NativeAOT
-runtime packs to restore.
+When building a single NativeAOT test through MSBuild, pass the same local-pack
+properties used for smokes. There are no upstream PPC64LE NativeAOT runtime
+packs to restore during bring-up.
 
-## Current CoreCLR BringUpTests Investigation
+## System.Runtime.Tests NativeAOT Flow
 
-For initial CoreCLR test passes, keep ReadyToRun and tiering disabled so JIT
-failures are not mixed with R2R fixups, tiered recompilation, or OSR behavior:
-
-```sh
-export DOTNET_ReadyToRun=0
-export DOTNET_TieredCompilation=0
-```
-
-The recent `string.Format`/null-conditional cast failure was caused by a
-PPC64LE-only morph-time conversion of JIT helper calls into R2R-style indirect
-helper calls. Removing that morph change keeps normal JIT helper calls in the
-same shape used by the other architectures and fixes the focused repros below.
-
-The focused `string.Format` repro is:
-
-```csharp
-Console.WriteLine(string.Format("value={0}", 123));
-Console.WriteLine(string.Format("{0}: {1}", "name", "value"));
-```
-
-Run it with:
-
-```sh
-CORE_ROOT=$PWD/artifacts/tests/coreclr/linux.ppc64le.Release/Tests/Core_Root \
-DOTNET_ReadyToRun=0 \
-DOTNET_TieredCompilation=0 \
-$CORE_ROOT/corerun /tmp/ppc-format-repro/bin/Release/net11.0/ppc-format-repro.dll
-```
-
-This now prints the expected output in full-opt mode:
-
-```txt
-value=123
-name: value
-```
-
-The smaller shape found during that investigation is a null-conditional
-interface call followed by an immediate interface `castclass` at the merge:
-
-```csharp
-[MethodImpl(MethodImplOptions.NoInlining)]
-static void M(IFormatProvider? provider)
-{
-    ICustomFormatter? cf =
-        (ICustomFormatter?)provider?.GetFormat(typeof(ICustomFormatter));
-    Console.WriteLine(cf == null ? "null" : "not-null");
-}
-
-M(null);
-```
-
-This now prints `null` in full-opt mode.
-
-Two additional CoreCLR bring-up fixes were needed after the morph cleanup:
-
-- PPC64LE conditional branches now reserve worst-case space for long conditional
-  branches and emit an inverted short branch over a long unconditional branch
-  when the target is out of B-form range. This fixed the checked-JIT emitter
-  assertion seen in `System.TimeZoneInfo:CacheTransitionsForYear`.
-- PPC64LE exception resume now updates nonvolatile registers, preserves reserved
-  ABI registers `r2` and `r13` in `RtlRestoreContext`, and resumes at `Nip`
-  instead of `Link`. This fixed caught-exception crashes in
-  `__tls_get_addr_opt` and the `ArrayExc` case where a throwing range-check
-  helper resumed after the helper call instead of at the caller's catch handler.
-- Reflection invocation now copies PPC64LE structs passed in mixed floating
-  point/integer registers through the same `ArgDestination::CopyStructToRegisters`
-  path used by LoongArch64/RISC-V. This fixed
-  `JIT/Intrinsics/Interlocked`'s `TestCompareExchangeUnextended`, where the
-  integer half of a `{ float, uint }` argument arrived in `r3` as stale pointer
-  data instead of the struct field value.
-
-The CodeGen BringUpTests wrappers currently pass with ReadyToRun and tiering
-disabled:
-
-```sh
-for t in r d do ro; do
-    CORE_ROOT=$PWD/artifacts/tests/coreclr/linux.ppc64le.Release/Tests/Core_Root \
-    DOTNET_ReadyToRun=0 \
-    DOTNET_TieredCompilation=0 \
-    artifacts/tests/coreclr/linux.ppc64le.Release/JIT/CodeGenBringUpTests/JIT.CodeGenBringUpTests_$t/JIT.CodeGenBringUpTests_$t.sh \
-        -coreroot $PWD/artifacts/tests/coreclr/linux.ppc64le.Release/Tests/Core_Root
-done
-```
-
-The current non-ilasm CoreCLR wrapper status with ReadyToRun and tiering
-disabled:
-
-- `JIT/JIT_r/JIT_r.sh` passes, including the Interlocked mixed-struct
-  reflection repro.
-- `JIT/JIT_d/JIT_d.sh` and `JIT/JIT_do/JIT_do.sh` pass after excluding
-  `JIT/Stress/ABI` on PPC64LE. The ABI stress harness has architecture-specific
-  ABI models and does not have PPC64LE coverage yet; forcing it forward reaches
-  untriaged dynamic-code/native ABI stress failures.
-- `JIT/JIT_ro/JIT_ro.sh`, `managed/Managed/Managed.sh`, and
-  `CoreMangLib/CoreMangLib/CoreMangLib.sh` pass.
-- Skip `ilasm/ilasm_tests/ilasm_tests.sh` for now. These tests depend on
-  launching `ilasm`/`ildasm` from inside the emulated PPC64LE CoreCLR process,
-  which is not a useful runtime signal in the current QEMU-user setup.
-
-## CoreCLR PPC64LE Disabled Code Paths
-
-These code paths are intentionally disabled by default while the PPC64LE port is
-still in bring-up. They should be treated as active follow-up work, not as
-permanent architecture limitations.
-
-- On-stack replacement is disabled for PPC64LE via `FEATURE_ON_STACK_REPLACEMENT`
-  and `Compiler::compCanHavePatchpoints()`. The JIT also defaults
-  `TC_OnStackReplacement=0`. PPC64LE OSR prolog/epilog, patchpoint frame layout,
-  and stack-walk interaction have not been validated enough for broad testing.
-- `TC_QuickJitForLoops` defaults to `0` on PPC64LE. Loop methods should not be
-  forced through quick Tier0/OSR paths until OSR is supported.
-- `EnableWriteXorExecute` defaults to `0` on PPC64LE during bring-up. Under
-  qemu/binfmt, `System.Runtime.Tests` discovery reproducibly hit SIGILL in
-  dynamic reflection invoke stubs with W^X enabled; the faulting IP landed in
-  unwind/metadata bytes after the generated method body. Running the same path
-  with `DOTNET_EnableWriteXorExecute=0` completed discovery and started the test
-  run, matching the existing RISC-V bring-up guard for executable memory.
-- Non-interruptible thread hijacking can now use saved PPC64LE link-register
-  stack locations exposed through `KNONVOLATILE_CONTEXT_POINTERS::Link`. The
-  path still declines frames when unwind data only points `Link` at the copied
-  context value, when no saved link location is available, or when the frame has
-  tailcalls.
-- CoreCLR R2R reverse P/Invoke remains unsupported. See
-  `docs/design/coreclr/ppc64le-toc-abi.md` for the runtime-TOC managed ABI and
-  the required entrypoint choices before enabling it.
-- CoreCLR R2R TOC/GOT relocation forms are guarded against. PPC64LE CoreCLR R2R
-  PE images must not produce `PPC64_TOC16`, `PPC64_REL16_TOC`,
-  `PPC64_GOT_TPREL16`, or `PPC64_GOT16`; use explicit non-TOC R2R relocation
-  concepts if new file-format support becomes necessary.
-
-Recent validation of those gates:
-
-- `System.Tests.EnumTests.GetValuesAsUnderlyingType_InvokeSByteEnum_ReturnsExpected`
-  passes after fixing PPC64LE signed small-value spill reloads.
-- Tiered compilation remains enabled and `TC_CallCounting` now uses the normal
-  default. The PPC64LE precode and call-counting stubs reserve `r12` for the
-  next branch target and carry the secret stub parameter or call-counting token
-  in `r11`; this avoids clobbering the ELFv2 global-entry target register.
-- `System.Runtime.Tests` should be run with `DOTNET_REMOTEEXECUTOR_SUPPORTED=0`
-  under qemu/binfmt for now. RemoteExecutor child processes currently fail with
-  `ENOENT` even when the target executable exists; a small `Process.Start`
-  repro shows the same behavior for `corerun`, `/usr/bin/qemu-ppc64le`, and a
-  trivial native PPC64LE child, so this is tracked separately from call-counting.
-- `System.Runtime.Tests` with CoreCLR R2R enabled, default
-  `DOTNET_TieredCompilation`, `DOTNET_EnableWriteXorExecute=0`, and no explicit
-  `COMPlus_TC_*` overrides progressed under qemu/binfmt to the 180 second cap
-  without the previous `LowLevelMonitor.Wait` abort.
-- With CoreCLR R2R disabled, RemoteExecutor disabled, tiering enabled, and
-  `COMPlus_TC_CallCounting=1`, `System.Runtime.Tests` reaches normal test
-  execution without the previous call-counting assert or SIGILL. A forced
-  threshold run (`COMPlus_TC_CallCountThreshold=1`,
-  `COMPlus_TC_CallCountingDelayMs=0`) reached the qemu time cap in
-  `System.Text.Unicode.Tests.Utf8Tests.ToBytes_AllPossibleScalarValues` without
-  call-counting failures. `System.Tests.TimeOnlyTests.AllCulturesTest` and the
-  full `System.Tests.TimeOnlyTests` class pass with forced call counting.
-
-## Current System.Runtime Investigation
-
-System.Runtime NativeAOT Release tests can be built through the library project
-with the same local-pack switches used for smokes:
+Build NativeAOT `System.Runtime.Tests` through the library project:
 
 ```sh
 ./dotnet.sh build src/libraries/System.Runtime/tests/System.Runtime.Tests/System.Runtime.Tests.csproj \
@@ -281,20 +186,7 @@ with the same local-pack switches used for smokes:
   /p:LibrariesConfiguration=Release
 ```
 
-Run individual methods from the publish directory with the glibc static-TLS
-workaround while the PPC64LE TLS model is still being hardened:
-
-```sh
-cd artifacts/bin/System.Runtime.Tests/Release/net11.0-unix/publish
-GLIBC_TUNABLES=glibc.rtld.optional_static_tls=128000 \
-DOTNET_PROCESSOR_COUNT=1 \
-./System.Runtime.Tests -method System.Tests.SingleTests.NegativeZero
-```
-
-The NativeAOT single-file runner accepts the standard xUnit trait filters. Use
-them for broad runs; unfiltered direct runs include tests that are normally
-excluded by platform or active-issue traits and produce misleading failures such
-as Browser-only runtime-feature tests or NativeAOT-disabled reflection tests:
+Run from the publish directory:
 
 ```sh
 cd artifacts/bin/System.Runtime.Tests/Release/net11.0-unix/publish
@@ -308,279 +200,176 @@ DOTNET_PROCESSOR_COUNT=1 \
   -notrait category=OuterLoop
 ```
 
-At this checkpoint, the filtered Release NativeAOT `System.Runtime.Tests` run
-passes under qemu/binfmt with 68,593 tests run, 0 failures, and 122 skipped.
-Focused checks for `System.Tests.SingleTests.IsSubnormal`,
-`System.Text.Tests.CompositeFormatTests.MemoryExtensionsTryWrite_Valid`, and
-the checked `Int128`/`UInt128` arithmetic tests pass.
+The NativeAOT single-file runner accepts standard xUnit trait filters. Avoid
+unfiltered direct runs for broad signal because they include tests normally
+excluded by platform or active-issue traits.
 
-One misleading clue came from disassembling a generated `DynamicInvoke` thunk
-that appeared to load the argument storage from `r4` instead of the expected
-fourth PPC64LE argument register `r6`. A temporary codegen probe later showed
-that several dynamic-invoke thunks do map `ldarg.3` to `r6`, so do not assume
-that raw symbol-name matching has found the exact thunk used by the failing
-xUnit path. Use a checked PPC64LE cross-JIT and a focused `JitDump`/`JitDisasm`
-before changing ABI or local-variable handling here.
+Use the glibc static TLS tunable while the PPC64LE TLS model is still being
+hardened:
 
-Checked PPC64LE cross-JIT builds are useful for this because Release ILC does
-not reliably emit JIT dumps from environment variables. Build the checked JIT
-and point ILC at it with `--jitpath`; pass JIT config through repeated
-`--codegenopt Name=Value` arguments. Keep temporary runtime or JIT print probes
-out of commits.
+```sh
+export GLIBC_TUNABLES=glibc.rtld.optional_static_tls=128000
+```
 
-Checked JIT bring-up notes from this investigation:
+This is a runtime loader workaround, not a substitute for correct generated TLS
+access sequences.
 
-- PPC64LE must route INS_OPTS_RL pseudo label loads before looking up a real instruction encoding. INS_lea is a pseudo instruction used for prolog label materialization and is not present in the PPC instruction encoding table.
-- Standard estimate intrinsics that lower to ordinary arithmetic still need to be marked target-supported when compiling their recursive managed bodies. PPC64LE currently expands Abs, Sqrt, MultiplyAddEstimate, ReciprocalEstimate, and ReciprocalSqrtEstimate in the JIT.
-- PPC DS-form load/store instructions have stricter displacement requirements than signed-16 range. Stack struct-copy code must allocate address temporaries when std/ld offsets are unaligned even if the offset numerically fits.
-- PPC FP/int register-class moves used for ABI shuffles are bit-preserving moves; use mffprd/mtfprd for 8-byte transfers instead of treating them as regular integer or FP register copies.
+## Current Runtime Configuration Gates
 
-Split-parameter frame-layout investigation notes:
+These defaults and guards are intentional during bring-up:
 
-- The failing xUnit theory made `InvokeTestAsync` iterate a
-  `NativeReader` object as if it were the constructor-argument `object[]`.
-  A live debugger run showed `AfterTestCaseStartingAsync` loaded the correct
-  array into callee-saved `r22`, then `r22` became the `NativeReader` after the
-  call path through `GetBeforeAfterTestAttributes`.
-- The first bad callee was
-  `System.Reflection.Runtime.General.MetadataReaderExtensions.CreateRuntimeAssemblyNameFromMetadata`.
-  Its broken prolog saved `r22` at `400(r1)`. Since the method established
-  `r31 = r1 + 320`, that save slot was also `80(r31)`. The method then
-  reassembled a split argument with `std r10,80(r31)`, overwriting the saved
-  `r22` with the `NativeReader`.
-- PPC64LE split parameters are now treated like RISC-V and LoongArch: do not
-  promote split multireg struct parameters, and do not apply the fixed
-  save-area delta when finalizing their local stack homes. Their virtual
-  offsets are already frame-pointer-relative local homes. Applying the extra
-  delta moves them into the callee-saved save area.
-- The fixed image still saves `r22` at `400(r1)`, but the split argument homes
-  in `CreateRuntimeAssemblyNameFromMetadata` are at negative FP-relative
-  offsets such as `-128(r31)` and `-120(r31)`, so they no longer overlap the
-  callee-saved register save slots.
+- OSR is disabled for PPC64LE via `FEATURE_ON_STACK_REPLACEMENT`,
+  `Compiler::compCanHavePatchpoints()`, and `TC_OnStackReplacement=0`.
+- `TC_QuickJitForLoops` defaults to `0` on PPC64LE until OSR prolog/epilog,
+  patchpoint frame layout, and stack walking are validated.
+- `EnableWriteXorExecute` defaults to `0` on PPC64LE during qemu/binfmt
+  testing.
+- CoreCLR R2R reverse P/Invoke remains unsupported.
+- CoreCLR R2R PPC64LE TOC/GOT relocation forms are guarded against. R2R PE
+  images must not produce `PPC64_TOC16`, `PPC64_REL16_TOC`,
+  `PPC64_GOT_TPREL16`, or `PPC64_GOT16`.
+- SIMD/VSX is blocked for PPC64LE until JIT and runtime support are implemented.
 
-## PPC64LE ABI Entry Points And Thunks
+Do not remove a gate without adding a focused validation plan for the code path
+being enabled.
+
+## TOC And Entry-Point Rules
+
+See `docs/design/coreclr/ppc64le-toc-abi.md` for the detailed CoreCLR R2R/JIT
+TOC ABI. This section is the short operational version.
 
 PPC64LE ELFv2 uses `r2` as the TOC pointer. Cross-module calls enter global
 entry points with `r12` holding the callee entry address, allowing the callee to
-derive its own TOC. Calls that may cross TOC domains must assume `r2` can be
-clobbered and restore the caller TOC after returning.
+derive its own TOC. Same-module calls may enter the local entry when the caller
+already has the callee TOC in `r2`.
 
-The current port uses these TOC entry rules:
+CoreCLR managed ABI:
 
-- A PPC64LE ELFv2 global entry may establish `r2` from `r12`. The caller must
-  set `r12` to the global entry address before branching through CTR.
-- A local entry assumes the caller already has the callee's TOC in `r2`.
-  Same-module calls may branch to the local entry and avoid the TOC setup.
-- Assembly helpers declared with the shared `LEAF_ENTRY`/`NESTED_ENTRY` macros
-  are local-entry-only unless the source explicitly emits a TOC setup. They
-  must not be used as cross-TOC targets directly.
-- Compiler-generated C++ functions in `libcoreclr.so` have normal ELFv2 global
-  entries. They can be used as cross-TOC targets as long as the call sequence
-  puts their global entry address in `r12`.
-- VM assembly stubs that call C++ while entered from managed/R2R code save the
-  caller `r2`, run `ESTABLISH_TOC_FROM_PC`, call the VM worker, then restore the
-  caller `r2` before returning or tailcalling. `ESTABLISH_TOC_FROM_PC` uses a
-  local `bl`/`mflr` and `.TOC.-label@ha/@l`, so it must only be used where the
-  current LR has already been saved or is intentionally disposable.
-- R2R delay-load helpers tailcall the helper returned by the VM worker. Dynamic
-  helper stubs are therefore tailcall trampolines, not normal call wrappers.
-  If the final helper target needs the `libcoreclr.so` TOC, the target must be a
-  global-entry wrapper, not a raw local-entry assembly label.
-- R2R delay-load import thunks must preserve the managed argument registers.
-  PPC64LE thunks pass the indirection cell in `r11`, the owning `Module*` in
-  `r12`, and the import section index in `r0`; the assembly helper saves `r0`
-  before building the transition block.
+- JIT and R2R managed code preserve `r2` as the `libcoreclr.so` runtime TOC.
+- Managed-to-managed calls preserve the runtime TOC.
+- Calls to runtime helpers may expose raw local-entry assembly helper labels
+  only when the managed caller already has the runtime TOC.
+- Any branch to a native global entry must put the target address in `r12`
+  before `bctr`/`bctrl`.
+- `r12` is reserved for the next branch target. Stub secret parameters and
+  call-counting tokens use `r11`.
+- R2R PE images must not pretend to have an ELF `.TOC.`. Introduce explicit
+  file-format support before adding any PPC64LE TOC-like R2R relocation model.
 
-`[UnmanagedCallersOnly(EntryPoint = ...)]` exports point directly at the
-managed method body. The JIT emits the PPC64LE global-entry TOC setup in the
-method prolog, and the ELF writer annotates matching symbols with localentry 8
-so same-module calls can skip that setup while external callers enter through
-the global entry.
+NativeAOT ABI:
 
-P/Invoke calls use an outbound managed-to-native sequence in the JIT. Direct
-targets are loaded through the GOT into `r12`, called through CTR, and followed
-by an `r2` restore. Indirect unmanaged calls use the same convention after
-moving the target address into `r12`. This keeps linker-inserted PLT entries out
-of managed-generated call sites.
+- NativeAOT follows the platform ELFv2 TOC model.
+- Reverse P/Invoke / `[UnmanagedCallersOnly]` global entries establish `r2`
+  from `r12`.
+- The ELF writer annotates matching symbols with localentry 8 so same-module
+  calls can skip the global-entry TOC setup.
+- NativeAOT runtime wrappers should own calls to true external libc/libm
+  symbols when managed/JIT helper call sites need to remain in-module.
 
-Extern symbols used by the JIT helper path are emitted as normal extern
-function symbols. Runtime helpers are expected to be in the current module; if a
-helper maps to a true external dependency, the call site needs an explicit
-ABI-correct sequence instead of a generated text-section thunk.
+Assembly helper rules:
 
-In CoreCLR, fast allocation helpers such as `RhpNewFast`, `RhpNewArrayFast`,
-`RhpNewPtrArrayFast`, and `RhNewString` are assembly fast paths. Their
-`LEAF_ENTRY` symbols assume the `libcoreclr.so` TOC is already in `r2` because
-the first instructions use TOC-relative inline TLS loads. The CoreCLR PPC64LE
-managed ABI now keeps `r2` as the runtime TOC across JIT and R2R managed code,
-so the helper table intentionally exposes these raw helper labels directly.
-Older bring-up builds used compiler-generated `*_Ppc64leGlobalEntry` wrappers
-to enter these helpers from an unknown TOC domain; that model is obsolete and
-conflicts with the runtime-TOC-preserving ABI documented in
-`docs/design/coreclr/ppc64le-toc-abi.md`.
+- `LEAF_ENTRY`/`NESTED_ENTRY` helpers are local-entry-only unless the source
+  explicitly emits a TOC setup.
+- Helpers that call C++ from a managed/R2R entry domain must save caller `r2`,
+  establish the runtime TOC, call the VM worker, then restore caller `r2` before
+  returning or tailcalling.
+- Delay-load helper paths that tailcall must establish the TOC expected by the
+  final target before branching.
 
-CoreCLR R2R PE images must not use PPC64LE TOC/GOT relocation forms. The
-compiler uses PC-relative materialization for R2R addresses and the JIT, stub
-emitter, and PE writer all guard against producing `PPC64_TOC16`,
-`PPC64_REL16_TOC`, `PPC64_GOT_TPREL16`, or `PPC64_GOT16`.
+P/Invoke rules:
 
-PPC64LE math `[RuntimeImport]` entries resolve to local `RhpPpc64leMath*`
-runtime wrappers. The wrappers live in `MathHelpers.cpp` and make the external
-libm calls from native runtime code, keeping the managed call sites in-module.
-JIT floating-point remainder helpers use the same wrappers for `fmod`/`fmodf`
-because `%` on `float`/`double` is emitted through helper calls rather than the
-CoreLib `RuntimeImport` declarations.
+- Save managed `r2`.
+- Put the unmanaged target address in `r12`.
+- Branch through CTR.
+- Restore managed `r2` after return.
 
-PPC64LE memory helpers that would otherwise bind to libc `memmove`/`memset`
-resolve to local `RhpPpc64leMem*` runtime wrappers in `MiscHelpers.cpp`. This
-keeps managed and JIT-helper call sites in-module while leaving the native
-runtime object code responsible for any external libc call sequence.
+## Frame, Unwind, And Hijacking Rules
 
-## GC Hole Debugging
+Frame layout follows PPC64 ELFv2 linkage conventions. The caller linkage area
+remains at the top of the stack, and the JIT reserves ABI-sensitive slots such
+as the TOC save slot at offset 24 from SP for unmanaged calls that can clobber
+`r2`.
 
-For flaky NativeAOT failures under `DOTNET_GCStress=0xC`, treat GC corruption
-as the default hypothesis until proven otherwise. Reduced concurrency is a
-useful sanity check, but `DOTNET_PROCESSOR_COUNT=1` passing or failing is not a
-root-cause signal by itself. QEMU user-mode execution also does not model all
-real PPC hardware ordering behavior, so avoid overfitting failures to partial
-load/store theories without evidence.
+Frame invariants to re-check after prolog/epilog or unwind changes:
 
-The recurring workflow is:
+- SP points at the active linkage area whenever unmanaged ABI code can observe
+  the frame.
+- Saved LR, saved `r2`, callee-saved registers, outgoing argument space, and
+  local slots agree between JIT codegen, unwind info, and NativeAOT code
+  manager logic.
+- Split SP adjustment still leaves callee-save offsets encodable at the
+  instruction that saves or restores them.
+- Epilog recognition covers normal methods and funclets.
+- `TrailingEpilogueInstructionsCount`, hijack offset calculation, DWARF CFI,
+  and NativeAOT `UnixNativeCodeManager` epilog recognition stay in sync.
 
-1. Minimize the repro command and preserve the exact binary, symbols, sysroot,
-   environment, and command line.
-2. Enable stress logging with a large buffer. A useful starting point is
-   `DOTNET_StressLog=1 DOTNET_TotalStressLogSize=67108864 DOTNET_StressLogLevel=9`.
-3. Capture the stress log, find the object or stack location that was corrupted
-   or overwritten, then walk backward in the log to the frame/static/TLS report
-   that last described it.
-4. Map the suspicious IP to a method with `powerpc64le-linux-gnu-nm -an`,
-   `powerpc64le-linux-gnu-objdump -d`, or the NativeAOT code manager ranges.
-5. Generate a focused JIT dump with
-   `--codegenopt "JitDump=<method-pattern>" --codegenopt JitGCDump=1`, then
-   compare the reported stack slots, interruptible regions, and no-GC windows
-   against the disassembly.
+Return-address hijacking depends on exact LR location. PPC64LE exposes saved
+link-register stack locations through `KNONVOLATILE_CONTEXT_POINTERS::Link`.
+Hijacking must decline frames when unwind data only points `Link` at the copied
+context value, when no saved link location is available, or when the frame has
+tailcalls.
 
-The stress log is most useful when it is treated as a timeline. Start near the
-failure and identify the overwritten reference, stack address, or suspicious
-object. Then walk backward through the last few GCs and record:
+`RhpGcProbeHijack` is entered by overwriting a return address. It must preserve
+valid return values and avoid clobbering registers or stack locations that may
+hold the interrupted method's return state. Keep the fast path minimal; build a
+proper probe frame before making calls on the slow path.
 
-- Which threads were stopped and at what managed IPs.
-- Whether each IP was in an interruptible region, call site, prolog, or epilog.
-- Which stack slots, callee-saved registers, statics, or TLS locations were
-  reported for the frame.
-- Whether the same address was later reused for a different stack frame.
+## JIT Debugging
 
-If the log points to a stack root, inspect the method's GC info before changing
-runtime stack walking. A typical PPC64LE failure mode is an address being
-reported correctly at one safe point but omitted at a neighboring interruptible
-point, or a slot being described relative to SP when the method's prolog/epilog
-and the code manager disagree about the current frame shape.
-
-Useful repro variants:
+Use checked JIT/runtime builds whenever possible:
 
 ```sh
-DOTNET_GCStress=0xC \
-DOTNET_StressLog=1 \
-DOTNET_TotalStressLogSize=67108864 \
-DOTNET_StressLogLevel=9 \
-./artifacts/tests/coreclr/linux.ppc64le.Release/nativeaot/SmokeTests/DynamicGenerics/DynamicGenerics/native/DynamicGenerics \
-    ThreadLocalStatics.TLSTesting.ThreadLocalStatics_Test
-
-DOTNET_PROCESSOR_COUNT=1 \
-DOTNET_GCStress=0xC \
-DOTNET_StressLog=1 \
-DOTNET_TotalStressLogSize=67108864 \
-DOTNET_StressLogLevel=9 \
-<same command>
-
-DOTNET_gcConservative=1 \
-DOTNET_GCStress=0xC \
-DOTNET_StressLog=1 \
-DOTNET_TotalStressLogSize=67108864 \
-DOTNET_StressLogLevel=9 \
-<same command>
+CORE_ROOT=$PWD/artifacts/tests/coreclr/linux.ppc64le.Checked/Tests/Core_Root \
+DOTNET_ReadyToRun=0 \
+DOTNET_TieredCompilation=0 \
+DOTNET_JitDump='<method-pattern>' \
+DOTNET_JitGCDump='<method-pattern>' \
+DOTNET_JitDisasm='<method-pattern>' \
+DOTNET_JitDisasmWithGC=1 \
+DOTNET_JitDisasmWithAddress=1 \
+DOTNET_JitStdOutFile=/tmp/ppc-jitdump.log \
+$CORE_ROOT/corerun <repro>.dll
 ```
 
-`DOTNET_PROCESSOR_COUNT=1` is only a noise reducer. If the failure remains, do
-not label it a concurrency issue. `DOTNET_gcConservative=1` is the stronger
-split: if conservative reporting fixes the repro, look at precise stack GC
-info; if it does not, inspect hijacking, transition frames, statics/TLS, helper
-ABIs, and unmanaged boundaries.
-
-Capturing the stress log through a debugger can be fragile under qemu-user, so
-prefer raw chunk dumps over interactive formatted output. The raw files can be
-decoded repeatedly while changing the analysis script, and they keep evidence
-stable even if qemu, GDB, or LLDB lose the original process state. SIG34 is used
-by NativeAOT thread hijacking during stop-the-world and is usually noise.
-
-The checked-in debugger capture helpers dump `StressLog::theLog` metadata and
-all reachable `StressLogChunk` instances to a directory. The decoder reconstructs
-the readable log by resolving format strings from the NativeAOT ELF image:
-
-```sh
-python3 src/tools/StressLogAnalyzer/scripts/decode_nativeaot_stresslog.py \
-    /tmp/stresslog-capture \
-    --module ./artifacts/tests/coreclr/linux.ppc64le.Release/nativeaot/SmokeTests/DynamicGenerics/DynamicGenerics/native/DynamicGenerics \
-    --output /tmp/stresslog.txt
-```
-
-GDB capture from a stopped process or core:
+For NativeAOT ILC JIT dumps, use focused codegen options:
 
 ```text
-(gdb) set pagination off
-(gdb) handle SIG34 nostop noprint pass
-(gdb) source src/tools/StressLogAnalyzer/scripts/dump_nativeaot_stresslog_gdb.py
-(gdb) dump_nativeaot_stresslog /tmp/stresslog-capture
+--codegenopt "JitDump=<method-pattern>" --codegenopt JitGCDump=1
 ```
 
-For qemu-user with a GDB stub, start the test with a debug port and attach:
+When debugging JIT behavior, compare the PPC64LE shape against x64, ARM64, and
+RISC-V before adding PPC-only codegen. Other architectures often avoid symptoms
+through normal lowering, containment, call-target handling, or GC-state updates.
+
+Useful checks in a JIT dump:
+
+- ABI argument and return classification.
+- Split struct parameter homes and callee-save save slots do not overlap.
+- GC live ranges for registers and stack slots around calls, helper calls, and
+  interruptible points.
+- No-GC windows have accurate state immediately before and after the window.
+- Hidden scratch registers introduced by emitter expansions produce matching
+  GC-dead transitions when they clobber volatile GC registers.
+- PPC DS-form load/store offsets are aligned as well as in range.
+- Address containment agreed between lowering, LSRA, codegen, and emitter.
+
+Prefer `powerpc64le-linux-gnu-objdump` over `llvm-objdump` for PPC64LE
+disassembly during bring-up:
 
 ```sh
-qemu-ppc64le -g 1234 ./DynamicGenerics ThreadLocalStatics.TLSTesting.ThreadLocalStatics_Test
-gdb-multiarch ./DynamicGenerics
+powerpc64le-linux-gnu-objdump -d -j __managedcode <binary>
 ```
 
-```text
-(gdb) target remote :1234
-(gdb) handle SIG34 nostop noprint pass
-(gdb) continue
-```
+Build tests with `StripSymbols=false` when native disassembly or core triage is
+expected.
 
-LLDB capture from a stopped process or core:
+## GC Stress Debugging
 
-```text
-(lldb) process handle -p true -n false -s false SIG34
-(lldb) command script import src/tools/StressLogAnalyzer/scripts/dump_nativeaot_stresslog_lldb.py
-(lldb) dump_nativeaot_stresslog /tmp/stresslog-capture
-```
+For flaky CoreCLR or NativeAOT failures under GC stress, assume GC corruption
+until evidence points elsewhere. Reduced concurrency can lower noise, but
+`DOTNET_PROCESSOR_COUNT=1` is not a root-cause signal by itself.
 
-When helper scripts cannot resolve debug type names automatically, the manual
-fallback is to inspect `StressLog::theLog` and dump each chunk:
-
-- `info variables StressLog`, `info variables theLog`, or LLDB `image lookup -rn
-  StressLog` to find the globals.
-- `ptype StressLog`, `ptype ThreadStressLog`, and `ptype StressLogChunk`, or
-  LLDB `image lookup -type StressLog`, to confirm the layout used by the binary.
-- GDB `dump binary memory <file> <start> <end>` or LLDB
-  `memory read --binary --outfile <file> <start> <end>` for each chunk.
-
-For qemu-user native crashes, enable core dumps before running the repro:
-
-```sh
-ulimit -c unlimited
-```
-
-Recent qemu-user builds commonly write files named like
-`qemu_<guest-exe>_<YYYYMMDD-HHMMSS>_<qemu-pid>.core`. These cores are often more
-reliable than live debugger sessions for SIGSEGV/SIGABRT triage. Still, SIG34
-stops are usually hijacking noise, not the failing condition.
-
-For CoreCLR GC stress failures, capture enough information in the crashing run to
-map the bad root back to a managed method before changing JIT GC reporting. Use a
-checked runtime/JIT when possible, keep ReadyToRun disabled while isolating JIT
-codegen, and start with tiering disabled unless the bug is specifically in
-tiered paths:
+CoreCLR stress command template:
 
 ```sh
 ulimit -c unlimited
@@ -603,16 +392,75 @@ COMPlus_LogLevel=9 \
 $CORE_ROOT/corerun <test-or-repro>.dll
 ```
 
-The useful artifacts are the qemu `.core` file, `/tmp/perf-<pid>.map`, the exact
-command/environment, and matching `.dbg` files. `PerfMapEnabled=1` maps managed
-code and stub ranges, which quickly distinguishes object references from code
-pointers such as `ReportStubBlock<MethodCallThunk>`. The stress log usually gives
-the managed frame in records like `Scanning Frameless method %pM ControlPC = %p`;
-map the `ControlPC` through the perf map, and inspect the `MethodDesc` in GDB if
-the method name is not obvious from the log.
+NativeAOT stress command template:
 
-For a native stack from a qemu core, load the core with `gdb-multiarch` and map
-`libcoreclr.so` PCs through the matching debug image:
+```sh
+DOTNET_GCStress=0xC \
+DOTNET_StressLog=1 \
+DOTNET_TotalStressLogSize=67108864 \
+DOTNET_StressLogLevel=9 \
+GLIBC_TUNABLES=glibc.rtld.optional_static_tls=128000 \
+<nativeaot-test-command>
+```
+
+Use `DOTNET_gcConservative=1` to split precise GC reporting holes from other
+state corruption. If conservative reporting fixes the repro, inspect precise
+stack and register GC info. If it does not, inspect hijacking, transition
+frames, statics/TLS, helper ABIs, register preservation, and unmanaged
+boundaries.
+
+Useful artifacts for GC-hole reports:
+
+- Minimized command and full environment.
+- qemu `.core` file, if any.
+- `/tmp/perf-<pid>.map`.
+- Matching binaries and `.dbg` files.
+- Raw and decoded stress-log chunks.
+- JIT dumps for top managed frames, with `JitGCDump=1`.
+- A table of suspect stack slots and registers: location, method, GC type,
+  tracked/untracked state, and corrupted value.
+
+Stress-log workflow:
+
+1. Find the bad object reference, stack location, or register value near the
+   failure.
+2. Walk backward through the previous GCs to find where that location was last
+   reported.
+3. Record stopped threads, managed IPs, interruptible/prolog/epilog state, and
+   reported roots for each suspect frame.
+4. Map managed IPs through `/tmp/perf-<pid>.map` or NativeAOT symbol ranges.
+5. Generate a focused JIT dump and compare GC info with disassembly at the
+   stopped IP.
+
+Bad values have different meanings:
+
+- Small integers or partial constants often indicate a missing GC-dead
+  transition for an emitter-expanded scratch register.
+- Stack addresses or code addresses usually mean the location was misclassified
+  as a GC reference.
+- Fill patterns such as `0xcdcdcdcdcdcdcdcd` usually mean an uninitialized or
+  poisoned location reached a reporting path.
+- Stale interior pointers often point to outgoing argument, byref, or fixed
+  outgoing-arg pseudo-local reporting mistakes.
+
+## Core Dumps And Debuggers
+
+Enable qemu core dumps before running crash repros:
+
+```sh
+ulimit -c unlimited
+```
+
+qemu-user cores commonly use names like:
+
+```text
+qemu_<guest-exe>_<YYYYMMDD-HHMMSS>_<qemu-pid>.core
+```
+
+These are often more reliable than live debugger sessions. SIG34 is used by
+NativeAOT thread hijacking during stop-the-world and is usually noise.
+
+Load a qemu core with:
 
 ```sh
 gdb-multiarch -nx -nh -q \
@@ -621,449 +469,149 @@ gdb-multiarch -nx -nh -q \
     -iex 'set debuginfod enabled off' \
     -iex 'set auto-solib-add off' \
     $CORE_ROOT/corerun qemu_corerun_*.core
+```
 
+Map native runtime PCs through matching debug images:
+
+```sh
 addr2line -Cfipe $CORE_ROOT/libcoreclr.so.dbg <libcoreclr-offset>
 ```
 
-If the top stack is in `TGcInfoDecoder<PowerPC64GcInfoEncoding>` and
-`Object::ValidateInner`, identify the reported register or stack slot, its value,
-and the `REGDISPLAY` IP. A bad value that is a small integer, stack address, code
-address, or fill pattern points to a different class of bug than a stale object
-pointer. When GDB can resolve stress-log types, use the debugger stress-log
-chunk dumper; otherwise find `StressLog::theLog` with `nm`, dump the current
-thread's `StressLogChunk` memory, and decode records using the layout in
-`src/coreclr/inc/stresslog.h`.
-
-After the offending method is known, make a focused checked JIT dump before
-editing codegen:
+For qemu-user with a GDB stub:
 
 ```sh
-CORE_ROOT=$PWD/artifacts/tests/coreclr/linux.ppc64le.Checked/Tests/Core_Root \
-DOTNET_ReadyToRun=0 \
-DOTNET_TieredCompilation=0 \
-DOTNET_JitDump='<method-pattern>' \
-DOTNET_JitGCDump='<method-pattern>' \
-DOTNET_JitDisasm='<method-pattern>' \
-DOTNET_JitDisasmWithGC=1 \
-DOTNET_JitDisasmWithAddress=1 \
-DOTNET_JitStdOutFile=/tmp/ppc-jitdump.log \
-$CORE_ROOT/corerun <repro>.dll
+qemu-ppc64le -g 1234 <guest-exe> <args>
+gdb-multiarch <guest-exe>
 ```
-
-Check the live range transitions, GC register/slot ids, interruptible ranges,
-and the native instruction shape at the stopped IP. Then cross-check the same
-pattern against x64/ARM64/RISC-V: either run the host JIT dump for the same
-managed method or compare the lowering/codegen source. Other architectures often
-avoid PPC-only symptoms through ordinary containment, call-target handling, or
-GC-state updates; prefer matching those shapes over adding PPC-only GC masking.
-
-Recent GC stress findings from the `System.Gen2GcCallback.Finalize` focused
-repro:
-
-- PPC64LE originally materialized a delegate invoke target address as
-  `LEA(base+offset)` into the same register that still held the delegate object,
-  then loaded through that address. The JIT dump showed the register becoming a
-  short-lived GC ref for the address shape, unlike x64 where the memory operand
-  stayed folded. Adding simple load-indirection containment for
-  `GT_LEA(base+offset)` and `GT_LCL_ADDR` gives PPC64LE the same effective
-  shape for this case.
-- After that was fixed, the remaining failure moved to `Gen2Repro.Main`.
-  StressLog identified the failing frame and the JIT dump showed a
-  `CNS_INT(h) ref` becoming live after the second instruction of a multi-
-  instruction PPC64LE constant materialization. The reported value was the
-  partial high half (`0x1017`), not an object. PPC64LE now keeps GC/byref
-  attributes off intermediate immediate-materialization instructions and only
-  marks the final instruction as producing the GC value, matching the RISC-V
-  load-immediate descriptor model.
-- The containment change exposed one more lowering/LSRA/emitter contract issue:
-  `lwa` with an unaligned signed-16 displacement is handled by codegen as
-  `lwz` plus `extsw`, so LSRA must not reserve an address temporary for it and
-  the emitter-side containment predicate must agree.
-- A later `System.Diagnostics.StackTraceSymbols.GetSourceLineInfo` failure
-  under `DOTNET_GCStress=0x4` looked at first like bad callee GC info, but the
-  checked JIT dump showed `r15`/`r16`/`r17` were incoming stack-passed `out`
-  byrefs. The real hole was in the caller:
-  `StackFrameHelper.InitializeSourceInfo` stored byref outgoing arguments with
-  raw `SP+offset` PPC stores, unlike RISC-V/ARM64 which use symbolic
-  outgoing-arg local stores. That skipped the emitter's fixed-out-arg GC
-  records, so a GC between caller and callee could move the arrays and leave the
-  callee with stale interior pointers. PPC64LE stack argument stores now keep the
-  outgoing-arg pseudo-local in the instruction descriptor while folding in the
-  PPC64LE ABI `FIRST_ARG_STACK_OFFS`; the JIT dump now shows byref stack slots
-  at `sp+0x70`, `sp+0x78`, and `sp+0x80`, and the focused repro completed 20
-  `GCStress=0x4` runs without the previous qemu core.
-- The next `GC/GC` failure under `DOTNET_GCStress=0x4` crashed while validating
-  `System.Environment.GetEnvironmentVariables`. The bad root was `r3 = 0xfff`
-  at an interruptible point after `CORINFO_HELP_NEWSFAST` had returned a
-  `Hashtable` in `r3` and codegen had copied it to `r14`. Codegen's logical GC
-  state killed `r3`, but final GC info kept it live until the later constructor
-  call. The JIT dump and qemu core showed the intervening instruction sequence
-  was a PPC64LE emitter-expanded constant-data load for `double 1.0`: the
-  hidden address scratch register was `idReg2 == r3`, while the logical
-  instruction was an FP load whose target was `idReg1 == f1`. The shared emitter
-  GC update only considered `idReg1`, so the hidden scratch clobber never
-  produced a `r3` dead transition. `emitOutputConstLoad` now records
-  `emitGCregDeadUpd(addrReg, ...)` immediately after the synthesized instruction
-  that first writes the address register. A checked JIT dump for method hash
-  `c4d6bb9d` now shows `r3` live at `0x184`, `r14` live at `0x188`, and `r3`
-  dead at `0x18c` before the partial constant value can be reported. With
-  `DOTNET_ReadyToRun=0`, `DOTNET_TieredCompilation=0`, and
-  `DOTNET_GCStress=0x4`, the full `GC/GC` wrapper completed successfully.
-
-Core dumps are most useful when every run writes into its own directory with the
-command line and environment saved beside the core. For qemu-user NativeAOT
-smokes, save at least:
-
-- The executable and any `.so` files from the test's `native` directory.
-- The exact runtime libraries used by the multi-arch system or sysroot.
-- The main binary with `StripSymbols=false`, or the matching `.dbg` files.
-- `llvm-readelf -n <core>` output, so the core flavor and captured notes are
-  visible even if a later debugger cannot load it.
-- `llvm-nm -an <binary>` output for quick IP-to-symbol lookup.
-
-When a core contains a bad object reference, first identify whether the bad
-value is an object pointer, an interior pointer, a stack address, a code
-address, or a fill pattern such as `0xcdcdcdcdcdcdcdcd`. Fill patterns usually
-mean an uninitialized local or a poisoned debug allocation reached a reporting
-path; they are not automatically proof that the GC moved an object incorrectly.
-
-Use `DOTNET_gcConservative=1` to separate precise GC reporting holes from other
-state corruption. If conservative GC makes the failure disappear, inspect stack
-root reporting. If it still fails, look harder at hijacking, transition frames,
-statics/TLS reporting, register preservation, and unmanaged helper paths.
-
-Two quick experiments narrow the surface without proving the root cause:
-
-- `DOTNET_PROCESSOR_COUNT=1` reduces scheduling variability, but a remaining
-  failure is still compatible with GC reporting or hijacking bugs.
-- Temporarily making `RhpGcProbeHijack` return after the trap-flag check splits
-  ordinary return-address hijacking from probe-frame construction. If the
-  failure disappears, inspect the slow path and probe frame GC info. If it
-  remains, inspect hijack offset calculation, epilog recognition, and DWARF CFI.
-
-For stack overflow or runaway recursion under stress, always capture a stack
-trace. Look for repeated class constructors, helper paths that should not
-re-enter managed code, and frames whose SP changes unexpectedly across a
-stop-the-world hijack. PPC64LE hijacking bugs can masquerade as recursion if the
-restored return address or saved SP is taken from the wrong stack slot.
-
-Do not patch GC info based on one suspicious method name alone. Previous
-investigations produced plausible methods such as
-`Interop.Sys.GetLowResolutionTimestamp` and `Environment.TickCount64`, but the
-right question is always more concrete: at the stopped IP, which exact stack
-slots and registers did the runtime report, which references were live in the
-JIT dump, and which of those locations later contained the corrupted value?
-
-Good artifacts to keep for a GC-hole bug report:
-
-- A minimized command that fails within a few runs.
-- The binary, symbols, and `llvm-nm -an` output.
-- The last several GC stress-log chunks, preferably raw plus decoded text.
-- The top managed frames and stopped IPs for each thread in the last GC.
-- JIT dumps for methods on those top frames, with `JitGCDump=1`.
-- A short table of suspect stack slots: address, frame, method, variable or
-  temp name, GC type, and whether it was tracked or untracked.
-
-For NativeAOT JIT dumps from an ILC build, pass focused codegen options rather
-than dumping the whole image:
 
 ```text
---codegenopt "JitDump=<method-pattern>" --codegenopt JitGCDump=1
+(gdb) target remote :1234
+(gdb) handle SIG34 nostop noprint pass
+(gdb) continue
 ```
 
-When using the test build scripts, keep `-p:StripSymbols=false` in the MSBuild
-arguments and record any non-default `IlcExtraArgs`, linker, sysroot, or
-runtime-pack overrides. Stale ILC layouts can make an investigation look
-impossible; verify the `ilc` executable or wrapper being used by the test tree
-matches the compiler binaries just rebuilt.
+## StressLog Capture Helpers
 
-## PPC64LE JIT Decisions
+Prefer raw chunk dumps over interactive formatted output. Raw chunks can be
+decoded repeatedly while the process/core state remains stable.
 
-Frame layout follows the PPC64 ELFv2 linkage convention closely. The caller's
-linkage area remains at the top of the stack, and the JIT reserves fixed slots
-used by ABI-sensitive paths, including the TOC save slot at offset 24 from SP
-for unmanaged calls that can clobber `r2`. Keep this offset in sync with any
-changes to call lowering or frame allocation.
+Decode NativeAOT stress-log chunks:
 
-The local frame size intentionally includes the outgoing argument area and the
-PPC64 linkage/parameter-save area. This keeps locals and spill temps above the
-caller-owned call area so a helper call made while preparing another call cannot
-overwrite values that are still live. Large local frames may be split into an
-initial SP adjustment, register saves, and a deferred SP adjustment so save
-offsets remain encodable and unwindable.
+```sh
+python3 src/tools/StressLogAnalyzer/scripts/decode_nativeaot_stresslog.py \
+    /tmp/stresslog-capture \
+    --module <nativeaot-elf> \
+    --output /tmp/stresslog.txt
+```
 
-The normal prolog may split frame allocation into an initial allocation and a
-deferred allocation so callee-saved register saves stay within encodable
-offsets and within the unwind encoding limits. When changing prolog/epilog
-shape, re-check `TrailingEpilogueInstructionsCount`, hijack offset calculation,
-DWARF CFI, and the NativeAOT `UnixNativeCodeManager` epilog recognizer.
+GDB capture:
 
-Return-address hijacking depends on exact frame facts. For PPC64LE, check the
-generated epilog sequences from both `genFnEpilog` and `genFuncletEpilog`
-against `TrailingEpilogueInstructionsCount`. The code manager needs to know
-whether the current IP is before LR restore, after LR restore but before SP
-restore, or after SP restore, because the return address location moves between
-the current frame and the caller linkage area.
+```text
+(gdb) set pagination off
+(gdb) handle SIG34 nostop noprint pass
+(gdb) source src/tools/StressLogAnalyzer/scripts/dump_nativeaot_stresslog_gdb.py
+(gdb) dump_nativeaot_stresslog /tmp/stresslog-capture
+```
 
-Frame-related PPC64LE invariants worth checking after every prolog/epilog
-change:
+LLDB capture:
 
-- SP must always point at the active linkage area whenever unmanaged ABI code
-  can observe the frame.
-- Saved LR, saved `r2`, callee-saved registers, outgoing argument space, and
-  local slots must agree between codegen, unwind info, and the NativeAOT code
-  manager.
-- If a large frame forces split SP adjustment, all callee-save offsets must
-  still be encodable at the instruction that saves or restores them.
-- Epilog recognition must cover both normal methods and funclets. A missing
-  epilog shape can make hijacking overwrite or read the return address from the
-  wrong frame.
-- A debug-only frame-shape workaround should not survive cleanup unless it is
-  described as an ABI requirement.
+```text
+(lldb) process handle -p true -n false -s false SIG34
+(lldb) command script import src/tools/StressLogAnalyzer/scripts/dump_nativeaot_stresslog_lldb.py
+(lldb) dump_nativeaot_stresslog /tmp/stresslog-capture
+```
 
-`[UnmanagedCallersOnly]` methods are reverse P/Invoke methods. They get the JIT
-reverse-P/Invoke enter/exit helpers and must be entered using the unmanaged ABI.
-For PPC64LE ELFv2, that means unmanaged callers arrive with `r12` containing the
-entry address. The method prolog can use this to establish the NativeAOT TOC in
-`r2` before any TOC-relative access. This avoids a separate export thunk and
-matches the intended external-entry shape for these methods.
+Manual fallback:
 
-NativeAOT can still make same-module native calls to `[UnmanagedCallersOnly]`
-entrypoints such as startup helpers. PPC64 ELFv2 handles this with dual entry
-points: external callers enter at the symbol value, while local calls branch to
-`symbol+localentry` and preserve the current TOC. The PPC64LE UCO prolog uses
-the canonical `addis/addi` `.TOC.` sequence to establish `r2`, producing an
-8-byte local entry offset. In `st_other`, localentry 8 is encoded as
-`3 << STO_PPC64_LOCAL_BIT` (`0x60`), not as the byte count itself. The ELF
-writer applies this based on the compiled method body being
-`IsUnmanagedCallersOnly`; it does not need to pattern-match the prolog bytes
-because the JIT interface always sets `CORJIT_FLAG_REVERSE_PINVOKE` for these
-methods, and the PPC64LE prolog hook emits the global-entry sequence for every
-reverse P/Invoke body.
+- Find globals with `info variables StressLog`, `info variables theLog`, or
+  `image lookup -rn StressLog`.
+- Confirm layouts with `ptype StressLog`, `ptype ThreadStressLog`, and
+  `ptype StressLogChunk`.
+- Dump each chunk with GDB `dump binary memory` or LLDB
+  `memory read --binary --outfile`.
 
-Unmanaged calls use the PPC64LE global-entry convention: save managed `r2`, put
-the target address in `r12`, branch through CTR, then restore `r2`. Direct
-P/Invoke calls load the target from the GOT; indirect unmanaged calls move the
-already-computed target into `r12`.
+## JIT And ABI Design Decisions
 
-CoreCLR JIT code currently uses absolute address materialization for method
-body references when `compReloc` is false; it does not rely on `r2` as a JIT
-TOC pointer. In that shape, reverse-P/Invoke / `[UnmanagedCallersOnly]` methods
-do not need a synthetic global-entry TOC prefix, and managed direct-call targets
-must not be adjusted by a local-entry offset. Keep the ELFv2 dual-entry
-`symbol+localentry` rule for relocatable R2R/AOT code shapes that actually use
-TOC-relative addressing. If CoreCLR JIT ever starts using TOC-relative data
-references, add an explicit JIT-side local-entry convention at the same time as
-the TOC-establishing prefix so direct same-code-heap calls skip the prefix and
-external/UCO function-pointer callers enter with `r12` set to the global entry.
-Even without a JIT TOC, indirect calls should still branch through `r12`.
-Managed targets do not depend on this, but runtime helpers and other native
-global entries do; branching through an arbitrary register can enter a PPC64
-ELFv2 global entry with stale `r12`, leading to a bogus callee TOC before the
-first TOC-relative load or PLT call.
+Struct classification:
 
-Cached interface dispatch keeps the interface dispatch cell in `r11`, matching
-the JIT's PPC64LE virtual stub parameter register. The dispatch stubs use `r12`
-as the cache/target scratch so any fast-path target or slow-path resolver call
-still branches with `r12` set to the callee entry address. Using `r12` for the
-cell makes the slow resolver see the helper entry address as the cell once the
-JIT emits ELFv2-shaped indirect calls.
+- `VarTypeIsMultiByteAndCanEnreg` must match the PPC64LE ABI.
+- Small aggregates may use multiple integer/floating return registers.
+- Larger or non-enregisterable structs use hidden return buffers.
+- Split multireg struct parameters should not overlap callee-saved save slots.
+- If a struct contains GC references, every intermediate copy location must be
+  non-GC by construction or reported for the full live range.
 
-CoreCLR PPC64LE stublinker code follows the same rule for computed
-instantiating method stubs: shuffle GPR arguments, materialize the hidden
-instantiation argument, adjust boxed `this` for unboxing stubs, and tailcall the
-target through `r12`. This is required for generic delegate/reflection paths
-used by the libraries xUnit runner.
+Calls and helpers:
 
-Precode and call-counting stubs keep the secret stub parameter or stub token in
-`r11`, not `r12`. Other architectures can use their existing secret parameter
-registers because they do not also require that register to hold the native
-branch target. On PPC64LE, `r12` is reserved for the next target before `bctr`
-or `bctrl`, so `REG_SECRET_STUB_PARAM`/`METHODDESC_REGISTER` use `r11`.
+- A no-GC helper is not a no-clobber helper.
+- Volatile registers holding GC refs across a no-GC helper must be dead,
+  spilled to reported locations, or preserved by a documented helper ABI.
+- Write-barrier and assignment-helper `AVLocation` labels must stay immediately
+  attached to the faulting memory access used for null-reference recognition.
+- Helper kill sets, `GT_START_NONGC`/`GT_START_PREEMPTGC`, and call-site GC
+  labels must be audited together.
 
-Small call descriptors store the live callee-saved GC register mask in
-`idReg1`/`idReg2`, not just physical register numbers. PPC64LE has 17 integer
-callee-saved registers (`r14`-`r30`), so `REGNUM_BITS` is sized to 9 and the PPC
-`instrDesc` layout puts those fields before `_idGCref` to avoid bitfield padding
-at the 32-bit storage-unit boundary. Keep this paired with
-`emitEncodeCallGCregs`/`emitDecodeCallGCregs`; do not paper over encoding gaps
-by forcing every call with a live GC register into the large descriptor path.
+Address materialization:
 
-No-GC regions and GC reporting must be audited together. Helper calls marked as
-no-GC can still trash volatile registers; the kill set must match the assembly
-helper ABI. For write barriers and assignment helpers, labels ending in
-`AVLocation` must remain immediately attached to the dereferencing instruction
-used for null-reference fault recognition. Do not insert barriers or probes
-between an `AVLocation` label and the faulting access.
+- PPC64LE HA/LO relocation pairs should be represented as one logical
+  relocation at the JIT/object-writer boundary.
+- The object writer may expand a logical relocation into `_HA` and `_LO`
+  records, but generic relocation records should not carry ad hoc half-pair
+  addends.
+- CoreCLR R2R should use explicit non-TOC file-format concepts if new PPC64LE
+  relocation support is needed.
 
-No-GC decisions that are easy to get wrong:
+Dispatch and stubs:
 
-- A no-GC helper call is not a no-clobber call. Volatile registers holding GC
-  refs must be dead, spilled to reported locations, or preserved by a documented
-  helper-specific ABI.
-- If codegen disables GC around a helper transition, the transition point still
-  needs accurate state on both sides. Check the instruction immediately before
-  `GT_START_NONGC` and immediately after `GT_START_PREEMPTGC`.
-- Assignment helpers and write barriers often rely on exact register contracts.
-  PPC64LE helper assembly should state which argument, scratch, return, and
-  thread registers it uses, and JIT lowering should match that contract.
-- Do not infer that a helper is safe to call from a hijack or probe path just
-  because it is no-GC. Hijack paths also have return-value and stack-layout
-  preservation constraints.
+- Interface dispatch keeps the dispatch cell in `r11`.
+- Dispatch stubs use `r12` for cache/target scratch so fast-path and slow-path
+  calls branch with `r12` set to the callee entry.
+- Instantiating method stubs shuffle arguments, materialize the hidden
+  instantiation argument, adjust boxed `this` for unboxing stubs, and tailcall
+  through `r12`.
+- Precode and call-counting stubs keep secret parameters or tokens in `r11`,
+  leaving `r12` for the branch target.
 
-`GT_START_NONGC`/`GT_START_PREEMPTGC`, helper kill sets, and call-site GC labels
-are not independent details. A register or stack slot that contains a GC
-reference across a no-GC helper must either be preserved by that helper ABI or
-be reported/killed consistently before and after the helper. When debugging a
-hole, compare the JIT dump's live GC sets with the disassembly around:
+## Current Implementation Gaps
 
-- Stores of `GCT_GCREF` and `GCT_BYREF` locals.
-- Helper calls that the JIT believes are no-GC.
-- `genDefineTempLabel` points used to force a GC-info boundary.
-- The last instruction before disabling GC and the first instruction after
-  enabling it again.
+Keep this list current. Remove items when the code path is enabled and covered
+by useful validation.
 
-Struct returns are easy to break on PPC64LE because the ABI uses multiple
-integer/floating return registers for small aggregates, while larger or
-non-enregisterable structs use return buffers. `VarTypeIsMultiByteAndCanEnreg`
-must reflect the PPC64LE ABI; otherwise the JIT may invent PPC-specific local
-copy/load workarounds that fight the wrong classification. Keep return-register
-copying close to the cross-architecture pattern unless the ABI requires a clear
-exception.
-
-For multi-register returns, prefer moving directly from the ABI return registers
-reported by `ReturnTypeDesc::GetABIReturnReg` into the registers allocated for
-the call node. Avoid PPC-only "load return from local" sequences unless there is
-a concrete ABI reason. If the return value has to be materialized through a
-local, verify that the local is typed and reported correctly and that the copy
-does not introduce a GC hole between the call and the final destination.
-
-Struct copies should follow the existing JIT decomposition rules. If a PPC64LE
-change needs a special temporary register for a large stack offset, first check
-whether the type classification or address-mode lowering is wrong. Several
-early workarounds around struct returns and large local offsets turned out to be
-symptoms of incorrect enregistration decisions rather than real PPC ABI needs.
-
-Struct-return and copy checklist:
-
-- Confirm the ABI classification first: integer registers, floating registers,
-  mixed aggregate, vector, or hidden return buffer.
-- Compare the PPC64LE path with ARM64 and x64 before adding a PPC-only local
-  bounce. The generic multi-reg return machinery is usually the right owner.
-- If a return buffer is used, verify the hidden argument is not confused with
-  the normal first user argument and that reverse P/Invoke/PInvoke transitions
-  preserve it.
-- If a struct contains GC references, every intermediate location used by a copy
-  must either be non-GC by construction or be reported for the full live range.
-- Large-offset address materialization should be solved in address lowering or
-  frame layout, not hidden inside return-copy code unless the ABI specifically
-  requires it.
-
-## Current JIT Gaps
-
-The PPC64LE JIT backend still has several known incomplete areas. Keep this
-list current as the bring-up matures:
-
-- Atomic IR support is present for pointer-sized and 32-bit `Interlocked.*`
-  operations that lower to `GT_CMPXCHG`, `GT_XADD`, `GT_XCHG`, `GT_XAND`, and
-  `GT_XORR`. The PPC64LE backend uses conservative `sync` barriers around
-  `lwarx`/`ldarx` plus `stwcx.`/`stdcx.` reservation loops. Byte and short
-  overloads still fall back to helpers.
 - OSR root frames need PPC64LE-specific handling in
   `genOSRHandleTier0CalleeSavedRegistersAndFrame`, or OSR should remain
-  explicitly blocked.
+  blocked.
 - Varargs are not implemented in the PPC64LE ABI classifier and
   `genJmpPlaceVarArgs`.
 - Fast tail calls are disabled. Codegen still has defensive NYI paths for fast
-  tail call stack argument placement and call emission.
-- SIMD/VSX and hardware intrinsics are not implemented. `FEATURE_SIMD` is
-  intentionally blocked for PPC64LE.
-- PPC64LE `genCodeForTreeNode` does not implement the RISC-V-specific Zba/Zbs
-  fused ops (`GT_SH*ADD*`, `GT_ADD_UW`, `GT_SLLI_UW`, `GT_BIT_*`) because the
-  PPC64LE lowerer does not introduce those IR nodes. It also lacks general
-  `GT_INTRINSIC`, `GT_CKFINITE`, `GT_SWAP`, and patchpoint handling; add these
-  when the corresponding importer/lowerer paths are enabled for PPC64LE.
-- `GT_FIELD_LIST` should remain contained by lowering. If it reaches codegen,
-  treat it as a lowering bug rather than adding real code emission.
+  tailcall stack argument placement and call emission.
+- SIMD/VSX and hardware intrinsics are not implemented.
 - Floating-point callee-saved registers F14-F31 are not available to LSRA until
   prolog/epilog save and restore support is implemented.
+- Byte and short `Interlocked.*` overloads still fall back to helpers.
 - Large stack-frame and large local-offset cases still have NYI paths. Prefer
   fixing address lowering, LSRA temporary allocation, or frame layout instead
   of hiding special cases in individual codegen sites.
-- PPC64LE lowering is intentionally conservative: many containment hooks are
-  empty, target intrinsics return false, and optimized write barriers are not
-  emitted. These are mostly code quality gaps once correctness is stable.
+- CoreCLR R2R reverse P/Invoke needs a loader/JIT/runtime entrypoint design
+  before it is enabled.
+- CoreCLR R2R PPC64LE TOC/GOT relocation forms are intentionally blocked until
+  the file-format contract is explicit.
+- Inline TLS access sequences need continued validation; the glibc static-TLS
+  tunable is only a test-environment workaround.
 
-Lowering audit follow-up, compared primarily with RISC-V and spot-checked
-against LoongArch64/ARM64:
+Lowering and containment follow-up:
 
-- Address containment is the most correctness-sensitive gap. PPC64LE now has
-  partial load-indirection containment for simple `GT_LEA(base+offset)` and
-  `GT_LCL_ADDR`, but store indirection containment still needs the same review.
-  Avoid local GC-state workarounds for loads/stores until the corresponding
-  lowering and emitter address-mode support has been checked.
-- `ContainCheckStoreIndir` is still minimal compared with RISC-V. Revisit zero
-  store containment and shared `ContainCheckIndir` use so stores and loads have
-  consistent address shapes.
-- `IsContainableImmed` currently rejects all immediates. RISC-V has
-  opcode-specific rules for arithmetic, compares, atomics, local stores, and
-  branches. PPC64LE needs its own rules based on D-form signed 16-bit immediates
-  and any supported logical-immediate forms; do not copy RISC-V's 12-bit rules.
+- Store indirection containment needs the same level of review as simple load
+  indirection containment.
+- `ContainCheckStoreIndir` is minimal compared with RISC-V; revisit zero-store
+  containment and shared `ContainCheckIndir` use.
+- `IsContainableImmed` rejects all immediates. PPC64LE needs opcode-specific
+  rules based on D-form signed 16-bit immediates and supported logical-immediate
+  forms.
 - `ContainCheckBinary`, `ContainCheckCompare`, `ContainCheckBoundsChk`, and
-  `ContainCheckStoreLoc` are still mostly empty. These are mainly code-quality
-  and register-pressure issues, but extra materialized constants can obscure GC
-  stress failures by changing short-lived reference/address lifetimes.
-- Shift/rotate containment differs from RISC-V: PPC64LE only contains constant
-  rotates today. Check PPC64LE codegen expectations before enabling contained
-  immediate shifts more broadly.
-- RISC-V-specific Zba/Zbb/Zbs transforms such as `GT_SH*ADD*`, `GT_ADD_UW`,
-  `GT_SLLI_UW`, and `GT_BIT_*` should not be mirrored directly. PPC64LE should
-  only introduce analogous IR when there is a real ISA/codegen equivalent.
-- Any expansion of containment must be paired with LSRA and emitter support for
-  the exact contained form. If the emitter cannot consume a contained address
-  safely, leave it uncontained rather than adding a one-off codegen workaround.
-
-`RhpGcProbeHijack` is entered by overwriting a return address during thread
-hijacking. It must preserve any valid return values and avoid clobbering
-registers or stack locations that may hold the interrupted method's return
-state. Keep the fast path minimal: check the trap flag, restore hijacked state
-through the same `FixupHijackedCallstack` pattern used by other platforms, and
-avoid calls unless the slow path has intentionally built the correct probe
-frame.
-
-The PPC64LE hijack path should be reviewed against ARM64 when in doubt. The
-entry can only use volatile scratch registers until it has decided to build a
-probe frame, and it must not touch stack locations that may contain a return
-buffer, saved return value, or caller linkage data. If the trap flag is clear,
-the path should restore the original return address and return with the
-interrupted method's return values intact.
-
-For TLS, prefer inline TLS access sequences in assembly and JIT-generated code
-over helper calls when the generated code can match the shared-library-safe
-model. PPC64LE shared-library tests are sensitive to static TLS exhaustion; the
-test environment may need
-`GLIBC_TUNABLES=glibc.rtld.optional_static_tls=128000`, but this is a runtime
-loader workaround, not a substitute for correct TLS code shape.
-
-Relocation pairs should be represented as compound relocation types at the JIT
-and object-writer boundary when the pair is logically one address materialization
-operation. PPC64LE HA/LO pairs should follow the same style as ARM and RISC-V
-compound relocations instead of threading ad hoc addends through generic
-relocation records.
-
-When an address sequence needs PPC64 relocations, prefer a human-readable
-assembler-shaped sequence in comments and one logical relocation in the JIT or
-object writer. The native file may expand that logical relocation into `_HA`
-and `_LO` records, but the importer, JIT, and dependency node should not pass
-around unrelated integer addends that only make sense for one half of the pair.
-
-When debugging generated code, build tests with `StripSymbols=false` so symbols
-stay in the primary binary instead of separate `.dbg` files. NativeAOT smoke
-tests commonly report success with exit code `100`; do not treat exit code `0`
-as the only successful result.
-
-Prefer `powerpc64le-linux-gnu-objdump` over `llvm-objdump` for PPC64LE
-disassembly during bring-up. `llvm-objdump` has repeatedly timed out on the
-large NativeAOT shared libraries and executables, while GNU objdump has produced
-the targeted section/address disassembly immediately. Use `-j __managedcode`
-when inspecting managed method bodies.
+  `ContainCheckStoreLoc` are mostly empty.
+- Shift/rotate containment currently only contains constant rotates; check
+  codegen expectations before enabling contained immediate shifts more broadly.
+- Do not mirror RISC-V-specific Zba/Zbb/Zbs transforms directly. Introduce
+  PPC64LE-specific IR only when there is a real ISA/codegen equivalent.
+- Any new contained form must be supported by lowering, LSRA, codegen, and the
+  emitter before it is enabled.

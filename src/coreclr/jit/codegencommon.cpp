@@ -4364,6 +4364,9 @@ void CodeGen::genHomeStackSegment(unsigned                 lclNum,
     emitAttr size = emitTypeSize(loadType);
 
     int loadOffset = (int)seg.GetStackOffset();
+#ifdef TARGET_POWERPC64
+    loadOffset += FIRST_ARG_STACK_OFFS;
+#endif
     if (isFramePointerUsed())
     {
         loadOffset -= genCallerSPtoFPdelta();

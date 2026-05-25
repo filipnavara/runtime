@@ -340,6 +340,9 @@ For NativeAOT ILC JIT dumps, use focused codegen options:
 When debugging JIT behavior, compare the PPC64LE shape against x64, ARM64, and
 RISC-V before adding PPC-only codegen. Other architectures often avoid symptoms
 through normal lowering, containment, call-target handling, or GC-state updates.
+When host execution is not enough, build crossjits such as RISC-V and use
+AltJit plus `JitDump` to compare non-host target lowering and codegen shapes
+against PPC64LE.
 
 Useful checks in a JIT dump:
 

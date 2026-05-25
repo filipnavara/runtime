@@ -3433,6 +3433,21 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
                                              regNumber   dataReg,
                                              unsigned    offset,
                                              regNumber   tmpReg) {
+        if (ppcLclOffsetFitsInstruction(m_compiler, storeIns, varNumOut, offset))
+        {
+            // Keep outgoing GC arg stores visible to the emitter as local stores so it can publish
+            // the matching rpdARG_PUSH entries. PPC64LE stack arguments start after the ELFv2
+            // linkage/parameter-save area, so include that bias in both the store and GC slot offset.
+            GetEmitter()->emitIns_S_R(storeIns, attr, dataReg, varNumOut, offset + FIRST_ARG_STACK_OFFS);
+            return;
+        }
+
+        if (EA_IS_GCREF_OR_BYREF(attr))
+        {
+            NYI_POWERPC64("large outgoing GC arg offset");
+        }
+
+        assert(tmpReg != REG_NA);
         regNumber baseReg     = REG_NA;
         int       frameOffset = ppcGetLclFrameOffset(m_compiler, varNumOut, offset, &baseReg);
         genInstrWithConstant(storeIns, attr, dataReg, baseReg, frameOffset, tmpReg);

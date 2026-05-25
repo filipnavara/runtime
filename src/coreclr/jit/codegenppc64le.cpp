@@ -1092,17 +1092,28 @@ void CodeGen::genCodeForDivMod(GenTreeOp* tree)
     regNumber divisorReg  = op2->GetRegNum();
 
     ExceptionSetFlags exceptions = tree->OperExceptions(m_compiler);
+    regNumber         tempReg    = REG_NA;
+
     if ((exceptions & ExceptionSetFlags::DivideByZeroException) != ExceptionSetFlags::None)
     {
-        genJumpToThrowHlpBlk_la(SCK_DIV_BY_ZERO, INS_beq, divisorReg, nullptr, REG_R0, attr);
-    }
+        regNumber zeroCheckReg = divisorReg;
+        if (attr == EA_4BYTE)
+        {
+            tempReg = internalRegisters.GetSingle(tree);
+            GetEmitter()->emitIns_R_R(INS_extsw, EA_PTRSIZE, tempReg, divisorReg);
+            zeroCheckReg = tempReg;
+        }
 
-    regNumber tempReg = REG_NA;
+        genJumpToThrowHlpBlk_la(SCK_DIV_BY_ZERO, INS_beq, zeroCheckReg);
+    }
 
     if (tree->OperIs(GT_DIV, GT_MOD) &&
         ((exceptions & ExceptionSetFlags::ArithmeticException) != ExceptionSetFlags::None))
     {
-        tempReg = internalRegisters.GetSingle(tree);
+        if (tempReg == REG_NA)
+        {
+            tempReg = internalRegisters.GetSingle(tree);
+        }
 
         instGen_Set_Reg_To_Imm(attr, tempReg, -1);
         GetEmitter()->emitIns_R_R((attr == EA_4BYTE) ? INS_cmpw : INS_cmpd, attr, divisorReg, tempReg);
@@ -2712,19 +2723,18 @@ void CodeGen::genJumpToThrowHlpBlk_la(SpecialCodeKind codeKind,
                                       instruction     ins,
                                       regNumber       reg1,
                                       BasicBlock*     failBlk,
-                                      regNumber       reg2,
-                                      emitAttr        cmpAttr)
+                                      regNumber       reg2)
 {
     assert((ins == INS_beq) || (ins == INS_bne) || (ins == INS_blt) || (ins == INS_bge) || (ins == INS_bgt) ||
            (ins == INS_ble));
 
     if ((reg2 == REG_NA) || (reg2 == REG_R0))
     {
-        instGen_Set_Reg_To_Imm(cmpAttr, REG_R0, 0);
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, 0);
         reg2 = REG_R0;
     }
 
-    GetEmitter()->emitIns_R_R((cmpAttr == EA_4BYTE) ? INS_cmpw : INS_cmpd, cmpAttr, reg1, reg2);
+    GetEmitter()->emitIns_R_R(INS_cmpd, EA_PTRSIZE, reg1, reg2);
 
     if (m_compiler->fgUseThrowHelperBlocks())
     {

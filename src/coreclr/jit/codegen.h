@@ -323,8 +323,7 @@ protected:
                                  instruction     ins,
                                  regNumber       reg1,
                                  BasicBlock*     failBlk = nullptr,
-                                 regNumber       reg2    = REG_R0,
-                                 emitAttr        cmpAttr = EA_PTRSIZE);
+                                 regNumber       reg2    = REG_R0);
 #else
     void genCheckOverflow(GenTree* tree);
 #endif

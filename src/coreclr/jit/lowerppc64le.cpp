@@ -20,12 +20,7 @@ void Lowering::ContainCheckStoreIndir(GenTreeStoreInd* node)
         MakeSrcContained(node, src);
     }
 
-    // Keep GC ref stores on the existing explicit-address path for now. The PPC64LE write-barrier
-    // code consumes the destination address from a register.
-    if (!varTypeIsGC(src->TypeGet()))
-    {
-        ContainCheckIndir(node);
-    }
+    ContainCheckIndir(node);
 }
 
 void Lowering::ContainCheckIndir(GenTreeIndir* node)

@@ -1497,8 +1497,8 @@ BOOL HandleHardwareException(PAL_SEHException* ex)
         Thread *pThread = GetThreadNULLOk();
         if (pThread != NULL && g_pDebugInterface != NULL)
         {
-#if (defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64)) || defined(TARGET_RISCV64)
-            // On ARM and ARM64 and LOONGARCH64 exception point to the break instruction.
+#if (defined(TARGET_ARM) || defined(TARGET_ARM64) || defined(TARGET_LOONGARCH64)) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+            // On ARM, ARM64, LOONGARCH64, RISCV64, and PPC64 exception point to the break instruction.
             // See https://static.docs.arm.com/ddi0487/db/DDI0487D_b_armv8_arm.pdf#page=6916&zoom=100,0,152
             // at aarch64/exceptions/debug/AArch64.SoftwareBreakpoint
             // However, the rest of the code expects that it points to an instruction after the break.

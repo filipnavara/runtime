@@ -857,38 +857,120 @@ LEAF_ENTRY GetThreadStaticsVariableOffset, _TEXT
 LEAF_END GetThreadStaticsVariableOffset, _TEXT
 
 NESTED_ENTRY CallEHFunclet, _TEXT, NoHandler
-    stdu 1, -32(1)
+    stdu 1, -176(1)
+    .cfi_adjust_cfa_offset 176
     mflr 0
     std 0, 16(1)
-    std 31, 24(1)
+    .cfi_offset lr, -160
+    std 2, 24(1)
+    .cfi_offset r2, -152
+    std 14, 32(1)
+    .cfi_offset r14, -144
+    std 15, 40(1)
+    .cfi_offset r15, -136
+    std 16, 48(1)
+    .cfi_offset r16, -128
+    std 17, 56(1)
+    .cfi_offset r17, -120
+    std 18, 64(1)
+    .cfi_offset r18, -112
+    std 19, 72(1)
+    .cfi_offset r19, -104
+    std 20, 80(1)
+    .cfi_offset r20, -96
+    std 21, 88(1)
+    .cfi_offset r21, -88
+    std 22, 96(1)
+    .cfi_offset r22, -80
+    std 23, 104(1)
+    .cfi_offset r23, -72
+    std 24, 112(1)
+    .cfi_offset r24, -64
+    std 25, 120(1)
+    .cfi_offset r25, -56
+    std 26, 128(1)
+    .cfi_offset r26, -48
+    std 27, 136(1)
+    .cfi_offset r27, -40
+    std 28, 144(1)
+    .cfi_offset r28, -32
+    std 29, 152(1)
+    .cfi_offset r29, -24
+    std 30, 160(1)
+    .cfi_offset r30, -16
+    std 31, 168(1)
+    .cfi_offset r31, -8
 
     std 1, 0(6)
+    ld 14, CONTEXT_R14(5)
+    ld 15, CONTEXT_R15(5)
+    ld 16, CONTEXT_R16(5)
+    ld 17, CONTEXT_R17(5)
+    ld 18, CONTEXT_R18(5)
+    ld 19, CONTEXT_R19(5)
+    ld 20, CONTEXT_R20(5)
+    ld 21, CONTEXT_R21(5)
+    ld 22, CONTEXT_R22(5)
+    ld 23, CONTEXT_R23(5)
+    ld 24, CONTEXT_R24(5)
+    ld 25, CONTEXT_R25(5)
+    ld 26, CONTEXT_R26(5)
+    ld 27, CONTEXT_R27(5)
+    ld 28, CONTEXT_R28(5)
+    ld 29, CONTEXT_R29(5)
+    ld 30, CONTEXT_R30(5)
     ld 31, CONTEXT_R31(5)
     mtctr 4
     bctrl
 
-    ld 31, 24(1)
+    ld 14, 32(1)
+    ld 15, 40(1)
+    ld 16, 48(1)
+    ld 17, 56(1)
+    ld 18, 64(1)
+    ld 19, 72(1)
+    ld 20, 80(1)
+    ld 21, 88(1)
+    ld 22, 96(1)
+    ld 23, 104(1)
+    ld 24, 112(1)
+    ld 25, 120(1)
+    ld 26, 128(1)
+    ld 27, 136(1)
+    ld 28, 144(1)
+    ld 29, 152(1)
+    ld 30, 160(1)
+    ld 31, 168(1)
+    ld 2, 24(1)
     ld 0, 16(1)
     mtlr 0
-    addi 1, 1, 32
+    addi 1, 1, 176
+    .cfi_adjust_cfa_offset -176
     blr
 NESTED_END CallEHFunclet, _TEXT
 
 NESTED_ENTRY CallEHFilterFunclet, _TEXT, NoHandler
-    stdu 1, -32(1)
+    stdu 1, -48(1)
+    .cfi_adjust_cfa_offset 48
     mflr 0
     std 0, 16(1)
-    std 31, 24(1)
+    .cfi_offset lr, -32
+    std 2, 24(1)
+    .cfi_offset r2, -24
+    std 31, 40(1)
+    .cfi_offset r31, -8
 
     std 1, 0(6)
     mr 31, 4
     mtctr 5
     bctrl
 
-    ld 31, 24(1)
+    ld 31, 40(1)
+    ld 2, 24(1)
     ld 0, 16(1)
     mtlr 0
-    addi 1, 1, 32
+    addi 1, 1, 48
+    .cfi_adjust_cfa_offset -48
     blr
 NESTED_END CallEHFilterFunclet, _TEXT
 

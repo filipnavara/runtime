@@ -291,8 +291,19 @@ void CodeGen::genFnEpilog(BasicBlock* block)
         switch (addrInfo.accessType)
         {
             case IAT_VALUE:
-                params.callType = EC_FUNC_TOKEN;
-                params.addr     = addrInfo.addr;
+                if (m_compiler->opts.compReloc)
+                {
+                    params.callType = EC_FUNC_TOKEN;
+                    params.addr     = addrInfo.addr;
+                }
+                else
+                {
+                    instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_INDIRECT_CALL_TARGET_REG,
+                                            reinterpret_cast<ssize_t>(addrInfo.addr));
+                    params.callType = EC_INDIR_R;
+                    params.ireg     = REG_INDIRECT_CALL_TARGET_REG;
+                    regSet.verifyRegUsed(params.ireg);
+                }
                 break;
 
             case IAT_PVALUE:

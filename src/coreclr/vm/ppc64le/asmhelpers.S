@@ -744,13 +744,37 @@ LEAF_END JIT_PatchpointForced, _TEXT
 #endif
 
 LEAF_ENTRY JIT_GetDynamicGCStaticBase_SingleAppDomain, _TEXT
-    trap
+    // If class is not initialized, tail call GetGCStaticBase.
+    ld 4, OFFSETOF__DynamicStaticsInfo__m_pGCStatics(3)
+    sync
+    andi. 12, 4, 1
+    bne LOCAL_LABEL(JIT_GetDynamicGCStaticBase_SingleAppDomain_CallHelper)
+    mr 3, 4
     blr
+
+LOCAL_LABEL(JIT_GetDynamicGCStaticBase_SingleAppDomain_CallHelper):
+    ld 3, OFFSETOF__DynamicStaticsInfo__m_pMethodTable(3)
+    addis 12, 2, g_pGetGCStaticBase@toc@ha
+    ld 12, g_pGetGCStaticBase@toc@l(12)
+    mtctr 12
+    bctr
 LEAF_END JIT_GetDynamicGCStaticBase_SingleAppDomain, _TEXT
 
 LEAF_ENTRY JIT_GetDynamicNonGCStaticBase_SingleAppDomain, _TEXT
-    trap
+    // If class is not initialized, tail call GetNonGCStaticBase.
+    ld 4, OFFSETOF__DynamicStaticsInfo__m_pNonGCStatics(3)
+    sync
+    andi. 12, 4, 1
+    bne LOCAL_LABEL(JIT_GetDynamicNonGCStaticBase_SingleAppDomain_CallHelper)
+    mr 3, 4
     blr
+
+LOCAL_LABEL(JIT_GetDynamicNonGCStaticBase_SingleAppDomain_CallHelper):
+    ld 3, OFFSETOF__DynamicStaticsInfo__m_pMethodTable(3)
+    addis 12, 2, g_pGetNonGCStaticBase@toc@ha
+    ld 12, g_pGetNonGCStaticBase@toc@l(12)
+    mtctr 12
+    bctr
 LEAF_END JIT_GetDynamicNonGCStaticBase_SingleAppDomain, _TEXT
 
 // OnHijackTripThread is reached by replacing a managed return address. Save the

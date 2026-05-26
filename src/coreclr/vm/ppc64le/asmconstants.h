@@ -32,6 +32,16 @@ ASMCONSTANTS_C_ASSERT(OFFSETOF__RuntimeThreadLocals__ee_alloc_context == offseto
 #define OFFSETOF__ThreadLocalInfo__m_pThread 0
 ASMCONSTANTS_C_ASSERT(OFFSETOF__ThreadLocalInfo__m_pThread == offsetof(ThreadLocalInfo, m_pThread));
 
+#define OFFSETOF__DynamicStaticsInfo__m_pGCStatics 0
+ASMCONSTANTS_C_ASSERT(OFFSETOF__DynamicStaticsInfo__m_pGCStatics == offsetof(DynamicStaticsInfo, m_pGCStatics));
+
+#define OFFSETOF__DynamicStaticsInfo__m_pNonGCStatics 0x8
+ASMCONSTANTS_C_ASSERT(OFFSETOF__DynamicStaticsInfo__m_pNonGCStatics ==
+                      offsetof(DynamicStaticsInfo, m_pNonGCStatics));
+
+#define OFFSETOF__DynamicStaticsInfo__m_pMethodTable 0x10
+ASMCONSTANTS_C_ASSERT(OFFSETOF__DynamicStaticsInfo__m_pMethodTable == offsetof(DynamicStaticsInfo, m_pMethodTable));
+
 #define OFFSETOF__ee_alloc_context__alloc_ptr 0x8
 ASMCONSTANTS_C_ASSERT(OFFSETOF__ee_alloc_context__alloc_ptr == offsetof(ee_alloc_context, m_GCAllocContext) +
                                                                offsetof(gc_alloc_context, alloc_ptr));

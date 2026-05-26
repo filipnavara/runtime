@@ -602,6 +602,10 @@ void CodeGen::genCodeForTreeNode(GenTree* treeNode)
             genCodeForCompare(treeNode->AsOp());
             break;
 
+        case GT_CKFINITE:
+            genCkfinite(treeNode);
+            break;
+
         case GT_INTRINSIC:
             genIntrinsic(treeNode->AsIntrinsic());
             break;
@@ -4733,6 +4737,59 @@ void CodeGen::genFloatToFloatCast(GenTree* treeNode)
     else if (dstReg != srcReg)
     {
         GetEmitter()->emitIns_Mov(emitActualTypeSize(treeNode), dstReg, srcReg, true);
+    }
+
+    genProduceReg(treeNode);
+}
+
+// genCkfinite: Generate code for ckfinite opcode.
+//
+// Arguments:
+//    treeNode - The GT_CKFINITE node
+//
+// Return Value:
+//    None.
+//
+// Assumptions:
+//    GT_CKFINITE node has reserved one internal integer register, and one
+//    internal floating-point register for TYP_FLOAT.
+//
+void CodeGen::genCkfinite(GenTree* treeNode)
+{
+    assert(treeNode->OperIs(GT_CKFINITE));
+
+    GenTree*  op1        = treeNode->AsOp()->gtOp1;
+    var_types targetType = treeNode->TypeGet();
+    assert(targetType == op1->TypeGet());
+
+    regNumber fpReg = genConsumeReg(op1);
+    assert(genIsValidFloatReg(fpReg));
+
+    regNumber intReg = internalRegisters.Extract(treeNode, RBM_ALLINT);
+    if (targetType == TYP_FLOAT)
+    {
+        regNumber tmpFltReg = internalRegisters.Extract(treeNode, RBM_ALLFLOAT);
+
+        GetEmitter()->emitIns_R_R(INS_xscvdpspn, EA_4BYTE, tmpFltReg, fpReg);
+        GetEmitter()->emitIns_R_R(INS_mffprwz, EA_4BYTE, intReg, tmpFltReg);
+        GetEmitter()->emitIns_R_R_I_I(INS_rldicl, EA_8BYTE, intReg, intReg, 64 - 23, 23);
+        GetEmitter()->emitIns_R_R_I(INS_xori, EA_8BYTE, intReg, intReg, 0xFF);
+    }
+    else
+    {
+        assert(targetType == TYP_DOUBLE);
+
+        GetEmitter()->emitIns_R_R(INS_mffprd, EA_8BYTE, intReg, fpReg);
+        GetEmitter()->emitIns_R_R_I_I(INS_rldicl, EA_8BYTE, intReg, intReg, 64 - 52, 52);
+        GetEmitter()->emitIns_R_R_I(INS_xori, EA_8BYTE, intReg, intReg, 0x7FF);
+    }
+
+    genJumpToThrowHlpBlk_la(SCK_ARITH_EXCPN, INS_beq, intReg);
+
+    regNumber targetReg = treeNode->GetRegNum();
+    if (targetReg != fpReg)
+    {
+        GetEmitter()->emitIns_Mov(emitActualTypeSize(treeNode), targetReg, fpReg, true);
     }
 
     genProduceReg(treeNode);

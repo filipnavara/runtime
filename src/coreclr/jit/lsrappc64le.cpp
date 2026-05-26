@@ -399,6 +399,19 @@ int LinearScan::BuildNode(GenTree* tree)
             return srcCount;
         }
 
+        case GT_CKFINITE:
+        {
+            buildInternalIntRegisterDefForNode(tree);
+            if (tree->TypeIs(TYP_FLOAT))
+            {
+                buildInternalFloatRegisterDefForNode(tree);
+            }
+            BuildUse(tree->gtGetOp1());
+            BuildDef(tree);
+            buildInternalRegisterUses();
+            return 1;
+        }
+
         case GT_INTRINSIC:
         {
             GenTree* op1 = tree->gtGetOp1();

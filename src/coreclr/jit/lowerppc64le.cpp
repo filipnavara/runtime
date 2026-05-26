@@ -346,7 +346,7 @@ void Lowering::ContainCheckShiftRotate(GenTreeOp* node)
     GenTree* shiftBy = node->gtOp2;
     assert(node->OperIsShiftOrRotate());
 
-    if (node->OperIs(GT_ROL, GT_ROR) && shiftBy->IsCnsIntOrI())
+    if (shiftBy->IsCnsIntOrI())
     {
         MakeSrcContained(node, shiftBy);
     }

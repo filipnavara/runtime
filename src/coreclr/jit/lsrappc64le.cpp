@@ -433,11 +433,14 @@ int LinearScan::BuildNode(GenTree* tree)
             return 1;
         }
 
+        case GT_LSH:
+        case GT_RSH:
+        case GT_RSZ:
         case GT_ROL:
         case GT_ROR:
         {
             int srcCount = BuildBinaryUses(tree->AsOp());
-            if (tree->OperIs(GT_ROR) && !tree->gtGetOp2()->isContained())
+            if (!tree->gtGetOp2()->isContained())
             {
                 buildInternalIntRegisterDefForNode(tree);
                 buildInternalRegisterUses();

@@ -217,6 +217,19 @@ static bool ppcLclOffsetFitsInstruction(Compiler* compiler, instruction ins, uns
     return ppcOffsetFitsInstruction(ins, offset);
 }
 
+static bool ppcCanSplitUnalignedLclDWord(Compiler* compiler, instruction ins, unsigned lclNum, unsigned lclOffs)
+{
+    if ((ins != INS_ld) && (ins != INS_std))
+    {
+        return false;
+    }
+
+    regNumber baseReg = REG_NA;
+    int       offset  = ppcGetLclFrameOffset(compiler, lclNum, lclOffs, &baseReg);
+    return !ppcOffsetFitsInstruction(ins, offset) && emitter::isValidSimm16(offset) &&
+           emitter::isValidSimm16(offset + 4);
+}
+
 static void ppcEmitSignExtendSmallLoadIfNeeded(emitter* emit, var_types targetType, regNumber targetReg)
 {
     if (targetType == TYP_BYTE)
@@ -1065,8 +1078,30 @@ void CodeGen::genCodeForShift(GenTree* tree)
 
     genConsumeOperands(tree->AsOp());
 
-    GetEmitter()->emitIns_R_R_R(genGetInsForOper(tree), emitActualTypeSize(tree), tree->GetRegNum(),
-                                operand->GetRegNum(), shiftBy->GetRegNum());
+    emitAttr  attr      = emitActualTypeSize(tree);
+    const int shiftMask = (attr == EA_4BYTE) ? 0x1F : 0x3F;
+
+    regNumber shiftByReg = REG_NA;
+    if (shiftBy->isContained())
+    {
+        assert(shiftBy->IsCnsIntOrI());
+        instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, shiftBy->AsIntCon()->gtIconVal & shiftMask);
+        shiftByReg = REG_R0;
+    }
+    else
+    {
+        shiftByReg = internalRegisters.GetSingle(tree);
+        if (attr == EA_4BYTE)
+        {
+            GetEmitter()->emitIns_R_R_I_I_I(INS_rlwinm, attr, shiftByReg, shiftBy->GetRegNum(), 0, 27, 31);
+        }
+        else
+        {
+            GetEmitter()->emitIns_R_R_I_I(INS_rldicl, attr, shiftByReg, shiftBy->GetRegNum(), 0, 58);
+        }
+    }
+
+    GetEmitter()->emitIns_R_R_R(genGetInsForOper(tree), attr, tree->GetRegNum(), operand->GetRegNum(), shiftByReg);
 
     genProduceReg(tree);
 }
@@ -1634,6 +1669,17 @@ void CodeGen::genCodeForLclFld(GenTreeLclFld* tree)
     assert(targetReg != REG_NA);
 
     instruction loadIns = ins_Load(targetType);
+    if ((targetType == TYP_LONG) &&
+        ppcCanSplitUnalignedLclDWord(m_compiler, loadIns, tree->GetLclNum(), tree->GetLclOffs()))
+    {
+        GetEmitter()->emitIns_R_S(INS_lwz, EA_4BYTE, targetReg, tree->GetLclNum(), tree->GetLclOffs());
+        GetEmitter()->emitIns_R_S(INS_lwz, EA_4BYTE, REG_R0, tree->GetLclNum(), tree->GetLclOffs() + 4);
+        GetEmitter()->emitIns_R_R_I(INS_sldi, EA_PTRSIZE, REG_R0, REG_R0, 32);
+        GetEmitter()->emitIns_R_R_R(INS_or, EA_PTRSIZE, targetReg, targetReg, REG_R0);
+        genProduceReg(tree);
+        return;
+    }
+
     regNumber   baseReg = REG_NA;
     int         offset  = ppcGetLclFrameOffset(m_compiler, tree, &baseReg);
     regNumber   tmpReg  = ppcOffsetFitsInstruction(loadIns, offset) ? REG_NA : internalRegisters.GetSingle(tree);
@@ -1872,7 +1918,18 @@ void CodeGen::genCodeForStoreLclFld(GenTreeLclFld* tree)
 
     instruction storeIns = ins_StoreFromSrc(dataReg, targetType);
     emitAttr    attr     = emitTypeSize(targetType);
-    if (ppcLclOffsetFitsInstruction(m_compiler, storeIns, tree->GetLclNum(), tree->GetLclOffs()))
+    if ((targetType == TYP_LONG) &&
+        ppcCanSplitUnalignedLclDWord(m_compiler, storeIns, tree->GetLclNum(), tree->GetLclOffs()))
+    {
+        GetEmitter()->emitIns_S_R(INS_stw, EA_4BYTE, dataReg, tree->GetLclNum(), tree->GetLclOffs());
+        if (dataReg != REG_R0)
+        {
+            instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, 32);
+            GetEmitter()->emitIns_R_R_R(INS_srd, EA_PTRSIZE, REG_R0, dataReg, REG_R0);
+        }
+        GetEmitter()->emitIns_S_R(INS_stw, EA_4BYTE, REG_R0, tree->GetLclNum(), tree->GetLclOffs() + 4);
+    }
+    else if (ppcLclOffsetFitsInstruction(m_compiler, storeIns, tree->GetLclNum(), tree->GetLclOffs()))
     {
         GetEmitter()->emitIns_S_R(storeIns, attr, dataReg, tree->GetLclNum(), tree->GetLclOffs());
     }

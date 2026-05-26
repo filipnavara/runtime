@@ -857,49 +857,52 @@ LEAF_ENTRY GetThreadStaticsVariableOffset, _TEXT
 LEAF_END GetThreadStaticsVariableOffset, _TEXT
 
 NESTED_ENTRY CallEHFunclet, _TEXT, NoHandler
-    stdu 1, -176(1)
-    .cfi_adjust_cfa_offset 176
+    // Save LR in the caller linkage area. ExecuteFunctionBelowContext can run a
+    // native propagation helper below this frame, and that helper owns this
+    // frame's linkage slots.
     mflr 0
     std 0, 16(1)
-    .cfi_offset lr, -160
-    std 2, 24(1)
-    .cfi_offset r2, -152
+    stdu 1, -192(1)
+    .cfi_adjust_cfa_offset 192
+    .cfi_offset 65, 16
     std 14, 32(1)
-    .cfi_offset r14, -144
+    .cfi_offset r14, -160
     std 15, 40(1)
-    .cfi_offset r15, -136
+    .cfi_offset r15, -152
     std 16, 48(1)
-    .cfi_offset r16, -128
+    .cfi_offset r16, -144
     std 17, 56(1)
-    .cfi_offset r17, -120
+    .cfi_offset r17, -136
     std 18, 64(1)
-    .cfi_offset r18, -112
+    .cfi_offset r18, -128
     std 19, 72(1)
-    .cfi_offset r19, -104
+    .cfi_offset r19, -120
     std 20, 80(1)
-    .cfi_offset r20, -96
+    .cfi_offset r20, -112
     std 21, 88(1)
-    .cfi_offset r21, -88
+    .cfi_offset r21, -104
     std 22, 96(1)
-    .cfi_offset r22, -80
+    .cfi_offset r22, -96
     std 23, 104(1)
-    .cfi_offset r23, -72
+    .cfi_offset r23, -88
     std 24, 112(1)
-    .cfi_offset r24, -64
+    .cfi_offset r24, -80
     std 25, 120(1)
-    .cfi_offset r25, -56
+    .cfi_offset r25, -72
     std 26, 128(1)
-    .cfi_offset r26, -48
+    .cfi_offset r26, -64
     std 27, 136(1)
-    .cfi_offset r27, -40
+    .cfi_offset r27, -56
     std 28, 144(1)
-    .cfi_offset r28, -32
+    .cfi_offset r28, -48
     std 29, 152(1)
-    .cfi_offset r29, -24
+    .cfi_offset r29, -40
     std 30, 160(1)
-    .cfi_offset r30, -16
+    .cfi_offset r30, -32
     std 31, 168(1)
-    .cfi_offset r31, -8
+    .cfi_offset r31, -24
+    std 2, 176(1)
+    .cfi_offset r2, -16
 
     std 1, 0(6)
     ld 14, CONTEXT_R14(5)
@@ -941,23 +944,25 @@ NESTED_ENTRY CallEHFunclet, _TEXT, NoHandler
     ld 29, 152(1)
     ld 30, 160(1)
     ld 31, 168(1)
-    ld 2, 24(1)
-    ld 0, 16(1)
+    ld 2, 176(1)
+    ld 0, 208(1)
     mtlr 0
-    addi 1, 1, 176
-    .cfi_adjust_cfa_offset -176
+    addi 1, 1, 192
+    .cfi_adjust_cfa_offset -192
     blr
 NESTED_END CallEHFunclet, _TEXT
 
 NESTED_ENTRY CallEHFilterFunclet, _TEXT, NoHandler
-    stdu 1, -48(1)
-    .cfi_adjust_cfa_offset 48
+    // Save LR in the caller linkage area; this frame's linkage area is reserved
+    // for callees used during native exception propagation.
     mflr 0
     std 0, 16(1)
-    .cfi_offset lr, -32
-    std 2, 24(1)
-    .cfi_offset r2, -24
-    std 31, 40(1)
+    stdu 1, -96(1)
+    .cfi_adjust_cfa_offset 96
+    .cfi_offset 65, 16
+    std 2, 80(1)
+    .cfi_offset r2, -16
+    std 31, 88(1)
     .cfi_offset r31, -8
 
     std 1, 0(6)
@@ -965,12 +970,12 @@ NESTED_ENTRY CallEHFilterFunclet, _TEXT, NoHandler
     mtctr 5
     bctrl
 
-    ld 31, 40(1)
-    ld 2, 24(1)
-    ld 0, 16(1)
+    ld 31, 88(1)
+    ld 2, 80(1)
+    ld 0, 112(1)
     mtlr 0
-    addi 1, 1, 48
-    .cfi_adjust_cfa_offset -48
+    addi 1, 1, 96
+    .cfi_adjust_cfa_offset -96
     blr
 NESTED_END CallEHFilterFunclet, _TEXT
 

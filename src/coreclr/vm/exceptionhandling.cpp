@@ -944,6 +944,15 @@ static VOID UpdateContextForPropagationCallback(
     // Pass the context for the callback as the first argument.
     startContext->R0 = (DWORD)callbackCtx;
 
+#elif defined(TARGET_POWERPC64)
+
+    // Reset the linked return register to the current function to let the
+    // unwinder work if the callback throws an exception as opposed to failing fast.
+    startContext->Link = GetIP(startContext);
+
+    // Pass the context for the callback as the first argument.
+    startContext->R3 = (DWORD64)callbackCtx;
+
 #else
 
     EEPOLICY_HANDLE_FATAL_ERROR_WITH_MESSAGE(
@@ -3045,6 +3054,8 @@ void ExecuteFunctionBelowContext(PCODE functionPtr, CONTEXT *pContext, size_t ta
     pContext->Lr = GetIP(pContext);
 #elif defined(HOST_RISCV64) || defined(HOST_LOONGARCH64)
     pContext->Ra = GetIP(pContext);
+#elif defined(HOST_POWERPC64)
+    pContext->Link = GetIP(pContext);
 #endif
 
     SetFirstArgReg(pContext, arg1);

@@ -4,6 +4,7 @@
 using System;
 using System.Runtime.InteropServices;
 using Xunit;
+using TestLibrary;
 
 unsafe partial class GenericsNative
 {
@@ -37,6 +38,7 @@ unsafe partial class GenericsNative
 
 public unsafe partial class GenericsTest
 {
+    [ActiveIssue("PPC64LE unmanaged HFA aggregate interop is not implemented yet", typeof(PlatformDetection), nameof(PlatformDetection.IsPpc64leProcess))]
     [Fact]
     public static void TestPoint4F()
     {

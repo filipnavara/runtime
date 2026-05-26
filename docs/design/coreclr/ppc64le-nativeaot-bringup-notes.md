@@ -585,6 +585,10 @@ by useful validation.
   blocked.
 - Varargs are not implemented in the PPC64LE ABI classifier and
   `genJmpPlaceVarArgs`.
+- Unmanaged HFA and mixed floating-point/integer aggregate ABI classification is
+  incomplete. Native interop tests that require those exact platform ABI shapes
+  should remain active PPC64LE issues until the classifier and call lowering are
+  implemented and validated.
 - Fast tail calls are disabled. Codegen still has defensive NYI paths for fast
   tailcall stack argument placement and call emission. Tests that require
   explicit or portable tailcalls to avoid stack growth should remain marked as

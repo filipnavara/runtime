@@ -4746,6 +4746,16 @@ void CodeGen::genFloatToIntCast(GenTree* treeNode)
     regNumber tempReg = internalRegisters.Extract(treeNode, RBM_ALLFLOAT);
     assert(genIsValidFloatReg(tempReg));
 
+    BasicBlock* doneLabel = genCreateTempLabel();
+
+    // PPC64LE FP-to-int conversion instructions produce an architecture-specific
+    // integer indefinite value for NaN. The managed non-overflow conversion
+    // semantics require NaN to convert to zero, so skip the conversion when a
+    // self-compare is unordered.
+    instGen_Set_Reg_To_Imm(dstSize, targetReg, 0);
+    GetEmitter()->emitIns_R_R(INS_fcmpu, emitActualTypeSize(srcType), op1->GetRegNum(), op1->GetRegNum());
+    GetEmitter()->emitIns_J(INS_bne, doneLabel);
+
     instruction convertIns = INS_fctiwz;
     if (isUnsigned)
     {
@@ -4771,13 +4781,13 @@ void CodeGen::genFloatToIntCast(GenTree* treeNode)
             GetEmitter()->emitIns_R_R_I(INS_clrldi, EA_8BYTE, lowReg, targetReg, 32);
             GetEmitter()->emitIns_R_R(INS_cmpld, EA_8BYTE, targetReg, lowReg);
 
-            BasicBlock* doneLabel = genCreateTempLabel();
-            GetEmitter()->emitIns_J(INS_beq, doneLabel);
+            BasicBlock* uintDoneLabel = genCreateTempLabel();
+            GetEmitter()->emitIns_J(INS_beq, uintDoneLabel);
 
             instGen_Set_Reg_To_Imm(EA_8BYTE, targetReg, -1);
             GetEmitter()->emitIns_R_R_I(INS_clrldi, EA_8BYTE, targetReg, targetReg, 32);
 
-            genDefineTempLabel(doneLabel);
+            genDefineTempLabel(uintDoneLabel);
         }
         else
         {
@@ -4785,6 +4795,7 @@ void CodeGen::genFloatToIntCast(GenTree* treeNode)
         }
     }
 
+    genDefineTempLabel(doneLabel);
     genProduceReg(treeNode);
 }
 

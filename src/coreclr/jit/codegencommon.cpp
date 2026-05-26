@@ -8372,6 +8372,14 @@ void CodeGen::genPoisonFrame(regMaskTP regLiveIn)
     // The first time we need to poison something we will initialize a register to the largest immediate cccccccc that
     // we can fit.
     bool hasPoisonImm = false;
+    auto emitPoisonStore = [this, poisonValReg](instruction ins, emitAttr attr, unsigned varNum, int offs) {
+#ifdef TARGET_POWERPC64
+        GetEmitter()->emitIns_S_R(ins, attr, poisonValReg, static_cast<int>(varNum), offs, REG_ARG_0);
+#else
+        GetEmitter()->emitIns_S_R(ins, attr, poisonValReg, static_cast<int>(varNum), offs);
+#endif
+    };
+
     for (unsigned varNum = 0; varNum < m_compiler->info.compLocalsCount; varNum++)
     {
         LclVarDsc* varDsc = m_compiler->lvaGetDesc(varNum);
@@ -8430,14 +8438,14 @@ void CodeGen::genPoisonFrame(regMaskTP regLiveIn)
 #ifdef TARGET_64BIT
                 if ((offs % 8) == 0 && end - offs >= 8)
                 {
-                    GetEmitter()->emitIns_S_R(ins_Store(TYP_LONG), EA_8BYTE, REG_SCRATCH, (int)varNum, offs - addr);
+                    emitPoisonStore(ins_Store(TYP_LONG), EA_8BYTE, varNum, offs - addr);
                     offs += 8;
                     continue;
                 }
 #endif
 
                 assert((offs % 4) == 0 && end - offs >= 4);
-                GetEmitter()->emitIns_S_R(ins_Store(TYP_INT), EA_4BYTE, REG_SCRATCH, (int)varNum, offs - addr);
+                emitPoisonStore(ins_Store(TYP_INT), EA_4BYTE, varNum, offs - addr);
                 offs += 4;
             }
         }

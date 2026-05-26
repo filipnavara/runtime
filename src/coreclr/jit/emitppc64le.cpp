@@ -788,6 +788,13 @@ void emitter::emitIns_S_R(instruction ins, emitAttr attr, regNumber ireg, int va
     bool useTmpReg = false;
     if (!ppcOffsetFitsInstruction(ins, imm))
     {
+        if ((tmpReg == REG_NA) && m_compiler->compGeneratingProlog)
+        {
+            // Prolog stores are emitted outside LSRA, so use a volatile scratch
+            // register for large frame offsets when the caller cannot provide one.
+            tmpReg = (ireg != REG_SCRATCH) ? REG_SCRATCH : REG_TMP_0;
+        }
+
         if (tmpReg == REG_NA)
         {
             NYI_POWERPC64("large stack local offset");
@@ -889,14 +896,25 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
             GenTreeLclVarCommon* varNode = addr->AsLclVarCommon();
             unsigned             lclNum  = varNode->GetLclNum();
             unsigned             lclOffs = varNode->GetLclOffs();
+            bool                 fpBased = false;
+            ssize_t              frameOffset =
+                m_compiler->lvaFrameAddress(lclNum, &fpBased) + static_cast<ssize_t>(lclOffs);
+            regNumber tmpReg = REG_NA;
+
+            if (ppcLoadStoreOpNeedsOffsetTemp(ins, frameOffset))
+            {
+                tmpReg = codeGen->internalRegisters.GetSingle(indir);
+            }
+
+            noway_assert(emitInsIsLoad(ins) || (tmpReg != dataReg));
 
             if (emitInsIsStore(ins))
             {
-                emitIns_S_R(ins, attr, dataReg, lclNum, lclOffs);
+                emitIns_S_R(ins, attr, dataReg, lclNum, lclOffs, tmpReg);
             }
             else
             {
-                emitIns_R_S(ins, attr, dataReg, lclNum, lclOffs);
+                emitIns_R_S(ins, attr, dataReg, lclNum, lclOffs, tmpReg);
             }
 
             return;

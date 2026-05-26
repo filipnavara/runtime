@@ -959,6 +959,81 @@ void CompileResult::applyRelocs(RelocContext* rc, unsigned char* block1, ULONG b
             }
         }
 
+        if (targetArch == SPMI_TARGET_ARCHITECTURE_PPC64LE)
+        {
+            DWORDLONG fixupLocation = tmp.location;
+            DWORDLONG address       = section_begin + (size_t)fixupLocation - (size_t)originalAddr;
+
+            DWORDLONG target = tmp.target + (int32_t)tmp.addlDelta;
+
+            switch (relocType)
+            {
+                case CorInfoReloc::PPC64_REL24:
+                {
+                    if ((section_begin <= address) && (address < section_end)) // A reloc for our section?
+                    {
+                        INT64 delta = (INT64)(target - fixupLocation);
+                        if (!FitsInPpc64Rel24(delta))
+                        {
+                            target = (DWORDLONG)originalAddr + (DWORDLONG)blocksize1;
+                            delta  = (INT64)(target - fixupLocation);
+                        }
+
+                        PutPpc64Rel24((UINT32*)address, delta);
+                    }
+                    wasRelocHandled = true;
+                }
+                break;
+
+                case CorInfoReloc::PPC64_REL16:
+                {
+                    if ((section_begin <= address) && (address < section_end)) // A reloc for our section?
+                    {
+                        INT64 delta = (INT64)(target - fixupLocation);
+                        if (delta != (INT64)(INT32)delta)
+                        {
+                            target = (DWORDLONG)originalAddr + (DWORDLONG)blocksize1;
+                            delta  = (INT64)(target - fixupLocation);
+                        }
+
+                        PutPpc64HaLo((UINT32*)address, delta);
+                    }
+                    wasRelocHandled = true;
+                }
+                break;
+
+                case CorInfoReloc::PPC64_REL16_TOC:
+                {
+                    if ((section_begin <= address) && (address < section_end)) // A reloc for our section?
+                    {
+                        // SuperPMI cannot resolve the linker's synthetic .TOC. symbol. Keep replay deterministic
+                        // by leaving the global-entry TOC delta as zero.
+                        PutPpc64HaLo((UINT32*)address, 0);
+                    }
+                    wasRelocHandled = true;
+                }
+                break;
+
+                case CorInfoReloc::PPC64_TOC16:
+                case CorInfoReloc::PPC64_TPREL16:
+                case CorInfoReloc::PPC64_GOT_TPREL16:
+                case CorInfoReloc::PPC64_GOT16:
+                {
+                    if ((section_begin <= address) && (address < section_end)) // A reloc for our section?
+                    {
+                        // SuperPMI has no real TOC, GOT, or TLS anchor. Use the low 32 bits as a stable replay
+                        // value, similar to the other SuperPMI relocation fallbacks for unresolved addresses.
+                        PutPpc64HaLo((UINT32*)address, (INT64)(INT32)target);
+                    }
+                    wasRelocHandled = true;
+                }
+                break;
+
+                default:
+                    break;
+            }
+        }
+
         if (IsSpmiTarget64Bit())
         {
             if (!wasRelocHandled && (relocType == CorInfoReloc::DIRECT))

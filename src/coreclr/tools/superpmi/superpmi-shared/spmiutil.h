@@ -65,6 +65,7 @@ enum SPMI_TARGET_ARCHITECTURE
     SPMI_TARGET_ARCHITECTURE_LOONGARCH64,
     SPMI_TARGET_ARCHITECTURE_RISCV64,
     SPMI_TARGET_ARCHITECTURE_WASM32,
+    SPMI_TARGET_ARCHITECTURE_PPC64LE,
 };
 
 SPMI_TARGET_ARCHITECTURE GetSpmiTargetArchitecture();
@@ -82,7 +83,8 @@ inline bool IsSpmiTarget64Bit()
     return (GetSpmiTargetArchitecture() == SPMI_TARGET_ARCHITECTURE_AMD64) ||
            (GetSpmiTargetArchitecture() == SPMI_TARGET_ARCHITECTURE_ARM64) ||
            (GetSpmiTargetArchitecture() == SPMI_TARGET_ARCHITECTURE_LOONGARCH64) ||
-           (GetSpmiTargetArchitecture() == SPMI_TARGET_ARCHITECTURE_RISCV64);
+           (GetSpmiTargetArchitecture() == SPMI_TARGET_ARCHITECTURE_RISCV64) ||
+           (GetSpmiTargetArchitecture() == SPMI_TARGET_ARCHITECTURE_PPC64LE);
 }
 
 inline size_t SpmiTargetPointerSize()
@@ -109,6 +111,10 @@ void PutArm32MovtConstant(UINT32* p, unsigned con);
 
 INT64 GetRiscV64AuipcCombo(UINT32 * pCode, bool isStype);
 void PutRiscV64AuipcCombo(UINT32 * pCode, INT64 offset, bool isStype);
+
+bool FitsInPpc64Rel24(INT64 offset);
+void PutPpc64Rel24(UINT32* pCode, INT64 offset);
+void PutPpc64HaLo(UINT32* pCode, INT64 value);
 
 template <typename T, int size>
 inline constexpr unsigned ArrLen(T (&)[size])

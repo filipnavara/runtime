@@ -250,6 +250,8 @@ static SPMI_TARGET_ARCHITECTURE SpmiTargetArchitecture = SPMI_TARGET_ARCHITECTUR
 static SPMI_TARGET_ARCHITECTURE SpmiTargetArchitecture = SPMI_TARGET_ARCHITECTURE_RISCV64;
 #elif defined(TARGET_WASM32)
 static SPMI_TARGET_ARCHITECTURE SpmiTargetArchitecture = SPMI_TARGET_ARCHITECTURE_WASM32;
+#elif defined(TARGET_POWERPC64)
+static SPMI_TARGET_ARCHITECTURE SpmiTargetArchitecture = SPMI_TARGET_ARCHITECTURE_PPC64LE;
 #else
 #error Unsupported architecture
 #endif
@@ -536,6 +538,62 @@ void PutRiscV64AuipcCombo(UINT32 * pCode, INT64 offset, bool isStype)
     }
 
     _ASSERTE(GetRiscV64AuipcCombo(pCode, isStype) == offset);
+}
+
+static INT32 GetPpc64Rel24(UINT32* pCode)
+{
+    UINT32 branchInstr = *pCode;
+    return INT32((branchInstr & 0x03FFFFFC) << 6) >> 6;
+}
+
+bool FitsInPpc64Rel24(INT64 offset)
+{
+    return (offset >= -0x02000000LL) && (offset < 0x02000000LL) && ((offset & 0x3) == 0);
+}
+
+void PutPpc64Rel24(UINT32* pCode, INT64 offset)
+{
+    _ASSERTE(FitsInPpc64Rel24(offset));
+
+    UINT32 branchInstr = *pCode;
+
+    // Keep primary opcode, AA, and LK bits; replace the LI field.
+    branchInstr &= 0xFC000003;
+    branchInstr |= (UINT32)offset & 0x03FFFFFC;
+
+    *pCode = branchInstr;
+
+    _ASSERTE(GetPpc64Rel24(pCode) == offset);
+}
+
+static INT16 GetPpc64Imm16(UINT32* pCode)
+{
+    return (INT16)(*pCode & 0xFFFF);
+}
+
+static void PutPpc64Imm16(UINT32* pCode, INT64 value)
+{
+    UINT32 instr = *pCode;
+
+    instr &= 0xFFFF0000;
+    instr |= (UINT32)value & 0xFFFF;
+
+    *pCode = instr;
+
+    _ASSERTE(GetPpc64Imm16(pCode) == (INT16)value);
+}
+
+static INT64 GetPpc64HaLo(UINT32* pCode)
+{
+    return (INT64)GetPpc64Imm16(pCode) * 0x10000 + GetPpc64Imm16(pCode + 1);
+}
+
+void PutPpc64HaLo(UINT32* pCode, INT64 value)
+{
+    PutPpc64Imm16(pCode, (value + 0x8000) >> 16);
+    PutPpc64Imm16(pCode + 1, value);
+
+    _ASSERTE(GetPpc64HaLo(pCode) == value);
 }
 
 template<typename TPrint>

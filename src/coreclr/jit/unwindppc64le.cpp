@@ -131,6 +131,13 @@ void Compiler::unwindSaveReg(regNumber reg, unsigned offset)
 
 void Compiler::unwindNop()
 {
+#if defined(FEATURE_CFI_SUPPORT)
+    if (generateCFIUnwindCodes())
+    {
+        return;
+    }
+#endif // FEATURE_CFI_SUPPORT
+
     UnwindInfo* pu = &funCurrentFunc()->uwi;
 
 #ifdef DEBUG

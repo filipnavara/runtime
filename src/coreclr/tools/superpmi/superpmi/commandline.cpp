@@ -789,6 +789,9 @@ bool CommandLine::Parse(int argc, char* argv[], /* OUT */ Options* o)
             case SPMI_TARGET_ARCHITECTURE_RISCV64:
                 targetArch = "riscv64";
                 break;
+            case SPMI_TARGET_ARCHITECTURE_PPC64LE:
+                targetArch = "ppc64le";
+                break;
             default:
                 allowDefaultJIT = false;
                 break;
@@ -828,6 +831,7 @@ bool CommandLine::Parse(int argc, char* argv[], /* OUT */ Options* o)
                         break;
                     case SPMI_TARGET_ARCHITECTURE_LOONGARCH64:
                     case SPMI_TARGET_ARCHITECTURE_RISCV64:
+                    case SPMI_TARGET_ARCHITECTURE_PPC64LE:
                         jitOSName = "unix";
                         break;
                     default:

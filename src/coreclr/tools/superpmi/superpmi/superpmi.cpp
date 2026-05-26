@@ -66,6 +66,10 @@ void SetSuperPmiTargetArchitecture(const char* targetArchitecture)
         {
             SetSpmiTargetArchitecture(SPMI_TARGET_ARCHITECTURE_WASM32);
         }
+        else if (0 == _stricmp(targetArchitecture, "ppc64le"))
+        {
+            SetSpmiTargetArchitecture(SPMI_TARGET_ARCHITECTURE_PPC64LE);
+        }
         else
         {
             LogError("Illegal target architecture '%s'", targetArchitecture);

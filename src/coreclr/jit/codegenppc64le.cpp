@@ -4487,7 +4487,10 @@ void CodeGen::genCaptureFuncletPrologEpilogInfo()
 
     regMaskTP rsMaskSaveRegs = regSet.rsMaskCalleeSaved;
 
-    int funcletFrameSize   = m_compiler->lvaOutgoingArgSpaceSize;
+    // PPC64LE outgoing stack argument stores are biased by FIRST_ARG_STACK_OFFS
+    // to leave room for the ELFv2 linkage and parameter-save area. Funclets
+    // must reserve the same footprint before placing callee-save slots.
+    int funcletFrameSize   = roundUp(m_compiler->lvaOutgoingArgSpaceSize + FIRST_ARG_STACK_OFFS, STACK_ALIGN);
     int framePointerOffset = funcletFrameSize;
     int linkRegisterOffset = framePointerOffset + PPC_FRAME_POINTER_SAVE_SIZE;
     int calleeSavedOffset  = linkRegisterOffset + PPC_LINK_REGISTER_SAVE_SIZE;

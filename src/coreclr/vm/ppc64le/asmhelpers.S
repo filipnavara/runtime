@@ -294,8 +294,14 @@ LEAF_ENTRY JIT_PatchedCodeLast, _TEXT
 LEAF_END JIT_PatchedCodeLast, _TEXT
 
 NESTED_ENTRY ThePreStub, _TEXT, NoHandler
+    // Native unwinding can cross this frame if PreStubWorker rethrows a managed
+    // exception. Save LR in the caller linkage area before allocating our frame,
+    // matching the canonical PPC64 prolog shape used by CallDescrWorkerInternal.
+    mflr 0
+    std 0, 16(1)
     stdu 1, -PPC64_PRESTUB_STACK_FRAME_SIZE(1)
     .cfi_adjust_cfa_offset PPC64_PRESTUB_STACK_FRAME_SIZE
+    .cfi_offset 65, 16
     std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
     SAVE_TRANSITION_BLOCK 1
     ESTABLISH_TOC_FROM_PC LOCAL_LABEL(ThePreStubGetPc)

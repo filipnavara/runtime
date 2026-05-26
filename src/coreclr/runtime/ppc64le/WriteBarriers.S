@@ -1,25 +1,10 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+#include "AsmMacros_Shared.h"
+
 .abiversion 2
 .text
-
-.macro DEFINE_FUNC name
-    .p2align 2
-    .globl \name
-    .type \name,@function
-\name:
-.endm
-
-.macro DEFINE_LOCAL_FUNC name
-    .globl \name
-    .type \name,@function
-\name:
-.endm
-
-.macro END_FUNC name
-    .size \name, .-\name
-.endm
 
 .macro LOAD_GLOBAL target, symbol
     addis \target, 2, \symbol@toc@ha
@@ -94,23 +79,22 @@
 // JIT byref write barrier.
 //   r9: source address
 //   r11: destination address
-DEFINE_FUNC RhpByRefAssignRef
-DEFINE_FUNC RhpByRefAssignRefAVLocation1
+LEAF_ENTRY RhpByRefAssignRef, _TEXT
+ALTERNATE_ENTRY RhpByRefAssignRefAVLocation1
     ld 10, 0(9)
     addi 9, 9, 8
     b RhpCheckedAssignRef
-END_FUNC RhpByRefAssignRefAVLocation1
-END_FUNC RhpByRefAssignRef
+LEAF_END RhpByRefAssignRef, _TEXT
 
-DEFINE_FUNC RhpByRefAssignRefAVLocation2
+LEAF_ENTRY RhpByRefAssignRefAVLocation2, _TEXT
     trap
     blr
-END_FUNC RhpByRefAssignRefAVLocation2
+LEAF_END RhpByRefAssignRefAVLocation2, _TEXT
 
 // JIT checked write barrier placeholder.
 //   r10: object reference
 //   r11: destination address
-DEFINE_FUNC RhpCheckedAssignRef
+LEAF_ENTRY RhpCheckedAssignRef, _TEXT
     LOAD_GLOBAL 12, g_lowest_address
     cmpld 11, 12
     blt 0f
@@ -122,39 +106,36 @@ DEFINE_FUNC RhpCheckedAssignRef
     b RhpAssignRefPpc64le
 
 0:
-DEFINE_FUNC RhpCheckedAssignRefAVLocation
+ALTERNATE_ENTRY RhpCheckedAssignRefAVLocation
     std 10, 0(11)
     addi 11, 11, 8
     blr
-END_FUNC RhpCheckedAssignRefAVLocation
-END_FUNC RhpCheckedAssignRef
+LEAF_END RhpCheckedAssignRef, _TEXT
 
 // JIT unchecked write barrier placeholder.
 //   r10: object reference
 //   r11: destination address
-DEFINE_FUNC RhpAssignRefPowerPC64
-DEFINE_FUNC RhpAssignRefPpc64le
+LEAF_ENTRY RhpAssignRefPowerPC64, _TEXT
+ALTERNATE_ENTRY RhpAssignRefPpc64le
     sync
-DEFINE_LOCAL_FUNC RhpAssignRefAVLocation
+ALTERNATE_ENTRY RhpAssignRefAVLocation
     std 10, 0(11)
     INSERT_UNCHECKED_WRITE_BARRIER_CORE 11, 10
     addi 11, 11, 8
     blr
-END_FUNC RhpAssignRefAVLocation
-END_FUNC RhpAssignRefPpc64le
-END_FUNC RhpAssignRefPowerPC64
+LEAF_END RhpAssignRefPowerPC64, _TEXT
 
 // Standard ABI version used by NativeAOT helper binding.
 //   r3: destination address
 //   r4: object reference
-DEFINE_FUNC RhpAssignRef
+LEAF_ENTRY RhpAssignRef, _TEXT
     mr 11, 3
     mr 10, 4
     b RhpAssignRefPpc64le
-END_FUNC RhpAssignRef
+LEAF_END RhpAssignRef, _TEXT
 
-DEFINE_FUNC RhpCheckedLockCmpXchg
-DEFINE_FUNC RhpCheckedLockCmpXchgAVLocation
+LEAF_ENTRY RhpCheckedLockCmpXchg, _TEXT
+ALTERNATE_ENTRY RhpCheckedLockCmpXchgAVLocation
 1:
     ldarx 6, 0, 3
     cmpd 6, 5
@@ -168,12 +149,11 @@ DEFINE_FUNC RhpCheckedLockCmpXchgAVLocation
     sync
     mr 3, 6
     blr
-END_FUNC RhpCheckedLockCmpXchgAVLocation
-END_FUNC RhpCheckedLockCmpXchg
+LEAF_END RhpCheckedLockCmpXchg, _TEXT
 
-DEFINE_FUNC RhpCheckedXchg
+LEAF_ENTRY RhpCheckedXchg, _TEXT
     sync
-DEFINE_FUNC RhpCheckedXchgAVLocation
+ALTERNATE_ENTRY RhpCheckedXchgAVLocation
 1:
     ldarx 6, 0, 3
     stdcx. 4, 0, 3
@@ -182,5 +162,4 @@ DEFINE_FUNC RhpCheckedXchgAVLocation
     INSERT_CHECKED_WRITE_BARRIER_CORE 3, 4
     mr 3, 6
     blr
-END_FUNC RhpCheckedXchgAVLocation
-END_FUNC RhpCheckedXchg
+LEAF_END RhpCheckedXchg, _TEXT

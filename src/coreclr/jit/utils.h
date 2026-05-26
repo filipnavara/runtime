@@ -846,6 +846,8 @@ class FloatingPointUtils
 public:
     static double convertUInt64ToDouble(uint64_t u64);
 
+    static float convertInt64ToFloat(int64_t i64);
+
     static float convertUInt64ToFloat(uint64_t u64);
 
     static uint64_t convertDoubleToUInt64(double d);

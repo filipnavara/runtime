@@ -17295,13 +17295,13 @@ GenTree* Compiler::gtFoldExprUnaryConstLng(GenTreeUnOp* tree, GenTreeIntConCommo
                 {
                     double dconVal;
 
-                    if (tree->IsUnsigned() && (lconVal < 0))
+                    if (tree->IsUnsigned())
                     {
                         dconVal = FloatingPointUtils::convertUInt64ToFloat(static_cast<uint64_t>(lconVal));
                     }
                     else
                     {
-                        dconVal = static_cast<float>(lconVal);
+                        dconVal = FloatingPointUtils::convertInt64ToFloat(lconVal);
                     }
                     return gtBashTreeToConstDbl(tree, dconVal);
                 }

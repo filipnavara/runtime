@@ -2194,9 +2194,36 @@ double FloatingPointUtils::convertUInt64ToDouble(uint64_t uIntVal)
     return (double)uIntVal;
 }
 
+float FloatingPointUtils::convertInt64ToFloat(int64_t i64)
+{
+#ifdef HOST_POWERPC64
+    double result;
+    __asm__ volatile(
+        "mtfprd %0,%1\n\t"
+        "fcfids %0,%0\n\t"
+        "frsp %0,%0"
+        : "=&d"(result)
+        : "r"(i64));
+    return (float)result;
+#else
+    return (float)i64;
+#endif
+}
+
 float FloatingPointUtils::convertUInt64ToFloat(uint64_t u64)
 {
+#ifdef HOST_POWERPC64
+    double result;
+    __asm__ volatile(
+        "mtfprd %0,%1\n\t"
+        "fcfidus %0,%0\n\t"
+        "frsp %0,%0"
+        : "=&d"(result)
+        : "r"(u64));
+    return (float)result;
+#else
     return (float)u64;
+#endif
 }
 
 uint64_t FloatingPointUtils::convertDoubleToUInt64(double d)

@@ -4922,6 +4922,10 @@ void CodeGen::genIntToFloatCast(GenTree* treeNode)
     }
 
     GetEmitter()->emitIns_R_R(convertIns, emitActualTypeSize(dstType), targetReg, targetReg);
+    if (dstType == TYP_FLOAT)
+    {
+        GetEmitter()->emitIns_R_R(INS_frsp, EA_4BYTE, targetReg, targetReg);
+    }
 
     genProduceReg(treeNode);
 }

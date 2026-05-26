@@ -166,7 +166,18 @@ HCIMPLEND
 HCIMPL1_V(float, JIT_ULng2Flt, uint64_t val)
 {
     FCALL_CONTRACT;
+#ifdef TARGET_POWERPC64
+    double result;
+    __asm__ volatile(
+        "mtfprd %0,%1\n\t"
+        "fcfidus %0,%0\n\t"
+        "frsp %0,%0"
+        : "=&d"(result)
+        : "r"(val));
+    return (float)result;
+#else
     return (float)val;
+#endif
 }
 HCIMPLEND
 
@@ -182,7 +193,18 @@ HCIMPLEND
 HCIMPL1_V(float, JIT_Lng2Flt, int64_t val)
 {
     FCALL_CONTRACT;
+#ifdef TARGET_POWERPC64
+    double result;
+    __asm__ volatile(
+        "mtfprd %0,%1\n\t"
+        "fcfids %0,%0\n\t"
+        "frsp %0,%0"
+        : "=&d"(result)
+        : "r"(val));
+    return (float)result;
+#else
     return (float)val;
+#endif
 }
 HCIMPLEND
 

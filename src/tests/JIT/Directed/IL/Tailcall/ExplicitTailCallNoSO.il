@@ -25,6 +25,11 @@
         type([TestLibrary]TestLibrary.Utilities)
         string[2] ('IsNativeAot' 'IsX86')
     }
+    .custom instance void [Microsoft.DotNet.XUnitExtensions]Xunit.ActiveIssueAttribute::.ctor(string, class [mscorlib]System.Type, string[]) = {
+        string('PPC64LE explicit portable tailcall dispatch currently grows the stack')
+        type([TestLibrary]TestLibrary.PlatformDetection)
+        string[1] ('IsPpc64leProcess')
+    }
     .entrypoint
     // Code size       44 (0x2c)
     .maxstack  2

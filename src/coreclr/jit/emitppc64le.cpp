@@ -296,6 +296,16 @@ static bool ppcOffsetFitsInstruction(instruction ins, ssize_t offset)
     }
 }
 
+static bool ppcLoadStoreOpNeedsOffsetTemp(instruction ins, ssize_t offset)
+{
+    if ((ins == INS_lwa) && emitter::isValidSimm16(offset))
+    {
+        return false;
+    }
+
+    return !ppcOffsetFitsInstruction(ins, offset);
+}
+
 static ssize_t ppcSignExtend16(uint64_t value)
 {
     ssize_t part = static_cast<ssize_t>(value & 0xFFFF);
@@ -899,7 +909,7 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
         regNumber baseReg = indir->Base()->GetRegNum();
         regNumber tmpReg  = REG_NA;
 
-        if (!ppcOffsetFitsInstruction(ins, offset))
+        if (ppcLoadStoreOpNeedsOffsetTemp(ins, offset))
         {
             tmpReg = codeGen->internalRegisters.GetSingle(indir);
             noway_assert(emitInsIsLoad(ins) || (tmpReg != dataReg));
@@ -913,7 +923,7 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
     regNumber baseReg = addr->GetRegNum();
     regNumber tmpReg  = REG_NA;
 
-    if (!ppcOffsetFitsInstruction(ins, offset))
+    if (ppcLoadStoreOpNeedsOffsetTemp(ins, offset))
     {
         tmpReg = codeGen->internalRegisters.GetSingle(indir);
         noway_assert(emitInsIsLoad(ins) || (tmpReg != dataReg));
@@ -1861,7 +1871,7 @@ void emitter::emitIns_Call(const EmitCallParams& params)
     emitThisByrefRegs = byrefRegs;
 
     id->idSetIsNoGC(params.isJump || params.noSafePoint || emitNoGChelper(params.methHnd));
-    id->idIns(params.callType == EC_FUNC_TOKEN ? INS_bl : INS_bctrl);
+    id->idIns(params.callType == EC_FUNC_TOKEN ? (params.isJump ? INS_b : INS_bl) : (params.isJump ? INS_bctr : INS_bctrl));
     id->idInsOpt(INS_OPTS_C);
     if (params.callType == EC_FUNC_TOKEN)
     {
@@ -1928,24 +1938,24 @@ unsigned emitter::emitOutputCall(BYTE* dst, instrDesc* id)
 
     if (id->idIsDspReloc())
     {
-        assert(id->idIns() == INS_bl);
-        emitOutput_Instr(dst, emitInsCode(INS_bl));
+        assert((id->idIns() == INS_b) || (id->idIns() == INS_bl));
+        emitOutput_Instr(dst, emitInsCode(id->idIns()));
         emitRecordRelocation(dst, id->idAddr()->iiaAddr, CorInfoReloc::PPC64_REL24);
         emitOutput_Instr(dst + sizeof(code_t), emitInsCode(INS_nop));
     }
     else if (id->idIsCnsReloc())
     {
-        assert(id->idIns() == INS_bctrl);
+        assert((id->idIns() == INS_bctr) || (id->idIns() == INS_bctrl));
         emitOutput_Instr(dst, ppcEncodeDForm(emitInsCode(INS_addis), REG_R12, REG_R2, 0));
         emitOutput_Instr(dst + sizeof(code_t), ppcEncodeDForm(emitInsCode(INS_ld), REG_R12, REG_R12, 0));
         emitRecordRelocation(dst, id->idAddr()->iiaAddr, CorInfoReloc::PPC64_GOT16);
         emitOutput_Instr(dst + (2 * sizeof(code_t)), ppcEncodeMtspr(emitInsCode(INS_mtctr), REG_R12, 9));
-        emitOutput_Instr(dst + (3 * sizeof(code_t)), emitInsCode(INS_bctrl));
+        emitOutput_Instr(dst + (3 * sizeof(code_t)), emitInsCode(id->idIns()));
     }
     else
     {
         emitOutput_Instr(dst, ppcEncodeMtspr(emitInsCode(INS_mtctr), id->idReg3(), 9));
-        emitOutput_Instr(dst + sizeof(code_t), emitInsCode(INS_bctrl));
+        emitOutput_Instr(dst + sizeof(code_t), emitInsCode(id->idIns()));
     }
 
     if (id->idGCref() == GCT_GCREF)

@@ -143,13 +143,6 @@ static int ppcGetLclFrameOffset(Compiler* compiler, GenTreeLclVarCommon* lclNode
     return ppcGetLclFrameOffset(compiler, lclNode->GetLclNum(), lclNode->GetLclOffs(), baseReg);
 }
 
-static bool ppcOffsetRangeFitsSimm16(int offset, unsigned size)
-{
-    assert(size > 0);
-    ssize_t lastOffset = static_cast<ssize_t>(offset) + static_cast<ssize_t>(size) - 1;
-    return emitter::isValidSimm16(offset) && emitter::isValidSimm16(lastOffset);
-}
-
 static bool ppcOffsetFitsInstruction(instruction ins, ssize_t offset)
 {
     if (!emitter::isValidSimm16(offset))
@@ -172,6 +165,49 @@ static bool ppcOffsetFitsInstruction(instruction ins, ssize_t offset)
         default:
             return true;
     }
+}
+
+static instruction ppcStoreInsForSize(unsigned size)
+{
+    switch (size)
+    {
+        case 1:
+            return INS_stb;
+        case 2:
+            return INS_sth;
+        case 4:
+            return INS_stw;
+        case 8:
+            return INS_std;
+        default:
+            unreached();
+    }
+}
+
+static bool ppcCpBlkUnrollDstNeedsOffsetTemp(ssize_t offset, unsigned size)
+{
+    for (unsigned regSize = 2 * REGSIZE_BYTES; size >= regSize; size -= regSize, offset += regSize)
+    {
+        if (!ppcOffsetFitsInstruction(INS_std, offset) || !ppcOffsetFitsInstruction(INS_std, offset + 8))
+        {
+            return true;
+        }
+    }
+
+    for (unsigned regSize = REGSIZE_BYTES; size > 0; size -= regSize, offset += regSize)
+    {
+        while (regSize > size)
+        {
+            regSize /= 2;
+        }
+
+        if (!ppcOffsetFitsInstruction(ppcStoreInsForSize(regSize), offset))
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static bool ppcLclOffsetFitsInstruction(Compiler* compiler, instruction ins, unsigned lclNum, unsigned lclOffs)
@@ -232,9 +268,59 @@ void CodeGen::genFnEpilog(BasicBlock* block)
 
     m_compiler->unwindBegEpilog();
 
-    genPopCalleeSavedRegisters(/* jmpEpilog */ false);
-    GetEmitter()->emitIns(INS_blr);
-    m_compiler->unwindReturn(REG_NA);
+    bool jmpEpilog = block->HasFlag(BBF_HAS_JMP);
+    if (jmpEpilog)
+    {
+        SetHasTailCalls(true);
+
+        noway_assert(block->KindIs(BBJ_RETURN));
+        noway_assert(block->GetFirstLIRNode() != nullptr);
+
+        GenTree* jmpNode = block->lastNode();
+        noway_assert(jmpNode->OperIs(GT_JMP));
+
+        CORINFO_METHOD_HANDLE methHnd = reinterpret_cast<CORINFO_METHOD_HANDLE>(jmpNode->AsVal()->gtVal1);
+        CORINFO_CONST_LOOKUP  addrInfo;
+        addrInfo.addr       = nullptr;
+        addrInfo.accessType = IAT_VALUE;
+        m_compiler->info.compCompHnd->getFunctionEntryPoint(methHnd, &addrInfo);
+
+        EmitCallParams params;
+        params.methHnd = methHnd;
+
+        switch (addrInfo.accessType)
+        {
+            case IAT_VALUE:
+                params.callType = EC_FUNC_TOKEN;
+                params.addr     = addrInfo.addr;
+                break;
+
+            case IAT_PVALUE:
+                instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_INDIRECT_CALL_TARGET_REG,
+                                        reinterpret_cast<ssize_t>(addrInfo.addr));
+                GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_INDIRECT_CALL_TARGET_REG,
+                                            REG_INDIRECT_CALL_TARGET_REG, 0);
+                params.callType = EC_INDIR_R;
+                params.ireg     = REG_INDIRECT_CALL_TARGET_REG;
+                regSet.verifyRegUsed(params.ireg);
+                break;
+
+            default:
+                NO_WAY("Unsupported JMP indirection");
+                break;
+        }
+
+        genPopCalleeSavedRegisters(/* jmpEpilog */ true);
+
+        params.isJump = true;
+        genEmitCallWithCurrentGC(params);
+    }
+    else
+    {
+        genPopCalleeSavedRegisters(/* jmpEpilog */ false);
+        GetEmitter()->emitIns(INS_blr);
+        m_compiler->unwindReturn(REG_NA);
+    }
 
     m_compiler->unwindEndEpilog();
 }
@@ -2459,8 +2545,7 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* cpBlkNode)
             initialDstOffset  = ppcGetLclFrameOffset(m_compiler, dstLclNum, dstOffset, &baseReg);
         }
 
-        containedDstNeedsLargeOffsetTemp = !ppcOffsetRangeFitsSimm16(initialDstOffset, totalSize) ||
-                                           !ppcOffsetFitsInstruction(INS_std, initialDstOffset);
+        containedDstNeedsLargeOffsetTemp = ppcCpBlkUnrollDstNeedsOffsetTemp(initialDstOffset, totalSize);
     }
 
     regNumber dstTmpReg = containedDstNeedsLargeOffsetTemp ? internalRegisters.Extract(cpBlkNode, RBM_ALLINT) : REG_NA;

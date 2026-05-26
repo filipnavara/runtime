@@ -49,14 +49,50 @@ static bool ppc64leNeedsLclOffsetTemp(Compiler* compiler, instruction ins, GenTr
     return !ppc64leOffsetFitsInstruction(ins, offset);
 }
 
-static bool ppc64leOffsetRangeFitsSimm16(int offset, unsigned size)
+static instruction ppc64leStoreInsForSize(unsigned size)
 {
-    assert(size > 0);
-    ssize_t lastOffset = static_cast<ssize_t>(offset) + static_cast<ssize_t>(size) - 1;
-    return emitter::isValidSimm16(offset) && emitter::isValidSimm16(lastOffset);
+    switch (size)
+    {
+        case 1:
+            return INS_stb;
+        case 2:
+            return INS_sth;
+        case 4:
+            return INS_stw;
+        case 8:
+            return INS_std;
+        default:
+            unreached();
+    }
 }
 
-static bool ppc64leContainedAddrNeedsLargeOffsetTemp(Compiler* compiler, GenTree* addr, unsigned size)
+static bool ppc64leCpBlkUnrollDstNeedsOffsetTemp(ssize_t offset, unsigned size)
+{
+    for (unsigned regSize = 2 * REGSIZE_BYTES; size >= regSize; size -= regSize, offset += regSize)
+    {
+        if (!ppc64leOffsetFitsInstruction(INS_std, offset) || !ppc64leOffsetFitsInstruction(INS_std, offset + 8))
+        {
+            return true;
+        }
+    }
+
+    for (unsigned regSize = REGSIZE_BYTES; size > 0; size -= regSize, offset += regSize)
+    {
+        while (regSize > size)
+        {
+            regSize /= 2;
+        }
+
+        if (!ppc64leOffsetFitsInstruction(ppc64leStoreInsForSize(regSize), offset))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool ppc64leContainedAddrNeedsOffsetTemp(Compiler* compiler, GenTree* addr, instruction ins)
 {
     if (!addr->isContained())
     {
@@ -77,7 +113,31 @@ static bool ppc64leContainedAddrNeedsLargeOffsetTemp(Compiler* compiler, GenTree
                  addr->AsLclVarCommon()->GetLclOffs();
     }
 
-    return !ppc64leOffsetRangeFitsSimm16(offset, size) || !ppc64leOffsetFitsInstruction(INS_std, offset);
+    return !ppc64leOffsetFitsInstruction(ins, offset);
+}
+
+static bool ppc64leContainedCpBlkDstNeedsOffsetTemp(Compiler* compiler, GenTree* addr, unsigned size)
+{
+    if (!addr->isContained())
+    {
+        return false;
+    }
+
+    ssize_t offset = 0;
+    if (addr->OperIsAddrMode())
+    {
+        offset = addr->AsAddrMode()->Offset();
+    }
+    else
+    {
+        assert(addr->OperIs(GT_LCL_ADDR));
+
+        bool fpBased = false;
+        offset       = compiler->lvaFrameAddress(addr->AsLclVarCommon()->GetLclNum(), &fpBased) +
+                 addr->AsLclVarCommon()->GetLclOffs();
+    }
+
+    return ppc64leCpBlkUnrollDstNeedsOffsetTemp(offset, size);
 }
 
 int LinearScan::BuildNode(GenTree* tree)
@@ -639,8 +699,7 @@ int LinearScan::BuildIndir(GenTreeIndir* indirTree)
     }
 
     GenTree*       addr       = indirTree->Addr();
-    const unsigned accessSize = indirTree->OperIs(GT_NULLCHECK) ? 1 : genTypeSize(indirTree);
-    if ((addr->isContained() && ppc64leContainedAddrNeedsLargeOffsetTemp(m_compiler, addr, accessSize)) ||
+    if ((addr->isContained() && ppc64leContainedAddrNeedsOffsetTemp(m_compiler, addr, ins)) ||
         (!addr->isContained() && !ppc64leOffsetFitsInstruction(ins, indirTree->Offset())))
     {
         buildInternalIntRegisterDefForNode(indirTree);
@@ -953,7 +1012,7 @@ int LinearScan::BuildBlockStore(GenTreeBlk* blkNode)
                 {
                     buildInternalIntRegisterDefForNode(blkNode);
                 }
-                if (ppc64leContainedAddrNeedsLargeOffsetTemp(m_compiler, dstAddr, size))
+                if (ppc64leContainedCpBlkDstNeedsOffsetTemp(m_compiler, dstAddr, size))
                 {
                     buildInternalIntRegisterDefForNode(blkNode);
                 }

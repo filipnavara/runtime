@@ -267,18 +267,7 @@ public:
 
         if (setTarget)
         {
-#if defined(TARGET_POWERPC64)
-            // PPC64 ELFv2 reverse P/Invoke bodies have a two-instruction
-            // global-entry prefix that derives r2 from r12. Keep UMEntry
-            // thunks on the prestub path
-            // so TheUMEntryPrestub tailcalls the resolved target with r12 set to
-            // the target address. The generic StubPrecode dispatch path keeps
-            // r12 as the secret parameter and is therefore not a valid patched
-            // fast path for these entrypoints.
-            setTarget = false;
-#else
             m_pUMEntryThunk->SetTargetUnconditional(entryPoint);
-#endif
         }
 
 #ifdef _DEBUG

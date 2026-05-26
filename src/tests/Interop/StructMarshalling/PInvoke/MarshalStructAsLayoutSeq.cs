@@ -59,6 +59,7 @@ public class Managed
     [Fact]
     [ActiveIssue("needs triage", TestRuntimes.Mono)]
     [ActiveIssue("https://github.com/dotnet/runtime/issues/91388", typeof(TestLibrary.PlatformDetection), nameof(TestLibrary.PlatformDetection.PlatformDoesNotSupportNativeTestAssets))]
+    [ActiveIssue("PPC64LE unmanaged struct by-value and HFA aggregate interop is not implemented yet", typeof(TestLibrary.PlatformDetection), nameof(TestLibrary.PlatformDetection.IsPpc64leProcess))]
     public static int TestEntryPoint()
     {
         RunMarshalSeqStructAsParamByVal();

@@ -4201,7 +4201,14 @@ void CodeGen::genZeroInitFrameUsingBlockInit(int untrLclHi, int untrLclLo, regNu
 
     if (bytes >= (4 * REGSIZE_BYTES))
     {
-        regNumber countReg = (rAddr != REG_TMP_0) ? REG_TMP_0 : REG_SCRATCH;
+        regMaskTP availMask = regSet.rsGetModifiedRegsMask() | RBM_INT_CALLEE_TRASH;
+        availMask &= ~calleeRegArgMaskLiveIn;
+        availMask &= ~genRegMask(initReg);
+
+        noway_assert(availMask != RBM_NONE);
+        regMaskTP countMask = genFindLowestBit(availMask);
+        regNumber countReg  = genRegNumFromMask(countMask);
+
         noway_assert((genRegMask(countReg) & calleeRegArgMaskLiveIn) == 0);
 
         instGen_Set_Reg_To_Imm(EA_PTRSIZE, countReg, bytes / REGSIZE_BYTES);

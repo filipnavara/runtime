@@ -3042,8 +3042,8 @@ private:
     // EMITTER_STATS output for various statistics related to this.
     //
 
-#if defined(TARGET_ARMARCH) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
-// ARM32/64, LoongArch and RISC-V can require a bigger prolog instruction group. One scenario
+#if defined(TARGET_ARMARCH) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+// ARM32/64, LoongArch, RISC-V, and PPC64LE can require a bigger prolog instruction group. One scenario
 // is where a function uses all the incoming integer and single-precision floating-point arguments,
 // and must store them all to the frame on entry. If the frame is very large, we generate
 // ugly code like:
@@ -3352,7 +3352,7 @@ private:
     void        emitPrintLabel(const insGroup* ig) const;
     const char* emitLabelString(const insGroup* ig) const;
 
-#if defined(TARGET_ARMARCH) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_ARMARCH) || defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 
     void emitGetInstrDescs(insGroup* ig, instrDesc** id, int* insCnt);
 
@@ -3366,7 +3366,7 @@ private:
 
     static void emitGenerateUnwindNop(instrDesc* id, void* context);
 
-#endif // TARGET_ARMARCH || TARGET_LOONGARCH64
+#endif // TARGET_ARMARCH || TARGET_LOONGARCH64 || TARGET_RISCV64 || TARGET_POWERPC64
 
 #if EMIT_BACKWARDS_NAVIGATION
     bool emitPrevID(insGroup*& ig, instrDesc*& id);

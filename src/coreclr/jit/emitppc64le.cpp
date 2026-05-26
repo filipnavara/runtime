@@ -2051,26 +2051,6 @@ void emitter::emitSetShortJump(instrDescJmp* id)
     id->idjShort = true;
 }
 
-bool emitter::emitIsFuncEnd(emitLocation* emitLoc, emitLocation* emitLocNextFragment)
-{
-    assert(emitLoc != nullptr);
-    insGroup* ig = emitLoc->GetIG();
-    return (ig == nullptr) || (ig->igNext == nullptr) ||
-           ((emitLocNextFragment != nullptr) && (ig->igNext == emitLocNextFragment->GetIG()));
-}
-
-void emitter::emitSplit(emitLocation*         startLoc,
-                        emitLocation*         endLoc,
-                        UNATIVE_OFFSET        maxSplitSize,
-                        void*                 context,
-                        emitSplitCallbackType callbackFunc)
-{
-}
-
-void emitter::emitUnwindNopPadding(emitLocation* locFrom, Compiler* comp)
-{
-}
-
 #if defined(DEBUG) || defined(LATE_DISASM)
 emitter::insExecutionCharacteristics emitter::getInsExecutionCharacteristics(instrDesc* id)
 {

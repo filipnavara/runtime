@@ -586,7 +586,9 @@ by useful validation.
 - Varargs are not implemented in the PPC64LE ABI classifier and
   `genJmpPlaceVarArgs`.
 - Fast tail calls are disabled. Codegen still has defensive NYI paths for fast
-  tailcall stack argument placement and call emission.
+  tailcall stack argument placement and call emission. Tests that require
+  explicit or portable tailcalls to avoid stack growth should remain marked as
+  active PPC64LE issues until this path is implemented.
 - SIMD/VSX and hardware intrinsics are not implemented.
 - Floating-point callee-saved registers F14-F31 are not available to LSRA until
   prolog/epilog save and restore support is implemented.

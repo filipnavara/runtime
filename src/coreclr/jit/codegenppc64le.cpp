@@ -3329,10 +3329,14 @@ void CodeGen::genLclHeap(GenTree* tree)
 
     if (m_compiler->lvaOutgoingArgSpaceSize > 0)
     {
-        unsigned outgoingArgSpaceAligned = roundUp(m_compiler->lvaOutgoingArgSpaceSize, STACK_ALIGN);
-        tempReg                          = internalRegisters.Extract(tree);
-        genInstrWithConstant(INS_addi, EA_PTRSIZE, REG_SPBASE, REG_SPBASE, outgoingArgSpaceAligned, tempReg);
-        stackAdjustment += outgoingArgSpaceAligned;
+        // The PPC64LE outgoing-call area starts with the ELFv2 linkage and
+        // parameter-save prefix. Move the whole call area out of the way so
+        // localloc buffers do not overlap later outgoing stack arguments.
+        unsigned outgoingCallAreaAligned =
+            roundUp(m_compiler->lvaOutgoingArgSpaceSize + FIRST_ARG_STACK_OFFS, STACK_ALIGN);
+        tempReg = internalRegisters.Extract(tree);
+        genInstrWithConstant(INS_addi, EA_PTRSIZE, REG_SPBASE, REG_SPBASE, outgoingCallAreaAligned, tempReg);
+        stackAdjustment += outgoingCallAreaAligned;
     }
 
     if (size->IsCnsIntOrI())

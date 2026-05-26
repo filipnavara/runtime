@@ -689,12 +689,13 @@ namespace ILCompiler.Reflection.ReadyToRun
                 case Machine.Amd64:
                 case Machine.Arm64:
                 case Machine.LoongArch64:
+                case Machine.PowerPC:
                 case Machine.RiscV64:
                     _pointerSize = 8;
                     break;
 
                 default:
-                    throw new NotImplementedException(Machine.ToString());
+                    throw new NotImplementedException(_machine.ToString());
             }
 
             _imageBase = CompositeReader.ImageBase;
@@ -1538,12 +1539,13 @@ namespace ILCompiler.Reflection.ReadyToRun
                         case Machine.Amd64:
                         case Machine.Arm64:
                         case Machine.LoongArch64:
+                        case Machine.PowerPC:
                         case Machine.RiscV64:
                             entrySize = 8;
                             break;
 
                         default:
-                            throw new NotImplementedException(Machine.ToString());
+                            throw new NotImplementedException(_machine.ToString());
                     }
                 }
                 int entryCount = 0;

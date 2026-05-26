@@ -197,6 +197,9 @@ namespace R2RDump
                     // Instructions are dumped as 4-byte hexadecimal integers
                     Machine.LoongArch64 => 4 * 2 + 1,
 
+                    // Instructions are dumped as 4-byte hexadecimal integers
+                    Machine.PowerPC => 4 * 2 + 1,
+
                     // Instructions are either 2 or 4 bytes long
                     Machine.RiscV64 => 4 * 3,
 

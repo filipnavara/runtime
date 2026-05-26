@@ -63,7 +63,7 @@ class CoreclrArguments:
         self.require_built_core_root = require_built_core_root
         self.require_built_test_dir = require_built_test_dir
 
-        self.valid_arches = ["x64", "x86", "arm", "arm64", "loongarch64", "riscv64", "wasm"]
+        self.valid_arches = ["x64", "x86", "arm", "arm64", "loongarch64", "riscv64", "ppc64le", "wasm"]
         self.valid_build_types = ["Debug", "Checked", "Release"]
         self.valid_host_os = ["windows", "osx", "linux", "illumos", "solaris", "haiku", "freebsd", "browser", "android", "wasi"]
 
@@ -199,7 +199,7 @@ class CoreclrArguments:
     def provide_default_arch():
         """ Return a string representing the current processor architecture.
 
-            Returns one of: x64, x86, arm, armel, arm64.
+            Returns one of: x64, x86, arm, armel, arm64, loongarch64, riscv64, ppc64le.
         """
 
         platform_machine = platform.machine().lower()
@@ -213,6 +213,12 @@ class CoreclrArguments:
             return "armel"
         elif platform_machine == "aarch64" or platform_machine == "arm64":
             return "arm64"
+        elif platform_machine == "loongarch64":
+            return "loongarch64"
+        elif platform_machine == "riscv64":
+            return "riscv64"
+        elif platform_machine == "ppc64le":
+            return "ppc64le"
         else:
             print("Unknown architecture: %s" % platform_machine)
             sys.exit(1)

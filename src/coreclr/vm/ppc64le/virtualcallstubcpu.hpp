@@ -7,12 +7,15 @@
 #define USES_LOOKUP_STUBS 1
 
 #define DISPATCH_STUB_FIRST_DWORD 0xe8030000 // ld r0,0(r3)
-#define RESOLVE_STUB_FIRST_DWORD  0x3d400000 // addis r10,r0,imm16
+#define RESOLVE_STUB_FIRST_DWORD  0x3d800000 // addis r12,r0,imm16
 #define VTABLECALL_STUB_FIRST_DWORD 0xe9630000 // ld r11,0(r3)
-#define LOOKUP_STUB_FIRST_DWORD   0x3d400000 // addis r10,r0,imm16
+#define LOOKUP_STUB_FIRST_DWORD   0x3d800000 // addis r12,r0,imm16
 
 struct Ppc64StubEmitter
 {
+    // These stubs run in the middle of managed calls. Preserve r10: it is the
+    // last integer argument register on PPC64LE and can hold a real user arg.
+    // r0 is safe as a raw scratch, but not as a D-form base register.
     static DWORD Addis(int rt, int ra, UINT16 imm)
     {
         LIMITED_METHOD_CONTRACT;
@@ -74,6 +77,12 @@ struct Ppc64StubEmitter
         *p++ = 0x7c0903a6u | (reg << 21); // mtctr reg
         *p++ = 0x4e800420u;               // bctr
     }
+
+    static void EmitMoveRegister(DWORD*& p, int rd, int rs)
+    {
+        LIMITED_METHOD_CONTRACT;
+        *p++ = 0x7c000378u | (rs << 21) | (rd << 16) | (rs << 11); // mr rd, rs
+    }
 };
 
 struct LookupStub
@@ -85,7 +94,7 @@ struct LookupStub
 private:
     friend struct LookupHolder;
 
-    DWORD _entryPoint[9];
+    DWORD _entryPoint[10];
     PCODE _resolveWorkerTarget;
     size_t _token;
 };
@@ -101,10 +110,12 @@ public:
     void Initialize(LookupHolder* pLookupHolderRX, PCODE resolveWorkerTarget, size_t dispatchToken)
     {
         DWORD* p = _stub._entryPoint;
-        Ppc64StubEmitter::EmitLoadImm64(p, 10, reinterpret_cast<UINT64>(&pLookupHolderRX->_stub));
-        *p++ = Ppc64StubEmitter::Ld(12, offsetof(LookupStub, _token), 10);
-        *p++ = Ppc64StubEmitter::Ld(10, offsetof(LookupStub, _resolveWorkerTarget), 10);
-        Ppc64StubEmitter::EmitTailBranchRegister(p, 10);
+        Ppc64StubEmitter::EmitLoadImm64(p, 12, reinterpret_cast<UINT64>(&pLookupHolderRX->_stub));
+        *p++ = Ppc64StubEmitter::Ld(0, offsetof(LookupStub, _token), 12);
+        *p++ = Ppc64StubEmitter::Ld(12, offsetof(LookupStub, _resolveWorkerTarget), 12);
+        *p++ = 0x7c0903a6u | (12 << 21); // mtctr r12
+        Ppc64StubEmitter::EmitMoveRegister(p, 12, 0);
+        *p++ = 0x4e800420u; // bctr
         _ASSERTE(p == &_stub._entryPoint[ARRAY_SIZE(_stub._entryPoint)]);
 
         _stub._resolveWorkerTarget = resolveWorkerTarget;
@@ -141,7 +152,7 @@ struct DispatchStub
 private:
     friend struct DispatchHolder;
 
-    DWORD _entryPoint[15];
+    DWORD _entryPoint[25];
     size_t _expectedMT;
     PCODE _implTarget;
     PCODE _failTarget;
@@ -160,11 +171,13 @@ struct DispatchHolder
         DWORD* p = _stub._entryPoint;
         Ppc64StubEmitter::EmitLoadImm64(p, 12, reinterpret_cast<UINT64>(&pDispatchHolderRX->_stub));
         *p++ = Ppc64StubEmitter::Ld(0, 0, 3);
-        *p++ = Ppc64StubEmitter::Ld(10, offsetof(DispatchStub, _expectedMT), 12);
-        *p++ = Ppc64StubEmitter::Cmpd(0, 10);
-        *p++ = Ppc64StubEmitter::Bne(16);
+        *p++ = Ppc64StubEmitter::Ld(12, offsetof(DispatchStub, _expectedMT), 12);
+        *p++ = Ppc64StubEmitter::Cmpd(0, 12);
+        *p++ = Ppc64StubEmitter::Bne(36);
+        Ppc64StubEmitter::EmitLoadImm64(p, 12, reinterpret_cast<UINT64>(&pDispatchHolderRX->_stub));
         *p++ = Ppc64StubEmitter::Ld(12, offsetof(DispatchStub, _implTarget), 12);
         Ppc64StubEmitter::EmitTailBranchRegister(p, 12);
+        Ppc64StubEmitter::EmitLoadImm64(p, 12, reinterpret_cast<UINT64>(&pDispatchHolderRX->_stub));
         *p++ = Ppc64StubEmitter::Ld(12, offsetof(DispatchStub, _failTarget), 12);
         Ppc64StubEmitter::EmitTailBranchRegister(p, 12);
         _ASSERTE(p == &_stub._entryPoint[ARRAY_SIZE(_stub._entryPoint)]);
@@ -201,9 +214,9 @@ struct ResolveStub
 private:
     friend struct ResolveHolder;
 
-    DWORD _resolveEntryPoint[9];
-    DWORD _slowEntryPoint[9];
-    DWORD _failEntryPoint[10];
+    DWORD _resolveEntryPoint[10];
+    DWORD _slowEntryPoint[10];
+    DWORD _failEntryPoint[11];
     UINT32 _hashedToken;
     INT32* _pCounter;
     size_t _cacheAddress;
@@ -224,10 +237,12 @@ struct ResolveHolder
                     INT32* counterAddr)
     {
         auto emitSlowPath = [](DWORD*& p, ResolveStub* pStubRX) {
-            Ppc64StubEmitter::EmitLoadImm64(p, 10, reinterpret_cast<UINT64>(pStubRX));
-            *p++ = Ppc64StubEmitter::Ld(12, offsetof(ResolveStub, _token), 10);
-            *p++ = Ppc64StubEmitter::Ld(10, offsetof(ResolveStub, _resolveWorkerTarget), 10);
-            Ppc64StubEmitter::EmitTailBranchRegister(p, 10);
+            Ppc64StubEmitter::EmitLoadImm64(p, 12, reinterpret_cast<UINT64>(pStubRX));
+            *p++ = Ppc64StubEmitter::Ld(0, offsetof(ResolveStub, _token), 12);
+            *p++ = Ppc64StubEmitter::Ld(12, offsetof(ResolveStub, _resolveWorkerTarget), 12);
+            *p++ = 0x7c0903a6u | (12 << 21); // mtctr r12
+            Ppc64StubEmitter::EmitMoveRegister(p, 12, 0);
+            *p++ = 0x4e800420u; // bctr
         };
 
         DWORD* p = _stub._resolveEntryPoint;

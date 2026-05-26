@@ -11,7 +11,7 @@ function print_usage {
     echo 'Optional arguments:'
     echo '  -h|--help                        : Show usage information.'
     echo '  -v, --verbose                    : Show output from each test.'
-    echo '  <arch>                           : One of x64, x86, arm, arm64, loongarch64, riscv64, wasm. Defaults to current architecture.'
+    echo '  <arch>                           : One of x64, x86, arm, arm64, loongarch64, riscv64, ppc64le, wasm. Defaults to current architecture.'
     echo '  <build configuration>            : One of debug, checked, release. Defaults to debug.'
     echo '  android                          : Set build OS to Android.'
     echo '  wasi                             : Set build OS to WASI.'
@@ -112,6 +112,9 @@ do
             ;;
         wasm)
             buildArch="wasm"
+            ;;
+        ppc64le)
+            buildArch="ppc64le"
             ;;
         android)
             buildOS="android"

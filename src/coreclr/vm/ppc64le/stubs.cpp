@@ -292,7 +292,7 @@ void HijackFrame::UpdateRegDisplay_Impl(const PREGDISPLAY pRD, bool updateFloats
     pRD->pCurrentContextPointers->R28 = &m_Args->R28;
     pRD->pCurrentContextPointers->R29 = &m_Args->R29;
     pRD->pCurrentContextPointers->R30 = &m_Args->R30;
-    pRD->pCurrentContextPointers->Link = &m_Args->Link;
+    pRD->pCurrentContextPointers->Link = NULL;
 
     SyncRegDisplayToCurrentContext(pRD);
 }

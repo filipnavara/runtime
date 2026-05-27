@@ -36,7 +36,7 @@ namespace TestLibrary
                                                 : true);
 
         public static bool IsICorProfilerEnabled => !Utilities.IsNativeAot && !IsMonoRuntime;
-        public static bool IsICorProfilerEnterLeaveHooksEnabled => IsICorProfilerEnabled && !Utilities.IsCoreClrInterpreter;
+        public static bool IsICorProfilerEnterLeaveHooksEnabled => IsICorProfilerEnabled && !Utilities.IsCoreClrInterpreter && !IsPpc64leProcess;
 
         public static bool IsRareEnumsSupported => !Utilities.IsNativeAot;
 

@@ -593,6 +593,11 @@ by useful validation.
   tailcall stack argument placement and call emission. Tests that require
   explicit or portable tailcalls to avoid stack growth should remain marked as
   active PPC64LE issues until this path is implemented.
+- ICorProfiler enter/leave/tailcall hooks are not implemented. The PPC64LE VM
+  currently has placeholder `Profile*Help` support in `ppc64le/stubs.cpp` and
+  empty `ProfileEnterNaked`, `ProfileLeaveNaked`, and `ProfileTailcallNaked`
+  stubs, so ELT/inlining profiler tests should remain skipped until the naked
+  stubs and `ProfileArgIterator` support are implemented.
 - SIMD/VSX and hardware intrinsics are not implemented.
 - Floating-point callee-saved registers F14-F31 are not available to LSRA until
   prolog/epilog save and restore support is implemented.

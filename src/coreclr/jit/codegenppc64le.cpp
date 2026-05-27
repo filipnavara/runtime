@@ -4832,7 +4832,7 @@ void CodeGen::genCkfinite(GenTree* treeNode)
 
         GetEmitter()->emitIns_R_R(INS_xscvdpspn, EA_4BYTE, tmpFltReg, fpReg);
         GetEmitter()->emitIns_R_R(INS_mffprwz, EA_4BYTE, intReg, tmpFltReg);
-        GetEmitter()->emitIns_R_R_I_I(INS_rldicl, EA_8BYTE, intReg, intReg, 64 - 23, 23);
+        GetEmitter()->emitIns_R_R_I_I(INS_rldicl, EA_8BYTE, intReg, intReg, 64 - 23, 56);
         GetEmitter()->emitIns_R_R_I(INS_xori, EA_8BYTE, intReg, intReg, 0xFF);
     }
     else
@@ -4840,7 +4840,7 @@ void CodeGen::genCkfinite(GenTree* treeNode)
         assert(targetType == TYP_DOUBLE);
 
         GetEmitter()->emitIns_R_R(INS_mffprd, EA_8BYTE, intReg, fpReg);
-        GetEmitter()->emitIns_R_R_I_I(INS_rldicl, EA_8BYTE, intReg, intReg, 64 - 52, 52);
+        GetEmitter()->emitIns_R_R_I_I(INS_rldicl, EA_8BYTE, intReg, intReg, 64 - 52, 53);
         GetEmitter()->emitIns_R_R_I(INS_xori, EA_8BYTE, intReg, intReg, 0x7FF);
     }
 

@@ -116,7 +116,7 @@ static bool ppc64leContainedAddrNeedsOffsetTemp(Compiler* compiler, GenTree* add
     return !ppc64leOffsetFitsInstruction(ins, offset);
 }
 
-static bool ppc64leContainedCpBlkDstNeedsOffsetTemp(Compiler* compiler, GenTree* addr, unsigned size)
+static bool ppc64leContainedCpBlkDstNeedsOffsetTemp(GenTree* addr, unsigned size)
 {
     if (!addr->isContained())
     {
@@ -127,17 +127,16 @@ static bool ppc64leContainedCpBlkDstNeedsOffsetTemp(Compiler* compiler, GenTree*
     if (addr->OperIsAddrMode())
     {
         offset = addr->AsAddrMode()->Offset();
-    }
-    else
-    {
-        assert(addr->OperIs(GT_LCL_ADDR));
-
-        bool fpBased = false;
-        offset       = compiler->lvaFrameAddress(addr->AsLclVarCommon()->GetLclNum(), &fpBased) +
-                 addr->AsLclVarCommon()->GetLclOffs();
+        return ppc64leCpBlkUnrollDstNeedsOffsetTemp(offset, size);
     }
 
-    return ppc64leCpBlkUnrollDstNeedsOffsetTemp(offset, size);
+    assert(addr->OperIs(GT_LCL_ADDR));
+
+    // Final frame offsets are assigned after LSRA. For contained local addresses, the
+    // final displacement can differ enough to affect both signed-16 range and
+    // DS-form alignment, so reserve the address temp that codegen will consume if
+    // the final offset needs materialization.
+    return true;
 }
 
 int LinearScan::BuildNode(GenTree* tree)
@@ -1028,7 +1027,7 @@ int LinearScan::BuildBlockStore(GenTreeBlk* blkNode)
                 {
                     buildInternalIntRegisterDefForNode(blkNode);
                 }
-                if (ppc64leContainedCpBlkDstNeedsOffsetTemp(m_compiler, dstAddr, size))
+                if (ppc64leContainedCpBlkDstNeedsOffsetTemp(dstAddr, size))
                 {
                     buildInternalIntRegisterDefForNode(blkNode);
                 }

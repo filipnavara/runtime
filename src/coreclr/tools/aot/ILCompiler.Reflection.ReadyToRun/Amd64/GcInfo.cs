@@ -278,6 +278,14 @@ namespace ILCompiler.Reflection.ReadyToRun.Amd64
                 }
                 sb.AppendLine($"    Has Tailcalls: {_wantsReportOnlyLeaf}");
             }
+            else if (_machine == Machine.PowerPC)
+            {
+                if (StackBaseRegister != 0xffffffff)
+                {
+                    sb.AppendLine($"    StackBaseRegister: {(Ppc64le.Registers)StackBaseRegister}");
+                }
+                sb.AppendLine($"    Has Tailcalls: {_wantsReportOnlyLeaf}");
+            }
 
             sb.AppendLine($"    Size of parameter area: 0x{SizeOfStackOutgoingAndScratchArea:X}");
             if (SizeOfEditAndContinuePreservedArea != 0xffffffff)

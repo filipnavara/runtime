@@ -75,6 +75,10 @@ namespace ILCompiler.Reflection.ReadyToRun.Amd64
                         regType = typeof(RiscV64.Registers);
                         break;
 
+                    case Machine.PowerPC:
+                        regType = typeof(Ppc64le.Registers);
+                        break;
+
                     default:
                         throw new NotImplementedException();
                 }

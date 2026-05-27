@@ -172,6 +172,11 @@ namespace ILCompiler.Reflection.ReadyToRun
                     STACK_BASE_REGISTER_ENCBASE = 2;
                     NUM_REGISTERS_ENCBASE = 3;
                     break;
+                case Machine.PowerPC:
+                    SIZE_OF_RETURN_KIND_FAT = 4;
+                    STACK_BASE_REGISTER_ENCBASE = 2;
+                    NUM_REGISTERS_ENCBASE = 3;
+                    break;
             }
         }
 
@@ -182,6 +187,7 @@ namespace ILCompiler.Reflection.ReadyToRun
                 case Machine.ArmThumb2:
                 case Machine.RiscV64:
                     return (x << 1);
+                case Machine.PowerPC:
                 case Machine.Arm64:
                 case Machine.LoongArch64:
                     return (x << 2);
@@ -196,6 +202,7 @@ namespace ILCompiler.Reflection.ReadyToRun
                 case Machine.ArmThumb2:
                 case Machine.RiscV64:
                     return (x >> 1);
+                case Machine.PowerPC:
                 case Machine.Arm64:
                 case Machine.LoongArch64:
                     return (x >> 2);
@@ -228,6 +235,7 @@ namespace ILCompiler.Reflection.ReadyToRun
                 case Machine.Arm64:
                 case Machine.LoongArch64:
                 case Machine.RiscV64:
+                case Machine.PowerPC:
                     return (x << 3);
             }
             return x;
@@ -247,6 +255,8 @@ namespace ILCompiler.Reflection.ReadyToRun
                     return ((x ^ 22) & 0x3);
                 case Machine.RiscV64:
                     return (x ^ 8);
+                case Machine.PowerPC:
+                    return x == 0 ? 31u : 1u;
             }
             return x;
         }
@@ -262,6 +272,7 @@ namespace ILCompiler.Reflection.ReadyToRun
                 case Machine.Arm64:
                 case Machine.LoongArch64:
                 case Machine.RiscV64:
+                case Machine.PowerPC:
                     return (x << 3);
             }
             return x;

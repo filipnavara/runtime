@@ -515,7 +515,7 @@ namespace ILCompiler.Reflection.ReadyToRun
                     }
                     else
                     {
-                        // Arm, Arm64, LoongArch64 and RISCV64 use the same GcInfo format as Amd64
+                        // Arm, Arm64, LoongArch64, PPC64LE and RISCV64 use the same GcInfo format as Amd64
                         _gcInfo = new Amd64.GcInfo(
                             _readyToRunReader.ImageReader,
                             gcInfoOffset,
@@ -643,6 +643,10 @@ namespace ILCompiler.Reflection.ReadyToRun
                 else if (_readyToRunReader.Machine == Machine.RiscV64)
                 {
                     unwindInfo = new RiscV64.UnwindInfo(_readyToRunReader.ImageReader, unwindOffset);
+                }
+                else if (_readyToRunReader.Machine == Machine.PowerPC)
+                {
+                    unwindInfo = new Ppc64le.UnwindInfo(_readyToRunReader.ImageReader, unwindOffset);
                 }
 
                 if (i == 0 && unwindInfo != null)

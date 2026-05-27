@@ -74,6 +74,9 @@ namespace ILCompiler.Reflection.ReadyToRun.Amd64
                     case Machine.RiscV64:
                         return ((RiscV64.Registers)registerNumber).ToString();
 
+                    case Machine.PowerPC:
+                        return ((Ppc64le.Registers)registerNumber).ToString();
+
                     default:
                         throw new NotImplementedException(machine.ToString());
                 }

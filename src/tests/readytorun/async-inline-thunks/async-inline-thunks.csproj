@@ -37,7 +37,7 @@ if not exist IL_DLLS\async-inline-thunks.dll (
 )
 
 REM Crossgen2 the helper library
-%Core_Root%\crossgen2\crossgen2.exe -O -r:%Core_Root%\*.dll -r:%25CD%\IL_DLLS\async-inline-thunks.dll -o:helper.dll helper\helper\helper.dll
+%Core_Root%\crossgen2\crossgen2.exe -O --targetarch:$(TargetArchitecture) --targetos:$(TargetOS) -r:%Core_Root%\*.dll -r:%25CD%\IL_DLLS\async-inline-thunks.dll -o:helper.dll helper\helper\helper.dll
 
 set CrossGenStatus=!ERRORLEVEL!
 IF NOT !CrossGenStatus!==0 (
@@ -46,7 +46,7 @@ IF NOT !CrossGenStatus!==0 (
 )
 
 REM Crossgen2 the main test with cross-module inlining from helper
-%Core_Root%\crossgen2\crossgen2.exe -O --opt-cross-module:helper -r:%Core_Root%\*.dll -r:helper\helper\helper.dll -o:async-inline-thunks.dll IL_DLLS\async-inline-thunks.dll
+%Core_Root%\crossgen2\crossgen2.exe -O --targetarch:$(TargetArchitecture) --targetos:$(TargetOS) --opt-cross-module:helper -r:%Core_Root%\*.dll -r:helper\helper\helper.dll -o:async-inline-thunks.dll IL_DLLS\async-inline-thunks.dll
 
 set CrossGenStatus=!ERRORLEVEL!
 IF NOT !CrossGenStatus!==0 (
@@ -72,7 +72,7 @@ then
 fi
 
 # Crossgen2 the helper library
-"$CORE_ROOT"/crossgen2/crossgen2 -O -r:"$CORE_ROOT"/*.dll -r:IL_DLLS/async-inline-thunks.dll -o:helper.dll helper/helper/helper.dll
+"$CORE_ROOT"/crossgen2/crossgen2 -O --targetarch:$(TargetArchitecture) --targetos:$(TargetOS) -r:"$CORE_ROOT"/*.dll -r:IL_DLLS/async-inline-thunks.dll -o:helper.dll helper/helper/helper.dll
 
 __cgExitCode=$?
 if [ $__cgExitCode -ne 0 ]
@@ -82,7 +82,7 @@ then
 fi
 
 # Crossgen2 the main test with cross-module inlining from helper
-"$CORE_ROOT"/crossgen2/crossgen2 -O --opt-cross-module:helper -r:"$CORE_ROOT"/*.dll -r:helper/helper/helper.dll -o:async-inline-thunks.dll IL_DLLS/async-inline-thunks.dll
+"$CORE_ROOT"/crossgen2/crossgen2 -O --targetarch:$(TargetArchitecture) --targetos:$(TargetOS) --opt-cross-module:helper -r:"$CORE_ROOT"/*.dll -r:helper/helper/helper.dll -o:async-inline-thunks.dll IL_DLLS/async-inline-thunks.dll
 
 __cgExitCode=$?
 if [ $__cgExitCode -ne 0 ]

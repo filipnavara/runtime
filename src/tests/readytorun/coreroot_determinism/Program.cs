@@ -67,6 +67,14 @@ public class Program
 
     public static string OSExeSuffix(string path) => (OperatingSystem.IsWindows() ? path + ".exe" : path);
 
+    private static string TargetArchitecture => RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
+
+    private static string TargetOS =>
+        OperatingSystem.IsWindows() ? "windows" :
+        OperatingSystem.IsLinux() ? "linux" :
+        OperatingSystem.IsMacOS() ? "osx" :
+        throw new PlatformNotSupportedException();
+
     private static void PrepareCompilationInputFolder(string coreRootFolder, string compilationInputFolder)
     {
         if (Directory.Exists(compilationInputFolder))
@@ -95,7 +103,7 @@ public class Program
             Directory.Delete(outDir, true);
         }
         Directory.CreateDirectory(outDir);
-        ProcessStartInfo processStartInfo = new ProcessStartInfo(coreRunPath, $"{superIlcPath} compile-directory -cr {coreRootPath} -in {compilationInputFolder} --nojit --noexe --large-bubble --release --nocleanup -ct 30 -out {outDir}");
+        ProcessStartInfo processStartInfo = new ProcessStartInfo(coreRunPath, $"{superIlcPath} compile-directory -cr {coreRootPath} -in {compilationInputFolder} --nojit --noexe --large-bubble --release --nocleanup -ct 30 --target-arch {TargetArchitecture} --target-os {TargetOS} -out {outDir}");
         var process = Process.Start(processStartInfo);
         process.WaitForExit();
         if (process.ExitCode != 0)

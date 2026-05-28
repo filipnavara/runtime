@@ -38,7 +38,6 @@ unsafe partial class GenericsNative
 
 public unsafe partial class GenericsTest
 {
-    [ActiveIssue("PPC64LE unmanaged struct arguments with multiple stack segments are not implemented yet", typeof(PlatformDetection), nameof(PlatformDetection.IsPpc64leProcess))]
     [Fact]
     public static void TestPoint4U()
     {

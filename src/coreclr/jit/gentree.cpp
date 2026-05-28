@@ -32490,7 +32490,13 @@ void ReturnTypeDesc::InitializeStructReturnType(Compiler*                comp,
 
 #if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
             const CORINFO_FPSTRUCT_LOWERING* lowering = comp->GetFpStructLowering(retClsHnd);
-            if (!lowering->byIntegerCallConv)
+            bool useFpStructLowering = !lowering->byIntegerCallConv;
+#if defined(TARGET_POWERPC64)
+            useFpStructLowering = useFpStructLowering &&
+                                  ((callConv == CorInfoCallConvExtension::Managed) ||
+                                   (lowering->numLoweredElements == 1));
+#endif
+            if (useFpStructLowering)
             {
                 assert(lowering->numLoweredElements == 1);
                 m_fieldOffset[0] = lowering->offsets[0];
@@ -32569,7 +32575,25 @@ void ReturnTypeDesc::InitializeStructReturnType(Compiler*                comp,
             BYTE gcPtrs[MAX_RET_REG_COUNT] = {};
             comp->info.compCompHnd->getClassGClayout(retClsHnd, &gcPtrs[0]);
             const CORINFO_FPSTRUCT_LOWERING* lowering = comp->GetFpStructLowering(retClsHnd);
-            if (!lowering->byIntegerCallConv)
+            bool useFpStructLowering = !lowering->byIntegerCallConv;
+#if defined(TARGET_POWERPC64)
+            if ((callConv != CorInfoCallConvExtension::Managed) && useFpStructLowering)
+            {
+                bool hasFloat   = false;
+                bool hasInteger = false;
+                for (unsigned i = 0; i < lowering->numLoweredElements; i++)
+                {
+                    var_types loweredType = JITtype2varType(lowering->loweredElements[i]);
+                    hasFloat |= varTypeIsFloating(loweredType);
+                    hasInteger |= varTypeIsIntegralOrI(loweredType);
+                }
+
+                // PPC64 ELFv2 only returns homogeneous FP aggregates in FPRs. Mixed FP/integer
+                // aggregates return as integer chunks in r3/r4.
+                useFpStructLowering = !(hasFloat && hasInteger);
+            }
+#endif
+            if (useFpStructLowering)
             {
                 comp->compFloatingPointUsed = true;
                 assert((lowering->numLoweredElements >= 1) && (lowering->numLoweredElements <= MAX_RET_REG_COUNT));

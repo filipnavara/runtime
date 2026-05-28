@@ -874,21 +874,43 @@ var_types Compiler::getReturnTypeForStruct(CORINFO_CLASS_HANDLE     clsHnd,
         const CORINFO_FPSTRUCT_LOWERING* lowering = GetFpStructLowering(clsHnd);
         if (!lowering->byIntegerCallConv)
         {
-            if (lowering->numLoweredElements == 1)
-            {
-                useType = JITtype2varType(lowering->loweredElements[0]);
-                assert(varTypeIsFloating(useType));
-                howToReturnStruct = SPK_PrimitiveType;
-            }
-            else
-            {
 #if defined(TARGET_POWERPC64)
-                assert((lowering->numLoweredElements >= 2) && (lowering->numLoweredElements <= MAX_RET_REG_COUNT));
-#else
-                assert(lowering->numLoweredElements == 2);
+            bool isMixedFpIntegerStruct = false;
+            if (!isManagedCall)
+            {
+                bool hasFloat   = false;
+                bool hasInteger = false;
+                for (unsigned i = 0; i < lowering->numLoweredElements; i++)
+                {
+                    var_types loweredType = JITtype2varType(lowering->loweredElements[i]);
+                    hasFloat |= varTypeIsFloating(loweredType);
+                    hasInteger |= varTypeIsIntegralOrI(loweredType);
+                }
+
+                isMixedFpIntegerStruct = hasFloat && hasInteger;
+            }
+
+            // Mixed floating-point/integer aggregates are not homogeneous floating aggregates in the PPC64
+            // ELFv2 ABI. Let the normal aggregate return logic below use integer return registers.
+            if (!isMixedFpIntegerStruct)
 #endif
-                howToReturnStruct = SPK_ByValue;
-                useType           = TYP_STRUCT;
+            {
+                if (lowering->numLoweredElements == 1)
+                {
+                    useType = JITtype2varType(lowering->loweredElements[0]);
+                    assert(varTypeIsFloating(useType));
+                    howToReturnStruct = SPK_PrimitiveType;
+                }
+                else
+                {
+#if defined(TARGET_POWERPC64)
+                    assert((lowering->numLoweredElements >= 2) && (lowering->numLoweredElements <= MAX_RET_REG_COUNT));
+#else
+                    assert(lowering->numLoweredElements == 2);
+#endif
+                    howToReturnStruct = SPK_ByValue;
+                    useType           = TYP_STRUCT;
+                }
             }
         }
     }

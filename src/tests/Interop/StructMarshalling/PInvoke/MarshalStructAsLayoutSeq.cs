@@ -59,7 +59,6 @@ public class Managed
     [Fact]
     [ActiveIssue("needs triage", TestRuntimes.Mono)]
     [ActiveIssue("https://github.com/dotnet/runtime/issues/91388", typeof(TestLibrary.PlatformDetection), nameof(TestLibrary.PlatformDetection.PlatformDoesNotSupportNativeTestAssets))]
-    [ActiveIssue("PPC64LE unmanaged struct by-value and HFA aggregate interop is not implemented yet", typeof(TestLibrary.PlatformDetection), nameof(TestLibrary.PlatformDetection.IsPpc64leProcess))]
     public static int TestEntryPoint()
     {
         RunMarshalSeqStructAsParamByVal();
@@ -2434,7 +2433,10 @@ public class Managed
 #endif
         MarshalStructAsParam_AsSeqByVal(StructID.StringStructSequentialAnsiId);
         MarshalStructAsParam_AsSeqByVal(StructID.StringStructSequentialUnicodeId);
-        MarshalStructAsParam_AsSeqByVal(StructID.S8Id);
+        if (!TestLibrary.PlatformDetection.IsPpc64leProcess)
+        {
+            MarshalStructAsParam_AsSeqByVal(StructID.S8Id);
+        }
         MarshalStructAsParam_AsSeqByVal(StructID.S9Id);
         MarshalStructAsParam_AsSeqByVal(StructID.IncludeOuterIntegerStructSequentialId);
         MarshalStructAsParam_AsSeqByVal(StructID.S11Id);
@@ -2490,7 +2492,10 @@ public class Managed
 #endif
         MarshalStructAsParam_AsSeqByValIn(StructID.StringStructSequentialAnsiId);
         MarshalStructAsParam_AsSeqByValIn(StructID.StringStructSequentialUnicodeId);
-        MarshalStructAsParam_AsSeqByValIn(StructID.S8Id);
+        if (!TestLibrary.PlatformDetection.IsPpc64leProcess)
+        {
+            MarshalStructAsParam_AsSeqByValIn(StructID.S8Id);
+        }
         MarshalStructAsParam_AsSeqByValIn(StructID.S9Id);
         MarshalStructAsParam_AsSeqByValIn(StructID.IncludeOuterIntegerStructSequentialId);
         MarshalStructAsParam_AsSeqByValIn(StructID.S11Id);
@@ -2536,7 +2541,10 @@ public class Managed
 #endif
         MarshalStructAsParam_AsSeqByValOut(StructID.StringStructSequentialAnsiId);
         MarshalStructAsParam_AsSeqByValOut(StructID.StringStructSequentialUnicodeId);
-        MarshalStructAsParam_AsSeqByValOut(StructID.S8Id);
+        if (!TestLibrary.PlatformDetection.IsPpc64leProcess)
+        {
+            MarshalStructAsParam_AsSeqByValOut(StructID.S8Id);
+        }
         MarshalStructAsParam_AsSeqByValOut(StructID.S9Id);
         MarshalStructAsParam_AsSeqByValOut(StructID.IncludeOuterIntegerStructSequentialId);
         MarshalStructAsParam_AsSeqByValOut(StructID.S11Id);
@@ -2582,7 +2590,10 @@ public class Managed
 #endif
         MarshalStructAsParam_AsSeqByValInOut(StructID.StringStructSequentialAnsiId);
         MarshalStructAsParam_AsSeqByValInOut(StructID.StringStructSequentialUnicodeId);
-        MarshalStructAsParam_AsSeqByValInOut(StructID.S8Id);
+        if (!TestLibrary.PlatformDetection.IsPpc64leProcess)
+        {
+            MarshalStructAsParam_AsSeqByValInOut(StructID.S8Id);
+        }
         MarshalStructAsParam_AsSeqByValInOut(StructID.S9Id);
         MarshalStructAsParam_AsSeqByValInOut(StructID.IncludeOuterIntegerStructSequentialId);
         MarshalStructAsParam_AsSeqByValInOut(StructID.S11Id);

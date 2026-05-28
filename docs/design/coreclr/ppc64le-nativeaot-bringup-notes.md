@@ -543,6 +543,9 @@ Struct classification:
 - Managed aggregate returns use the CoreCLR managed ABI cap of two eight-byte
   return slots. PPC64LE HFA returns larger than 16 bytes are native interop ABI
   shapes only; managed calls must use a hidden return buffer for those structs.
+- For unmanaged returns, only homogeneous floating-point aggregates use FPR
+  return registers. Mixed floating-point/integer aggregates are not HFAs in the
+  ELFv2 ABI and must return through integer chunks in `r3/r4`.
 - Split multireg struct parameters should not overlap callee-saved save slots.
 - If a struct contains GC references, every intermediate copy location must be
   non-GC by construction or reported for the full live range.
@@ -641,10 +644,12 @@ by useful validation.
   blocked.
 - Varargs are not implemented in the PPC64LE ABI classifier and
   `genJmpPlaceVarArgs`.
-- Unmanaged HFA and mixed floating-point/integer aggregate ABI classification is
-  incomplete. Native interop tests that require those exact platform ABI shapes
-  should remain active PPC64LE issues until the classifier and call lowering are
-  implemented and validated.
+- Non-blittable by-value struct marshalling still has PPC64LE gaps. The
+  `MarshalStructAsLayoutSeq` P/Invoke test skips only the `S8` by-value cases
+  for now; by-ref cases and HFA/mixed aggregate cases are enabled.
+- Delegate/reverse P/Invoke by-value large struct marshalling still needs VM
+  stub and marshalling validation. The first exposed failure is the large `S3`
+  delegate P/Invoke by-value case.
 - Fast and portable tailcalls are enabled for managed calls. Keep split
   register/stack fast tailcall arguments rejected until the PPC64LE stack
   argument shuffle is designed and tested.

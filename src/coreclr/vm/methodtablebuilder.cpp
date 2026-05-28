@@ -10645,6 +10645,10 @@ void MethodTableBuilder::CheckForSystemTypes()
     #elif defined(TARGET_LOONGARCH64)
                     // TODO-LoongArch64: Update alignment to proper value when implement LoongArch64 intrinsic.
                     pLayout->SetAlignmentRequirement(16);
+    #elif defined(TARGET_POWERPC64)
+                    // No such type exists for the PPC64LE ABI. Use the same alignment as __m128, matching
+                    // the managed type-system layout used by crossgen2.
+                    pLayout->SetAlignmentRequirement(16);
     #elif defined(TARGET_RISCV64)
                     // TODO-RISCV64: Update alignment to proper value when we implement RISC-V intrinsic.
                     // RISC-V Vector Extenstion Intrinsic Document
@@ -10669,6 +10673,10 @@ void MethodTableBuilder::CheckForSystemTypes()
 
     #elif defined(TARGET_LOONGARCH64)
                     // TODO-LoongArch64: Update alignment to proper value when implement LoongArch64 intrinsic.
+                    pLayout->SetAlignmentRequirement(16);
+    #elif defined(TARGET_POWERPC64)
+                    // No such type exists for the PPC64LE ABI. Use the same alignment as __m128, matching
+                    // the managed type-system layout used by crossgen2.
                     pLayout->SetAlignmentRequirement(16);
     #elif defined(TARGET_RISCV64)
                     // TODO-RISCV64: Update alignment to proper value when we implement RISC-V intrinsic.

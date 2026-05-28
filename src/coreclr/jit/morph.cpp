@@ -4185,6 +4185,12 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee, const char** failReason)
 #endif // TARGET_ARM || TARGET_RISCV64 || TARGET_LOONGARCH64 || TARGET_POWERPC64
 
 #ifdef TARGET_POWERPC64
+    if (callee->IsDelegateInvoke())
+    {
+        reportFastTailCallDecision("Delegate invoke fast tail calls are not yet supported on " TARGET_READABLE_NAME);
+        return false;
+    }
+
     if (calleeArgStackSize > 0)
     {
         bool callerHasStackBaseAtZero = false;

@@ -619,6 +619,11 @@ Fast tailcalls:
   call target; the emitted branch must still be `mtctr r12; bctr`.
 - Fast-tailcall control expressions and temporary loaded call targets must avoid
   `r12`, because the epilog can clobber it before the final target load/move.
+- Delegate invokes are currently rejected for PPC64LE fast tailcall formation.
+  A `test76531` hang showed that the epilog+jump path still has an unresolved
+  interaction with delegate invoke targets that can enter VSD resolve/shuffle
+  stubs. Normal delegate invokes and explicit tailcalls through the helper path
+  remain the conservative route until that stub contract is audited.
 - PPC64LE call lowering distinguishes the ABI-mandated 64-byte parameter save
   area from actual stack-passed arguments. Fast-tailcall stack-space checks use
   only the raw classified stack-argument byte count; normal outgoing call frame
@@ -659,6 +664,10 @@ by useful validation.
 - Fast and portable tailcalls are enabled for managed calls. Keep split
   register/stack fast tailcall arguments rejected until the PPC64LE stack
   argument shuffle is designed and tested.
+- Delegate invoke fast tailcalls are blocked after `test76531` exposed a hang
+  in the VSD resolve/shuffle-stub path. Re-enable only after a targeted stub
+  audit explains the epilog+jump interaction and covers open-interface
+  delegates.
 - `StubLinkerCPU::EmitCallLabel` is still not implemented. The current PPC64LE
   managed-method stub path emits absolute target materialization and branch
   instructions directly, but generic label-ref call emission should be added

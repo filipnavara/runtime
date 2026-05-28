@@ -157,89 +157,46 @@ GenTree* Lowering::LowerBinaryArithmetic(GenTreeOp* binOp)
 
 void Lowering::LowerBlockStore(GenTreeBlk* blkNode)
 {
+    assert(blkNode->OperIsInitBlkOp());
     GenTree* dstAddr = blkNode->Addr();
     GenTree* src     = blkNode->Data();
     unsigned size    = blkNode->Size();
 
-    if (blkNode->OperIsInitBlkOp())
+    if (src->OperIs(GT_INIT_VAL))
     {
-        if (src->OperIs(GT_INIT_VAL))
-        {
-            src->SetContained();
-            src = src->AsUnOp()->gtGetOp1();
-        }
-
-        if ((size <= m_compiler->getUnrollThreshold(Compiler::UnrollKind::Memset)) && src->OperIs(GT_CNS_INT))
-        {
-            blkNode->gtBlkOpKind = GenTreeBlk::BlkOpKindUnroll;
-
-            ssize_t fill = src->AsIntCon()->IconValue() & 0xFF;
-            if (fill == 0)
-            {
-                src->SetContained();
-            }
-            else if (size >= REGSIZE_BYTES)
-            {
-                fill *= 0x0101010101010101LL;
-                src->gtType = TYP_LONG;
-            }
-            else
-            {
-                fill *= 0x01010101;
-            }
-            src->AsIntCon()->SetIconValue(fill);
-
-            ContainBlockStoreAddress(blkNode, size, dstAddr, nullptr);
-        }
-        else if (blkNode->IsZeroingGcPointersOnHeap())
-        {
-            blkNode->gtBlkOpKind = GenTreeBlk::BlkOpKindLoop;
-            src->SetContained();
-        }
-        else
-        {
-            LowerBlockStoreAsHelperCall(blkNode);
-        }
-        return;
+        src->SetContained();
+        src = src->AsUnOp()->gtGetOp1();
     }
 
-    assert(src->OperIs(GT_IND, GT_LCL_VAR, GT_LCL_FLD));
-    src->SetContained();
-
-    if (src->OperIs(GT_LCL_VAR))
-    {
-        const unsigned srcLclNum = src->AsLclVar()->GetLclNum();
-        m_compiler->lvaSetVarDoNotEnregister(srcLclNum DEBUGARG(DoNotEnregisterReason::BlockOp));
-    }
-
-    ClassLayout* layout               = blkNode->GetLayout();
-    bool         doCpObj              = layout->HasGCPtr();
-    unsigned     copyBlockUnrollLimit = m_compiler->getUnrollThreshold(Compiler::UnrollKind::Memcpy);
-
-    if (doCpObj)
-    {
-        if (TryLowerBlockStoreAsGcBulkCopyCall(blkNode))
-        {
-            return;
-        }
-
-        assert(dstAddr->TypeIs(TYP_BYREF, TYP_I_IMPL));
-        blkNode->gtBlkOpKind = GenTreeBlk::BlkOpKindCpObjUnroll;
-    }
-    else if (blkNode->OperIs(GT_STORE_BLK) && (size <= copyBlockUnrollLimit))
+    if ((size <= m_compiler->getUnrollThreshold(Compiler::UnrollKind::Memset)) && src->OperIs(GT_CNS_INT))
     {
         blkNode->gtBlkOpKind = GenTreeBlk::BlkOpKindUnroll;
 
-        if (src->OperIs(GT_IND))
+        ssize_t fill = src->AsIntCon()->IconValue() & 0xFF;
+        if (fill == 0)
         {
-            ContainBlockStoreAddress(blkNode, size, src->AsIndir()->Addr(), src->AsIndir());
+            src->SetContained();
         }
+        else if (size >= REGSIZE_BYTES)
+        {
+            fill *= 0x0101010101010101LL;
+            src->gtType = TYP_LONG;
+        }
+        else
+        {
+            fill *= 0x01010101;
+        }
+        src->AsIntCon()->SetIconValue(fill);
 
         ContainBlockStoreAddress(blkNode, size, dstAddr, nullptr);
     }
+    else if (blkNode->IsZeroingGcPointersOnHeap())
+    {
+        blkNode->gtBlkOpKind = GenTreeBlk::BlkOpKindLoop;
+        src->SetContained();
+    }
     else
     {
-        assert(blkNode->OperIs(GT_STORE_BLK));
         LowerBlockStoreAsHelperCall(blkNode);
     }
 }

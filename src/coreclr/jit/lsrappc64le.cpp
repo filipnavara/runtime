@@ -1001,28 +1001,6 @@ int LinearScan::BuildBlockStore(GenTreeBlk* blkNode)
 
         switch (blkNode->gtBlkOpKind)
         {
-            case GenTreeBlk::BlkOpKindCpObjUnroll:
-            {
-                SingleTypeRegSet internalIntCandidates =
-                    allRegs(TYP_INT) &
-                    ~(RBM_WRITE_BARRIER_DST_BYREF | RBM_WRITE_BARRIER_SRC_BYREF).GetRegSetForType(IntRegisterType);
-                buildInternalIntRegisterDefForNode(blkNode, internalIntCandidates);
-
-                if (size >= 2 * REGSIZE_BYTES)
-                {
-                    buildInternalIntRegisterDefForNode(blkNode, internalIntCandidates);
-                }
-
-                dstAddrRegMask = RBM_WRITE_BARRIER_DST_BYREF.GetIntRegSet();
-
-                if (srcAddrOrFill != nullptr)
-                {
-                    assert(!srcAddrOrFill->isContained());
-                    srcRegMask = RBM_WRITE_BARRIER_SRC_BYREF.GetIntRegSet();
-                }
-                break;
-            }
-
             case GenTreeBlk::BlkOpKindUnroll:
                 buildInternalIntRegisterDefForNode(blkNode);
                 if (size >= 2 * REGSIZE_BYTES)

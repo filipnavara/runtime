@@ -147,8 +147,11 @@
 #define REG_PINVOKE_COOKIE_PARAM          REG_R11
 #define RBM_PINVOKE_COOKIE_PARAM          RBM_R11
 
-#define REG_PINVOKE_TARGET_PARAM          REG_R10
-#define RBM_PINVOKE_TARGET_PARAM          RBM_R10
+// The JIT stages the unmanaged calli target in r12 so LSRA can model it as a
+// fixed argument without colliding with native argument registers. Codegen moves
+// it to r0 before r12 is repurposed as the ELFv2 helper entry register.
+#define REG_PINVOKE_TARGET_PARAM          REG_R12
+#define RBM_PINVOKE_TARGET_PARAM          RBM_R12
 
 #define REG_SECRET_STUB_PARAM     REG_R11
 #define RBM_SECRET_STUB_PARAM     RBM_R11

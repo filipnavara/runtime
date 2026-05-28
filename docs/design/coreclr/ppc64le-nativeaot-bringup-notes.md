@@ -587,14 +587,12 @@ Register selection decisions:
   indirection cells, virtual-stub dispatch cells, P/Invoke cookies, precode
   tokens, and call-counting state. Do not use `r11` as general epilog or branch
   scratch when any of those paths can still be live.
-- The P/Invoke calli unmanaged target uses `r10`. `r0` is not an
-  LSRA-allocatable integer register on PPC64LE, and `r12` must remain available
-  for the actual ELFv2 branch target loaded for the helper or native callee.
-  This is still an imperfect contract because native C calls can also use
-  `r10` for the eighth integer argument. Do not move the hidden calli target to
-  another register without validating the helper-generation path; experiments
-  with a private `r11`/`r12` helper ABI avoided the LSRA collision but exposed a
-  cached `pPInvokeILStub` branch to non-code precode/data.
+- The P/Invoke calli unmanaged target is staged in `r12` for LSRA, then copied
+  to `r0` immediately before the helper call because `r12` must contain the
+  ELFv2 helper entry point on entry. The helper consumes `r0` as the target and
+  uses `r11` for the VASigCookie before publishing the generated-stub secret
+  argument in `r11`. This keeps the private helper state out of the native
+  argument register set, including native argument `r10`.
 - Write barriers use `r11` for the destination/byref destination, `r10` for the
   normal source, and `r9` for the byref source. These registers match the
   assembly helper contracts and helper kill sets.
@@ -647,12 +645,6 @@ by useful validation.
   incomplete. Native interop tests that require those exact platform ABI shapes
   should remain active PPC64LE issues until the classifier and call lowering are
   implemented and validated.
-- P/Invoke calli hidden-register assignment still needs a final ABI decision.
-  The current helper uses `r10` for the unmanaged target and `r11` for the
-  VASigCookie/secret parameter. This matches the existing helper but collides
-  with native argument `r10` in MinOpts ABI stress. A replacement must preserve
-  both the native argument register set and the generated IL stub entry
-  contract.
 - Fast and portable tailcalls are enabled for managed calls. Keep split
   register/stack fast tailcall arguments rejected until the PPC64LE stack
   argument shuffle is designed and tested.

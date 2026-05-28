@@ -3923,6 +3923,14 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
     const ReturnTypeDesc* retTypeDesc = call->GetReturnTypeDesc();
     EmitCallParams        params;
 
+    if (call->IsHelperCall(CORINFO_HELP_PINVOKE_CALLI))
+    {
+        // REG_PINVOKE_TARGET_PARAM is r12 so LSRA can keep it separate from native argument registers.
+        // The actual helper call also needs r12 to contain the ELFv2 helper entry point, so move the
+        // unmanaged calli target to r0 before loading the helper target.
+        GetEmitter()->emitIns_R_R(INS_mr, EA_PTRSIZE, REG_R0, REG_PINVOKE_TARGET_PARAM);
+    }
+
     if (!call->IsUnusedValue())
     {
         if (call->HasMultiRegRetVal())

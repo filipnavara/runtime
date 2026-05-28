@@ -394,7 +394,8 @@ NESTED_END VarargPInvokeStub_RetBuffArg, _TEXT
 
 NESTED_ENTRY GenericPInvokeCalliHelper, _TEXT, NoHandler
     // The JIT calls this helper as an ELFv2 function, so r12 contains this
-    // helper's entry point on entry. The unmanaged target is passed in r10.
+    // helper's entry point on entry. Codegen moves the unmanaged target from
+    // the LSRA-visible r12 argument to r0 before loading the helper target.
     ld 12, VASigCookie__pPInvokeILStub(11)
     cmpdi 12, 0
     beq C_FUNC(GenericPInvokeCalliGenILStub)
@@ -403,14 +404,14 @@ NESTED_ENTRY GenericPInvokeCalliHelper, _TEXT, NoHandler
 
     // Tag the unmanaged target secret arg so the generated IL stub can
     // distinguish it from a MethodDesc*. MethodDesc pointers are 8-byte aligned.
-    sldi 11, 10, 1
+    sldi 11, 0, 1
     ori 11, 11, 1
 
     bctr
 NESTED_END GenericPInvokeCalliHelper, _TEXT
 
 NESTED_ENTRY GenericPInvokeCalliGenILStub, _TEXT, NoHandler
-    mr 12, 10
+    mr 12, 0
     stdu 1, -PPC64_PRESTUB_STACK_FRAME_SIZE(1)
     .cfi_adjust_cfa_offset PPC64_PRESTUB_STACK_FRAME_SIZE
     std 2, PPC64_CALL_FRAME_TOC_SAVE(1)
@@ -433,7 +434,7 @@ NESTED_ENTRY GenericPInvokeCalliGenILStub, _TEXT, NoHandler
     mr 11, 26
     mr 12, 27
     RESTORE_TRANSITION_BLOCK_FOR_TAILCALL 1
-    mr 10, 12
+    mr 0, 12
     ld 2, PPC64_CALL_FRAME_TOC_SAVE(1)
     addi 1, 1, PPC64_PRESTUB_STACK_FRAME_SIZE
     .cfi_adjust_cfa_offset -PPC64_PRESTUB_STACK_FRAME_SIZE

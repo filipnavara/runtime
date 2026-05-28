@@ -413,6 +413,11 @@ namespace ABIStress
                     Console.WriteLine("Selecting riscv64 ABI.");
                     return new Riscv64Abi();
                 }
+                if (RuntimeInformation.ProcessArchitecture == Architecture.Ppc64le)
+                {
+                    Console.WriteLine("Selecting ppc64le ABI.");
+                    return new Ppc64leAbi();
+                }
 
                 Trace.Assert(RuntimeInformation.ProcessArchitecture == Architecture.X64);
                 Console.WriteLine("Selecting SysV ABI");

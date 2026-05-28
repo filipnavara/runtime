@@ -3738,7 +3738,6 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
     }
 
     unsigned srcSize = layout->GetSize();
-    noway_assert(srcSize <= MAX_PASS_MULTIREG_BYTES);
 
     unsigned dstSize = treeNode->GetStackByteSize();
 

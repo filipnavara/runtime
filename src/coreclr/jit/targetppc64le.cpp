@@ -146,18 +146,21 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
     {
         const unsigned numSegments = roundUp(passedSize, TARGET_POINTER_SIZE) / TARGET_POINTER_SIZE;
         assert(numSegments <= MAX_ARG_REG_COUNT);
-        if ((numSegments > 2) && (m_intRegs.Count() < numSegments))
-        {
-            NYI_POWERPC64("PPC64LE unmanaged struct arguments with multiple stack segments");
-        }
 
-        ABIPassingInformation info(comp, numSegments);
-        for (unsigned i = 0; i < numSegments; i++)
+        const unsigned numRegSegments = min(m_intRegs.Count(), numSegments);
+        ABIPassingInformation info(comp, (numRegSegments == numSegments) ? numSegments : numRegSegments + 1);
+
+        for (unsigned i = 0; i < numRegSegments; i++)
         {
             unsigned offset = i * TARGET_POINTER_SIZE;
             unsigned size   = min(passedSize - offset, static_cast<unsigned>(TARGET_POINTER_SIZE));
-            info.Segment(i) = (m_intRegs.Count() > 0) ? ABIPassingSegment::InRegister(m_intRegs.Dequeue(), offset, size)
-                                                      : passOnStack(offset, size);
+            info.Segment(i) = ABIPassingSegment::InRegister(m_intRegs.Dequeue(), offset, size);
+        }
+
+        if (numRegSegments < numSegments)
+        {
+            unsigned offset              = numRegSegments * TARGET_POINTER_SIZE;
+            info.Segment(numRegSegments) = passOnStack(offset, passedSize - offset);
         }
 
         return info;

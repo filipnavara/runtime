@@ -216,4 +216,36 @@ namespace ABIStress
             return size;
         }
     }
+
+    internal class Ppc64leAbi : IAbi
+    {
+        // CoreCLR managed PPC64LE uses a 16-byte cap for aggregate arguments.
+        // Larger structs, including native ABI HFAs, are passed by reference
+        // and inhibit fast tailcalls, so keep the tailcall stress set to
+        // scalar and <=16-byte aggregate shapes. SIMD/VSX is not enabled for
+        // PPC64LE yet, so vector types are intentionally excluded here.
+        public Type[] TailCalleeCandidateArgTypes { get; } =
+            new[]
+            {
+                typeof(byte), typeof(short), typeof(int), typeof(long),
+                typeof(float), typeof(double), typeof(Int128),
+                typeof(S1P), typeof(S2P), typeof(S2U), typeof(S3U),
+                typeof(S4P), typeof(S4U), typeof(S5U), typeof(S6U),
+                typeof(S7U), typeof(S8P), typeof(S8U), typeof(S9U),
+                typeof(S10U), typeof(S11U), typeof(S12U), typeof(S13U),
+                typeof(S14U), typeof(S15U), typeof(S16U),
+                typeof(Hfa1), typeof(I128_1)
+            };
+
+        public CallingConvention[] PInvokeConventions { get; } = { CallingConvention.Cdecl };
+
+        public int ApproximateArgStackAreaSize(List<TypeEx> parameters)
+        {
+            int size = 0;
+            foreach (TypeEx pm in parameters)
+                size += Util.RoundUp(pm.Size, 8);
+
+            return size;
+        }
+    }
 }

@@ -63,7 +63,7 @@ W^X behavior.
 Run CodeGenBringUpTests:
 
 ```sh
-for t in d r ro do; do
+for t in d r ro; do
     CORE_ROOT=$PWD/artifacts/tests/coreclr/linux.ppc64le.Checked/Tests/Core_Root \
     DOTNET_ReadyToRun=0 \
     DOTNET_TieredCompilation=0 \
@@ -590,6 +590,11 @@ Register selection decisions:
 - The P/Invoke calli unmanaged target uses `r10`. `r0` is not an
   LSRA-allocatable integer register on PPC64LE, and `r12` must remain available
   for the actual ELFv2 branch target loaded for the helper or native callee.
+  This is still an imperfect contract because native C calls can also use
+  `r10` for the eighth integer argument. Do not move the hidden calli target to
+  another register without validating the helper-generation path; experiments
+  with a private `r11`/`r12` helper ABI avoided the LSRA collision but exposed a
+  cached `pPInvokeILStub` branch to non-code precode/data.
 - Write barriers use `r11` for the destination/byref destination, `r10` for the
   normal source, and `r9` for the byref source. These registers match the
   assembly helper contracts and helper kill sets.
@@ -612,6 +617,21 @@ Fast tailcalls:
   area from actual stack-passed arguments. Fast-tailcall stack-space checks use
   only the raw classified stack-argument byte count; normal outgoing call frame
   sizing still reserves the full save area.
+- Fast tailcalls that need stack arguments require a materialized incoming
+  stack-argument local at offset zero. If the caller's first stack slots are
+  consumed only by FPR parameter slots, the JIT rejects the fast tailcall and
+  uses the helper path instead.
+
+ABI stress:
+
+- `JIT/Stress/ABI` has a PPC64LE model for scalar, small aggregate, calli,
+  stub, and managed tailcall stress. SIMD/VSX types are intentionally excluded.
+- Managed tailcall stress uses scalar and <=16-byte aggregate candidates so it
+  exercises the managed ABI and fast-tailcall path without requiring native HFA
+  or large-struct tailcall support.
+- Unmanaged integer aggregates can split as a register prefix plus one stack
+  tail. Prolog homing and outgoing stack copies must handle stack segments
+  larger than one pointer-sized slot.
 
 ## Current Implementation Gaps
 
@@ -627,6 +647,12 @@ by useful validation.
   incomplete. Native interop tests that require those exact platform ABI shapes
   should remain active PPC64LE issues until the classifier and call lowering are
   implemented and validated.
+- P/Invoke calli hidden-register assignment still needs a final ABI decision.
+  The current helper uses `r10` for the unmanaged target and `r11` for the
+  VASigCookie/secret parameter. This matches the existing helper but collides
+  with native argument `r10` in MinOpts ABI stress. A replacement must preserve
+  both the native argument register set and the generated IL stub entry
+  contract.
 - Fast and portable tailcalls are enabled for managed calls. Keep split
   register/stack fast tailcall arguments rejected until the PPC64LE stack
   argument shuffle is designed and tested.

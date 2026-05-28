@@ -4184,6 +4184,38 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee, const char** failReason)
     }
 #endif // TARGET_ARM || TARGET_RISCV64 || TARGET_LOONGARCH64 || TARGET_POWERPC64
 
+#ifdef TARGET_POWERPC64
+    if (calleeArgStackSize > 0)
+    {
+        bool callerHasStackBaseAtZero = false;
+        for (unsigned lclNum = 0; lclNum < info.compArgsCount; lclNum++)
+        {
+            const ABIPassingInformation& abiInfo = lvaGetParameterABIInfo(lclNum);
+            if (!abiInfo.HasAnyStackSegment())
+            {
+                continue;
+            }
+
+            for (const ABIPassingSegment& seg : abiInfo.Segments())
+            {
+                if (seg.IsPassedOnStack())
+                {
+                    callerHasStackBaseAtZero = (seg.GetStackOffset() == 0);
+                    break;
+                }
+            }
+            break;
+        }
+
+        if (!callerHasStackBaseAtZero)
+        {
+            reportFastTailCallDecision(
+                "Caller incoming stack area has no materialized parameter at offset zero on " TARGET_READABLE_NAME);
+            return false;
+        }
+    }
+#endif // TARGET_POWERPC64
+
 #ifdef TARGET_ARM
     if (compIsProfilerHookNeeded())
     {

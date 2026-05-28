@@ -115,6 +115,21 @@ struct ArgLocDesc
     }
 };
 
+#ifdef TARGET_POWERPC64
+static inline bool IsPpc64leFloatHfa(TypeHandle th)
+{
+    LIMITED_METHOD_CONTRACT;
+
+    if (!th.IsHFA())
+    {
+        return false;
+    }
+
+    CorInfoHFAElemType hfaType = th.GetHFAType();
+    return (hfaType == CORINFO_HFA_ELEM_FLOAT) || (hfaType == CORINFO_HFA_ELEM_DOUBLE);
+}
+#endif
+
 #ifdef TARGET_WASM
 #define TARGET_REGISTER_SIZE INTERP_STACK_SLOT_SIZE
 #else
@@ -690,8 +705,8 @@ public:
         {
             _ASSERTE(!m_argTypeHandle.IsNull());
 #ifdef TARGET_POWERPC64
-            if (m_argTypeHandle.IsHFA() && ((m_argSize <= ENREGISTERED_PARAMTYPE_MAXSIZE) ||
-                                            this->UsesUnmanagedCallingConvention()))
+            if (IsPpc64leFloatHfa(m_argTypeHandle) && ((m_argSize <= ENREGISTERED_PARAMTYPE_MAXSIZE) ||
+                                                        this->UsesUnmanagedCallingConvention()))
             {
                 return FALSE;
             }
@@ -1860,7 +1875,7 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
         // in FP registers if possible.
 
 #ifdef TARGET_POWERPC64
-        if (thValueType.IsHFA() &&
+        if (IsPpc64leFloatHfa(thValueType) &&
             ((argSize <= ENREGISTERED_PARAMTYPE_MAXSIZE) || this->UsesUnmanagedCallingConvention()))
         {
             CorInfoHFAElemType hfaType = thValueType.GetHFAType();
@@ -1996,6 +2011,13 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
             static const int lastReg = NUM_ARGUMENT_REGISTERS - 1;
             assert(m_idxGenReg == lastReg); // pass head in last register
             assert(m_ofsStack == 0); // pass tail in first stack slot
+
+            m_argLocDescForStructInRegs.Init();
+            m_argLocDescForStructInRegs.m_idxGenReg      = lastReg;
+            m_argLocDescForStructInRegs.m_cGenReg        = 1;
+            m_argLocDescForStructInRegs.m_byteStackIndex = 0;
+            m_argLocDescForStructInRegs.m_byteStackSize  = argSize - TARGET_POINTER_SIZE;
+            m_hasArgLocDescForStructInRegs               = true;
 
             int argOfs = TransitionBlock::GetOffsetOfArgumentRegisters() + lastReg * TARGET_POINTER_SIZE;
             m_idxGenReg = NUM_ARGUMENT_REGISTERS;

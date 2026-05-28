@@ -5,7 +5,5 @@
   <PropertyGroup>
     <!-- needs triage -->
     <DisableProjectBuild Condition="'$(RuntimeFlavor)' == 'mono'">true</DisableProjectBuild>
-    <!-- The ABI stress harness has architecture-specific ABI models and does not have PPC64LE coverage yet. -->
-    <CLRTestTargetUnsupported Condition="'$(TargetArchitecture)' == 'ppc64le'">true</CLRTestTargetUnsupported>
   </PropertyGroup>
 </Project>

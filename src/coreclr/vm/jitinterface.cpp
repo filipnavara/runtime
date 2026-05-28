@@ -9787,56 +9787,30 @@ void CEEInfo::getFpStructLowering(CORINFO_CLASS_HANDLE structHnd, CORINFO_FPSTRU
     JIT_TO_EE_TRANSITION();
 
 #if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
-    bool fpStructLowered = false;
-
-#if defined(TARGET_POWERPC64)
-    TypeHandle th(structHnd);
-    if (th.IsHFA())
+    FpStructInRegistersInfo info = MethodTable::GetFpStructInRegistersInfo(TypeHandle(structHnd));
+    if (info.flags != FpStruct::UseIntCallConv)
     {
-        CorInfoType loweredType = CORINFO_TYPE_UNDEF;
-        unsigned    elemSize    = 0;
-        switch (th.GetHFAType())
-        {
-            case CORINFO_HFA_ELEM_FLOAT:
-                loweredType = CORINFO_TYPE_FLOAT;
-                elemSize    = sizeof(float);
-                break;
-            case CORINFO_HFA_ELEM_DOUBLE:
-                loweredType = CORINFO_TYPE_DOUBLE;
-                elemSize    = sizeof(double);
-                break;
-            default:
-                break;
-        }
+        pLowering->byIntegerCallConv = false;
 
-        unsigned size = th.GetSize();
-        if ((elemSize != 0) && ((size % elemSize) == 0))
+#ifdef TARGET_POWERPC64
+        if (info.IsPpc64leHfa())
         {
-            unsigned elemCount = size / elemSize;
-            if ((elemCount >= 1) && (elemCount <= MAX_FPSTRUCT_LOWERED_ELEMENTS))
+            CorInfoType loweredType = (info.Ppc64leHfaElementSize() == sizeof(double)) ? CORINFO_TYPE_DOUBLE
+                                                                                       : CORINFO_TYPE_FLOAT;
+
+            pLowering->numLoweredElements = info.Ppc64leHfaElementCount();
+            for (unsigned i = 0; i < info.Ppc64leHfaElementCount(); i++)
             {
-                pLowering->byIntegerCallConv  = false;
-                pLowering->numLoweredElements = elemCount;
-                for (unsigned i = 0; i < elemCount; i++)
-                {
-                    pLowering->loweredElements[i] = loweredType;
-                    pLowering->offsets[i]         = i * elemSize;
-                }
-                fpStructLowered = true;
+                pLowering->loweredElements[i] = loweredType;
+                pLowering->offsets[i]         = i * info.Ppc64leHfaElementSize();
             }
         }
-    }
+        else
 #endif // TARGET_POWERPC64
-
-    if (!fpStructLowered)
-    {
-        FpStructInRegistersInfo info = MethodTable::GetFpStructInRegistersInfo(TypeHandle(structHnd));
-        if (info.flags != FpStruct::UseIntCallConv)
         {
-            pLowering->byIntegerCallConv = false;
-            pLowering->offsets[0] = info.offset1st;
-            pLowering->offsets[1] = info.offset2nd;
-            pLowering->numLoweredElements = (info.flags & FpStruct::OnlyOne) ? 1ul : 2ul;
+            pLowering->offsets[0]           = info.offset1st;
+            pLowering->offsets[1]           = info.offset2nd;
+            pLowering->numLoweredElements   = (info.flags & FpStruct::OnlyOne) ? 1ul : 2ul;
 
             if (info.flags & (FpStruct::BothFloat | FpStruct::FloatInt | FpStruct::OnlyOne))
                 pLowering->loweredElements[0] = (info.SizeShift1st() == 3) ? CORINFO_TYPE_DOUBLE : CORINFO_TYPE_FLOAT;
@@ -9857,10 +9831,10 @@ void CEEInfo::getFpStructLowering(CORINFO_CLASS_HANDLE structHnd, CORINFO_FPSTRU
                 static_assert(CORINFO_TYPE_BYTE + 3 * 2 == CORINFO_TYPE_LONG, "");
             }
         }
-        else
-        {
-            pLowering->byIntegerCallConv = true;
-        }
+    }
+    else
+    {
+        pLowering->byIntegerCallConv = true;
     }
 #endif // TARGET_RISCV64 || TARGET_LOONGARCH64 || TARGET_POWERPC64
 

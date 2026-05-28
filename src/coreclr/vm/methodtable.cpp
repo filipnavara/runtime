@@ -2702,6 +2702,14 @@ void  MethodTable::AssignClassifiedEightByteTypes(SystemVStructRegisterPassingHe
 #endif // defined(UNIX_AMD64_ABI_ITF)
 
 #if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
+static unsigned GetFpStructFieldSizeShift(unsigned size)
+{
+    assert(size >= 1 && size <= 8);
+    assert((size & (size - 1)) == 0); // size needs to be a power of 2
+    static const int sizeShiftLUT = (0 << (1*2)) | (1 << (2*2)) | (2 << (4*2)) | (3 << (8*2));
+    return (sizeShiftLUT >> (size * 2)) & 0b11;
+}
+
 static void SetFpStructInRegistersInfoField(FpStructInRegistersInfo& info, int index,
     bool isFloating, unsigned size, uint32_t offset)
 {
@@ -2711,8 +2719,7 @@ static void SetFpStructInRegistersInfoField(FpStructInRegistersInfo& info, int i
 
     assert(size >= 1 && size <= 8);
     assert((size & (size - 1)) == 0); // size needs to be a power of 2
-    static const int sizeShiftLUT = (0 << (1*2)) | (1 << (2*2)) | (2 << (4*2)) | (3 << (8*2));
-    int sizeShift = (sizeShiftLUT >> (size * 2)) & 0b11;
+    int sizeShift = GetFpStructFieldSizeShift(size);
 
     using namespace FpStruct;
     // Use FloatInt and IntFloat as marker flags for 1st and 2nd field respectively being floating.
@@ -2725,6 +2732,65 @@ static void SetFpStructInRegistersInfoField(FpStructInRegistersInfo& info, int i
     info.flags = FpStruct::Flags(info.flags | floatFlag | sizeShiftMask);
     (index == 0 ? info.offset1st : info.offset2nd) = offset;
 }
+
+#ifdef TARGET_POWERPC64
+static bool GetPpc64leHfaInRegistersInfo(TypeHandle th, FpStructInRegistersInfo& info)
+{
+    if (!th.IsHFA())
+    {
+        return false;
+    }
+
+    unsigned elemSize = 0;
+    switch (th.GetHFAType())
+    {
+        case CORINFO_HFA_ELEM_FLOAT:
+            elemSize = sizeof(float);
+            break;
+        case CORINFO_HFA_ELEM_DOUBLE:
+            elemSize = sizeof(double);
+            break;
+        default:
+            return false;
+    }
+
+    const unsigned size = th.GetSize();
+    if ((elemSize == 0) || ((size % elemSize) != 0))
+    {
+        return false;
+    }
+
+    const unsigned elemCount = size / elemSize;
+    if ((elemCount < 1) || (elemCount > MAX_FPSTRUCT_LOWERED_ELEMENTS))
+    {
+        return false;
+    }
+
+    if (elemCount <= 2)
+    {
+        SetFpStructInRegistersInfoField(info, 0, /* isFloating */ true, elemSize, 0);
+        if (elemCount == 1)
+        {
+            info.flags = FpStruct::Flags(info.flags ^ (FpStruct::FloatInt | FpStruct::OnlyOne));
+        }
+        else
+        {
+            SetFpStructInRegistersInfoField(info, 1, /* isFloating */ true, elemSize, elemSize);
+            info.flags = FpStruct::Flags(info.flags ^ (FpStruct::FloatInt | FpStruct::IntFloat | FpStruct::BothFloat));
+        }
+    }
+    else
+    {
+        info.flags = FpStruct::Flags(FpStruct::Ppc64leHfa |
+                                     (GetFpStructFieldSizeShift(elemSize) << FpStruct::PosSizeShift1st) |
+                                     (elemCount << FpStruct::PosPpc64leHfaCount));
+        info.offset1st      = 0;
+        info.offset2nd      = elemSize;
+    }
+
+    return true;
+}
+#endif // TARGET_POWERPC64
 
 static bool HandleInlineArray(int elementTypeIndex, int nElements,
     FpStructInRegistersInfo& info, int& typeIndex, uint32_t& occupiedBytesMap DEBUG_ARG(int nestingLevel))
@@ -2937,6 +3003,14 @@ static bool FlattenFields(TypeHandle th, uint32_t structOffset, FpStructInRegist
 
 FpStructInRegistersInfo MethodTable::GetFpStructInRegistersInfo(TypeHandle th)
 {
+#ifdef TARGET_POWERPC64
+    FpStructInRegistersInfo hfaInfo = {};
+    if (GetPpc64leHfaInRegistersInfo(th, hfaInfo))
+    {
+        return hfaInfo;
+    }
+#endif // TARGET_POWERPC64
+
     if (th.GetSize() > ENREGISTERED_PARAMTYPE_MAXSIZE)
     {
         LOG((LF_JIT, LL_EVERYTHING, "FpStructInRegistersInfo: struct %s (%u bytes) is too big\n",

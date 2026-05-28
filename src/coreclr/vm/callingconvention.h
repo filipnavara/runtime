@@ -115,21 +115,6 @@ struct ArgLocDesc
     }
 };
 
-#ifdef TARGET_POWERPC64
-static inline bool IsPpc64leFloatHfa(TypeHandle th)
-{
-    LIMITED_METHOD_CONTRACT;
-
-    if (!th.IsHFA())
-    {
-        return false;
-    }
-
-    CorInfoHFAElemType hfaType = th.GetHFAType();
-    return (hfaType == CORINFO_HFA_ELEM_FLOAT) || (hfaType == CORINFO_HFA_ELEM_DOUBLE);
-}
-#endif
-
 #ifdef TARGET_WASM
 #define TARGET_REGISTER_SIZE INTERP_STACK_SLOT_SIZE
 #else
@@ -706,12 +691,6 @@ public:
             _ASSERTE(!m_argTypeHandle.IsNull());
 #ifdef TARGET_POWERPC64
             if (this->UsesUnmanagedCallingConvention())
-            {
-                return FALSE;
-            }
-
-            if (IsPpc64leFloatHfa(m_argTypeHandle) && ((m_argSize <= ENREGISTERED_PARAMTYPE_MAXSIZE) ||
-                                                        this->UsesUnmanagedCallingConvention()))
             {
                 return FALSE;
             }
@@ -1861,10 +1840,6 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
     assert(!this->IsVarArg()); // Varargs on RISC-V and LoongArch not supported yet
     int cFPRegs = 0;
     FpStructInRegistersInfo info = {};
-#ifdef TARGET_POWERPC64
-    bool isPpc64leHfa = false;
-    int ppc64leHfaFieldSize = 0;
-#endif
 
     switch (argType)
     {
@@ -1880,17 +1855,12 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
         // in FP registers if possible.
 
 #ifdef TARGET_POWERPC64
-        if (IsPpc64leFloatHfa(thValueType) &&
+        info = MethodTable::GetFpStructInRegistersInfo(thValueType);
+        if (info.IsPpc64leHfa() &&
             ((argSize <= ENREGISTERED_PARAMTYPE_MAXSIZE) || this->UsesUnmanagedCallingConvention()))
         {
-            CorInfoHFAElemType hfaType = thValueType.GetHFAType();
-            ppc64leHfaFieldSize = ArgLocDesc::getHFAFieldSize(hfaType);
-            _ASSERTE(ppc64leHfaFieldSize == 4 || ppc64leHfaFieldSize == 8);
-            _ASSERTE((argSize % ppc64leHfaFieldSize) == 0);
-
-            cFPRegs = argSize / ppc64leHfaFieldSize;
+            cFPRegs = info.Ppc64leHfaElementCount();
             _ASSERTE((cFPRegs > 0) && (cFPRegs <= 8));
-            isPpc64leHfa = true;
         }
         else
 #endif
@@ -1905,7 +1875,9 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
         }
         else
         {
+#ifndef TARGET_POWERPC64
             info = MethodTable::GetFpStructInRegistersInfo(thValueType);
+#endif
             if (info.flags != FpStruct::UseIntCallConv)
             {
                 cFPRegs = (info.flags & FpStruct::BothFloat) ? 2 : 1;
@@ -1974,13 +1946,13 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
         {
             int argOfs = TransitionBlock::GetOffsetOfFloatArgumentRegisters() + m_idxFPReg * FLOAT_REGISTER_SIZE;
 #ifdef TARGET_POWERPC64
-            if (isPpc64leHfa)
+            if (info.IsPpc64leHfa())
             {
                 m_argLocDescForStructInRegs.Init();
                 m_hasArgLocDescForStructInRegs = true;
                 m_argLocDescForStructInRegs.m_idxFloatReg = m_idxFPReg;
                 m_argLocDescForStructInRegs.m_cFloatReg = cFPRegs;
-                m_argLocDescForStructInRegs.m_hfaFieldSize = ppc64leHfaFieldSize;
+                m_argLocDescForStructInRegs.m_hfaFieldSize = info.Ppc64leHfaElementSize();
             }
             else
 #endif

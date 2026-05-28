@@ -20,6 +20,7 @@ namespace Internal.JitInterface
         PosIntFloat     = 3,
         PosSizeShift1st = 4, // 2 bits
         PosSizeShift2nd = 6, // 2 bits
+        PosPpc64leHfaCount = 9, // 4 bits
 
         UseIntCallConv = 0, // struct is passed according to integer calling convention
 
@@ -30,11 +31,14 @@ namespace Internal.JitInterface
         IntFloat         =    1 << PosIntFloat,     // has two fields, 2nd is floating and 1st is integer
         SizeShift1stMask = 0b11 << PosSizeShift1st, // log2(size) of 1st field
         SizeShift2ndMask = 0b11 << PosSizeShift2nd, // log2(size) of 2nd field
+        Ppc64leHfa       =    1 << 8,               // PPC64LE HFA with more than two elements
+        Ppc64leHfaCountMask = 0b1111 << PosPpc64leHfaCount,
         // Note: flags OnlyOne, BothFloat, FloatInt, and IntFloat are mutually exclusive
     }
 
     // On RISC-V, LoongArch, and PPC64LE a struct with up to two non-empty fields, at least one of them
-    // floating-point, can be passed in registers according to hardware FP calling convention.
+    // floating-point, can be passed in registers according to hardware FP calling convention. PPC64LE also
+    // uses this to represent homogeneous floating-point aggregates with more than two elements.
     // FpStructInRegistersInfo represents passing information for such parameters.
     public struct FpStructInRegistersInfo
     {
@@ -47,13 +51,34 @@ namespace Internal.JitInterface
 
         public uint Size1st() { return 1u << (int)SizeShift1st(); }
         public uint Size2nd() { return 1u << (int)SizeShift2nd(); }
+
+        public bool IsPpc64leHfa() { return (flags & FpStruct.Ppc64leHfa) != 0; }
+        public uint Ppc64leHfaElementCount()
+        {
+            Debug.Assert(IsPpc64leHfa());
+            return (uint)((int)(flags & FpStruct.Ppc64leHfaCountMask) >> (int)FpStruct.PosPpc64leHfaCount);
+        }
+        public uint Ppc64leHfaElementSize()
+        {
+            Debug.Assert(IsPpc64leHfa());
+            return Size1st();
+        }
     }
 
     internal static class RiscVLoongArch64FpStruct
     {
         private const int
             ENREGISTERED_PARAMTYPE_MAXSIZE = 16,
+            MAX_FPSTRUCT_LOWERED_ELEMENTS = 8,
             TARGET_POINTER_SIZE = 8;
+
+        private static uint GetFpStructFieldSizeShift(uint size)
+        {
+            Debug.Assert(size >= 1 && size <= 8);
+            Debug.Assert((size & (size - 1)) == 0, "size needs to be a power of 2");
+            const int sizeShiftLUT = (0 << (1*2)) | (1 << (2*2)) | (2 << (4*2)) | (3 << (8*2));
+            return (uint)((sizeShiftLUT >> ((int)size * 2)) & 0b11);
+        }
 
         private static void SetFpStructInRegistersInfoField(ref FpStructInRegistersInfo info, int index,
             bool isFloating, uint size, uint offset)
@@ -64,18 +89,64 @@ namespace Internal.JitInterface
 
             Debug.Assert(size >= 1 && size <= 8);
             Debug.Assert((size & (size - 1)) == 0, "size needs to be a power of 2");
-            const int sizeShiftLUT = (0 << (1*2)) | (1 << (2*2)) | (2 << (4*2)) | (3 << (8*2));
-            int sizeShift = (sizeShiftLUT >> ((int)size * 2)) & 0b11;
+            uint sizeShift = GetFpStructFieldSizeShift(size);
 
             // Use FloatInt and IntFloat as marker flags for 1st and 2nd field respectively being floating.
             // Fix to real flags (with OnlyOne and BothFloat) after flattening is complete.
             Debug.Assert((int)PosIntFloat == (int)PosFloatInt + 1, "FloatInt and IntFloat need to be adjacent");
             Debug.Assert((int)PosSizeShift2nd == (int)PosSizeShift1st + 2, "SizeShift1st and 2nd need to be adjacent");
             int floatFlag = Convert.ToInt32(isFloating) << ((int)PosFloatInt + index);
-            int sizeShiftMask = sizeShift << ((int)PosSizeShift1st + 2 * index);
+            int sizeShiftMask = (int)sizeShift << ((int)PosSizeShift1st + 2 * index);
 
             info.flags |= (FpStruct)(floatFlag | sizeShiftMask);
             (index == 0 ? ref info.offset1st : ref info.offset2nd) = offset;
+        }
+
+        private static bool GetPpc64leHfaInRegistersInfo(TypeDesc td, out FpStructInRegistersInfo info)
+        {
+            info = new FpStructInRegistersInfo{};
+
+            if (td is not DefType defType)
+                return false;
+
+            int elemSize = (defType.ValueTypeShapeCharacteristics & ValueTypeShapeCharacteristics.AggregateMask) switch
+            {
+                ValueTypeShapeCharacteristics.Float32Aggregate => sizeof(float),
+                ValueTypeShapeCharacteristics.Float64Aggregate => sizeof(double),
+                _ => 0
+            };
+
+            int size = td.GetElementSize().AsInt;
+            if (elemSize == 0 || (size % elemSize) != 0)
+                return false;
+
+            int elemCount = size / elemSize;
+            if (elemCount is < 1 or > MAX_FPSTRUCT_LOWERED_ELEMENTS)
+                return false;
+
+            if (elemCount <= 2)
+            {
+                SetFpStructInRegistersInfoField(ref info, 0, true, (uint)elemSize, 0);
+                if (elemCount == 1)
+                {
+                    info.flags ^= FloatInt | OnlyOne;
+                }
+                else
+                {
+                    SetFpStructInRegistersInfoField(ref info, 1, true, (uint)elemSize, (uint)elemSize);
+                    info.flags ^= FloatInt | IntFloat | BothFloat;
+                }
+            }
+            else
+            {
+                info.flags = Ppc64leHfa |
+                    (FpStruct)(GetFpStructFieldSizeShift((uint)elemSize) << (int)PosSizeShift1st) |
+                    (FpStruct)(elemCount << (int)PosPpc64leHfaCount);
+                info.offset1st = 0;
+                info.offset2nd = (uint)elemSize;
+            }
+
+            return true;
         }
 
         private static bool HandleInlineArray(int elementTypeIndex, int nElements,
@@ -194,6 +265,9 @@ namespace Internal.JitInterface
         public static FpStructInRegistersInfo GetFpStructInRegistersInfo(TypeDesc td, TargetArchitecture arch)
         {
             Debug.Assert(arch is TargetArchitecture.RiscV64 or TargetArchitecture.LoongArch64 or TargetArchitecture.Ppc64le);
+
+            if ((arch == TargetArchitecture.Ppc64le) && GetPpc64leHfaInRegistersInfo(td, out FpStructInRegistersInfo hfaInfo))
+                return hfaInfo;
 
             if (td.GetElementSize().AsInt > ENREGISTERED_PARAMTYPE_MAXSIZE)
                 return new FpStructInRegistersInfo{};

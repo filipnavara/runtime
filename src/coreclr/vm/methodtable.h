@@ -834,6 +834,7 @@ namespace FpStruct
         PosIntFloat     = 3,
         PosSizeShift1st = 4, // 2 bits
         PosSizeShift2nd = 6, // 2 bits
+        PosPpc64leHfaCount = 9, // 4 bits
 
         UseIntCallConv = 0, // struct is passed according to integer calling convention
 
@@ -844,13 +845,15 @@ namespace FpStruct
         IntFloat         =    1 << PosIntFloat,     // has two fields, 2nd is floating and 1st is integer
         SizeShift1stMask = 0b11 << PosSizeShift1st, // log2(size) of 1st field
         SizeShift2ndMask = 0b11 << PosSizeShift2nd, // log2(size) of 2nd field
+        Ppc64leHfa       =    1 << 8,               // PPC64LE HFA with more than two elements
+        Ppc64leHfaCountMask = 0b1111 << PosPpc64leHfaCount,
         // Note: flags OnlyOne, BothFloat, FloatInt, and IntFloat are mutually exclusive
     };
 }
 
-// On RISC-V and LoongArch a struct with up to two non-empty fields, at least one of them floating-point,
-// can be passed in registers according to hardware FP calling convention. FpStructInRegistersInfo represents
-// passing information for such parameters.
+// On RISC-V, LoongArch, and PPC64LE a struct with up to two non-empty fields, at least one of them floating-point,
+// can be passed in registers according to hardware FP calling convention. PPC64LE also uses this to represent
+// homogeneous floating-point aggregates with more than two elements.
 struct FpStructInRegistersInfo
 {
     FpStruct::Flags flags;
@@ -863,8 +866,21 @@ struct FpStructInRegistersInfo
     unsigned Size1st() const { return 1u << SizeShift1st(); }
     unsigned Size2nd() const { return 1u << SizeShift2nd(); }
 
+    bool IsPpc64leHfa() const { return (flags & FpStruct::Ppc64leHfa) != 0; }
+    unsigned Ppc64leHfaElementCount() const
+    {
+        assert(IsPpc64leHfa());
+        return (flags & FpStruct::Ppc64leHfaCountMask) >> FpStruct::PosPpc64leHfaCount;
+    }
+    unsigned Ppc64leHfaElementSize() const { assert(IsPpc64leHfa()); return Size1st(); }
+
     const char* FlagName() const
     {
+        if (IsPpc64leHfa())
+        {
+            return "Ppc64leHfa";
+        }
+
         switch (flags & (FpStruct::OnlyOne | FpStruct::BothFloat | FpStruct::FloatInt | FpStruct::IntFloat))
         {
             case FpStruct::OnlyOne: return "OnlyOne";

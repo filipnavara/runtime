@@ -546,6 +546,11 @@ Struct classification:
 - For unmanaged returns, only homogeneous floating-point aggregates use FPR
   return registers. Mixed floating-point/integer aggregates are not HFAs in the
   ELFv2 ABI and must return through integer chunks in `r3/r4`.
+- `MethodTable::GetFpStructInRegistersInfo`/`FpStructInRegistersInfo` are the
+  central runtime description for RISC-V/LoongArch two-field FP structs and
+  PPC64LE HFAs. `CEEInfo::getFpStructLowering`, NativeAOT `CorInfoImpl`, and
+  the VM argument iterator should consume that description instead of
+  rediscovering PPC64LE HFA shape locally.
 - Split multireg struct parameters should not overlap callee-saved save slots.
 - If a struct contains GC references, every intermediate copy location must be
   non-GC by construction or reported for the full live range.

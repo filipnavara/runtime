@@ -231,6 +231,9 @@ LOCAL_LABEL(CallDescrWorkerInternalReturnAddress):
     cmpwi 5, 0
     beq LOCAL_LABEL(IntReturn)
 
+    andi. 6, 5, FpStruct__Ppc64leHfa
+    bne LOCAL_LABEL(Ppc64leHfaReturn)
+
     stfd 1, CallDescrData__returnValue(31)
     andi. 5, 5, FpStruct__BothFloat
     bne LOCAL_LABEL(SecondFieldFloatReturn)
@@ -238,6 +241,28 @@ LOCAL_LABEL(CallDescrWorkerInternalReturnAddress):
     b LOCAL_LABEL(ReturnDone)
 
 LOCAL_LABEL(SecondFieldFloatReturn):
+    stfd 2, CallDescrData__returnValue + 8(31)
+    b LOCAL_LABEL(ReturnDone)
+
+LOCAL_LABEL(Ppc64leHfaReturn):
+    andi. 6, 5, FpStruct__SizeShift1stMask
+    cmpwi 6, 0x20
+    bne LOCAL_LABEL(Ppc64leDoubleHfaReturn)
+
+    stfs 1, CallDescrData__returnValue(31)
+    stfs 2, CallDescrData__returnValue + 4(31)
+    stfs 3, CallDescrData__returnValue + 8(31)
+
+    srwi 6, 5, FpStruct__PosPpc64leHfaCount
+    andi. 6, 6, 0xF
+    cmpwi 6, 3
+    beq LOCAL_LABEL(ReturnDone)
+
+    stfs 4, CallDescrData__returnValue + 12(31)
+    b LOCAL_LABEL(ReturnDone)
+
+LOCAL_LABEL(Ppc64leDoubleHfaReturn):
+    stfd 1, CallDescrData__returnValue(31)
     stfd 2, CallDescrData__returnValue + 8(31)
     b LOCAL_LABEL(ReturnDone)
 

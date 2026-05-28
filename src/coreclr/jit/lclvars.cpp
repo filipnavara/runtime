@@ -4947,6 +4947,16 @@ void Compiler::lvaAssignVirtualFrameOffsetsToLocals()
         TARGET_POINTER_SIZE;
     stkOffs -= fixedSaveSlotCount * TARGET_POINTER_SIZE;
 
+    if (lvaRetAddrVar != BAD_VAR_NUM)
+    {
+        int retAddrOffset = stkOffs;
+        if (codeGen->isFramePointerUsed())
+        {
+            retAddrOffset += REGSIZE_BYTES; // FP save slot precedes the LR save slot.
+        }
+        lvaTable[lvaRetAddrVar].SetStackOffset(retAddrOffset);
+    }
+
 #elif HAS_FIXED_REGISTER_SET
 #ifdef TARGET_ARM
     // On ARM32 LR is part of the pushed registers and is always stored at the

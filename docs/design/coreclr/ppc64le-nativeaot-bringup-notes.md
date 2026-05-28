@@ -575,6 +575,41 @@ Dispatch and stubs:
 - Precode and call-counting stubs keep secret parameters or tokens in `r11`,
   leaving `r12` for the branch target.
 
+Register selection decisions:
+
+- `r12` is the canonical ELFv2 branch-target register. Any indirect branch or
+  global-entry call/jump that can cross into ELFv2 code must branch through
+  `r12`, and the callee may use it to establish its TOC.
+- `r11` carries CoreCLR non-standard call state: secret stub parameters, R2R
+  indirection cells, virtual-stub dispatch cells, P/Invoke cookies, precode
+  tokens, and call-counting state. Do not use `r11` as general epilog or branch
+  scratch when any of those paths can still be live.
+- The P/Invoke calli unmanaged target uses `r10`. `r0` is not an
+  LSRA-allocatable integer register on PPC64LE, and `r12` must remain available
+  for the actual ELFv2 branch target loaded for the helper or native callee.
+- Write barriers use `r11` for the destination/byref destination, `r10` for the
+  normal source, and `r9` for the byref source. These registers match the
+  assembly helper contracts and helper kill sets.
+- Tailcall epilogs may use `r12` as scratch only before the final target is
+  materialized. The final target load or move must happen after the epilog has
+  restored callee-saves, SP, and LR.
+
+Fast tailcalls:
+
+- Managed fast tailcalls preserve the CoreCLR runtime TOC in `r2`.
+- `r11` is not available as a tailcall epilog scratch register. Virtual-stub
+  dispatch cells, R2R indirection cells, and other non-standard arguments can
+  remain live in `r11` until the final branch.
+- `r12` is the ELFv2 branch-target register. The JIT may use `r12` as a
+  tailcall epilog scratch register, but only before it materializes the final
+  call target; the emitted branch must still be `mtctr r12; bctr`.
+- Fast-tailcall control expressions and temporary loaded call targets must avoid
+  `r12`, because the epilog can clobber it before the final target load/move.
+- PPC64LE call lowering distinguishes the ABI-mandated 64-byte parameter save
+  area from actual stack-passed arguments. Fast-tailcall stack-space checks use
+  only the raw classified stack-argument byte count; normal outgoing call frame
+  sizing still reserves the full save area.
+
 ## Current Implementation Gaps
 
 Keep this list current. Remove items when the code path is enabled and covered
@@ -589,10 +624,13 @@ by useful validation.
   incomplete. Native interop tests that require those exact platform ABI shapes
   should remain active PPC64LE issues until the classifier and call lowering are
   implemented and validated.
-- Fast tail calls are disabled. Codegen still has defensive NYI paths for fast
-  tailcall stack argument placement and call emission. Tests that require
-  explicit or portable tailcalls to avoid stack growth should remain marked as
-  active PPC64LE issues until this path is implemented.
+- Fast and portable tailcalls are enabled for managed calls. Keep split
+  register/stack fast tailcall arguments rejected until the PPC64LE stack
+  argument shuffle is designed and tested.
+- `StubLinkerCPU::EmitCallLabel` is still not implemented. The current PPC64LE
+  managed-method stub path emits absolute target materialization and branch
+  instructions directly, but generic label-ref call emission should be added
+  before relying on VM stub-linker code paths that require it.
 - ICorProfiler enter/leave/tailcall hooks are not implemented. The PPC64LE VM
   currently has placeholder `Profile*Help` support in `ppc64le/stubs.cpp` and
   empty `ProfileEnterNaked`, `ProfileLeaveNaked`, and `ProfileTailcallNaked`

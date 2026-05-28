@@ -764,6 +764,7 @@ int LinearScan::BuildCall(GenTreeCall* call)
         if (call->IsFastTailCall())
         {
             ctrlExprCandidates = allRegs(TYP_INT) & RBM_INT_CALLEE_TRASH.GetIntRegSet();
+            ctrlExprCandidates &= ~genRegMask(REG_INDIRECT_CALL_TARGET_REG).GetIntRegSet();
             if (m_compiler->getNeedsGSSecurityCookie())
             {
                 ctrlExprCandidates &= ~m_compiler->codeGen->genGetGSCookieTempRegs(/* tailCall */ true).GetIntRegSet();
@@ -794,6 +795,7 @@ int LinearScan::BuildCall(GenTreeCall* call)
         if (call->IsFastTailCall())
         {
             candidates &= RBM_INT_CALLEE_TRASH.GetIntRegSet();
+            candidates &= ~genRegMask(REG_INDIRECT_CALL_TARGET_REG).GetIntRegSet();
             assert(candidates != RBM_NONE);
         }
 

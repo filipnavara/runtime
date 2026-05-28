@@ -5061,6 +5061,7 @@ public:
     // clang-format on
 
     unsigned OutgoingArgsStackSize() const;
+    unsigned ArgsStackSize() const { return m_argsStackSize; }
 
     unsigned CountArgs();
     unsigned CountUserArgs();

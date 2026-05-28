@@ -1,7 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!-- PPC64LE portable/explicit tailcall dispatch is still a bringup gap. -->
-    <CLRTestTargetUnsupported Condition="'$(TargetArchitecture)' == 'ppc64le'">true</CLRTestTargetUnsupported>
     <Optimize>True</Optimize>
     <TargetFramework>$(NetCoreAppToolCurrent)</TargetFramework>
     <OtherFlags>--tailcalls+</OtherFlags>

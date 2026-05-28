@@ -2,8 +2,6 @@
   <PropertyGroup>
     <!-- Needed for CLRTestEnvironmentVariable, Environment.Exit -->
     <RequiresProcessIsolation>true</RequiresProcessIsolation>
-    <!-- PPC64LE fast/portable tailcall dispatch currently grows the stack. -->
-    <CLRTestTargetUnsupported Condition="'$(TargetArchitecture)' == 'ppc64le'">true</CLRTestTargetUnsupported>
     <NativeAotIncompatible>true</NativeAotIncompatible>
   </PropertyGroup>
   <PropertyGroup>

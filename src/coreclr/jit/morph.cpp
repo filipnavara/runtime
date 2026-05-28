@@ -4106,6 +4106,12 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee, const char** failReason)
 
     unsigned calleeArgStackSize = callee->gtArgs.OutgoingArgsStackSize();
     unsigned callerArgStackSize = roundUp(lvaParameterStackSize, TARGET_POINTER_SIZE);
+#ifdef TARGET_POWERPC64
+    // The PPC64LE outgoing area always reserves the ABI-mandated parameter save area, but
+    // fast-tailcall compatibility is about the actual stack-passed arguments that must be
+    // written into the caller's incoming area.
+    calleeArgStackSize = roundUp(callee->gtArgs.ArgsStackSize(), TARGET_POINTER_SIZE);
+#endif
 
     auto reportFastTailCallDecision = [&](const char* thisFailReason) {
         if (failReason != nullptr)
@@ -4157,7 +4163,7 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee, const char** failReason)
 #endif // DEBUG
     };
 
-#if defined(TARGET_ARM) || defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#if defined(TARGET_ARM) || defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
     for (CallArg& arg : callee->gtArgs.Args())
     {
         if (arg.AbiInfo.IsSplitAcrossRegistersAndStack())
@@ -4176,7 +4182,7 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee, const char** failReason)
             return false;
         }
     }
-#endif // TARGET_ARM || TARGET_RISCV64 || defined(TARGET_LOONGARCH64)
+#endif // TARGET_ARM || TARGET_RISCV64 || TARGET_LOONGARCH64 || TARGET_POWERPC64
 
 #ifdef TARGET_ARM
     if (compIsProfilerHookNeeded())

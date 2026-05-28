@@ -290,54 +290,69 @@ void CodeGen::genFnEpilog(BasicBlock* block)
         noway_assert(block->GetFirstLIRNode() != nullptr);
 
         GenTree* jmpNode = block->lastNode();
+#if !FEATURE_FASTTAILCALL
         noway_assert(jmpNode->OperIs(GT_JMP));
+#else
+        noway_assert(!jmpNode->OperIs(GT_JMP) || (jmpNode->gtNext == nullptr));
+        noway_assert(jmpNode->OperIs(GT_JMP) || (jmpNode->OperIs(GT_CALL) && jmpNode->AsCall()->IsFastTailCall()));
 
-        CORINFO_METHOD_HANDLE methHnd = reinterpret_cast<CORINFO_METHOD_HANDLE>(jmpNode->AsVal()->gtVal1);
-        CORINFO_CONST_LOOKUP  addrInfo;
-        addrInfo.addr       = nullptr;
-        addrInfo.accessType = IAT_VALUE;
-        m_compiler->info.compCompHnd->getFunctionEntryPoint(methHnd, &addrInfo);
-
-        EmitCallParams params;
-        params.methHnd = methHnd;
-
-        switch (addrInfo.accessType)
+        if (jmpNode->OperIs(GT_JMP))
+#endif
         {
-            case IAT_VALUE:
-                if (m_compiler->opts.compReloc)
-                {
-                    params.callType = EC_FUNC_TOKEN;
-                    params.addr     = addrInfo.addr;
-                }
-                else
-                {
+
+            CORINFO_METHOD_HANDLE methHnd = reinterpret_cast<CORINFO_METHOD_HANDLE>(jmpNode->AsVal()->gtVal1);
+            CORINFO_CONST_LOOKUP  addrInfo;
+            addrInfo.addr       = nullptr;
+            addrInfo.accessType = IAT_VALUE;
+            m_compiler->info.compCompHnd->getFunctionEntryPoint(methHnd, &addrInfo);
+
+            genPopCalleeSavedRegisters(/* jmpEpilog */ true);
+
+            EmitCallParams params;
+            params.methHnd = methHnd;
+            params.isJump  = true;
+            switch (addrInfo.accessType)
+            {
+                case IAT_VALUE:
+                    if (m_compiler->opts.compReloc)
+                    {
+                        params.callType = EC_FUNC_TOKEN;
+                        params.addr     = addrInfo.addr;
+                    }
+                    else
+                    {
+                        instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_INDIRECT_CALL_TARGET_REG,
+                                                reinterpret_cast<ssize_t>(addrInfo.addr));
+                        params.callType = EC_INDIR_R;
+                        params.ireg     = REG_INDIRECT_CALL_TARGET_REG;
+                        regSet.verifyRegUsed(params.ireg);
+                    }
+                    break;
+
+                case IAT_PVALUE:
                     instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_INDIRECT_CALL_TARGET_REG,
                                             reinterpret_cast<ssize_t>(addrInfo.addr));
+                    GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_INDIRECT_CALL_TARGET_REG,
+                                                REG_INDIRECT_CALL_TARGET_REG, 0);
                     params.callType = EC_INDIR_R;
                     params.ireg     = REG_INDIRECT_CALL_TARGET_REG;
                     regSet.verifyRegUsed(params.ireg);
-                }
-                break;
+                    break;
 
-            case IAT_PVALUE:
-                instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_INDIRECT_CALL_TARGET_REG,
-                                        reinterpret_cast<ssize_t>(addrInfo.addr));
-                GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_INDIRECT_CALL_TARGET_REG,
-                                            REG_INDIRECT_CALL_TARGET_REG, 0);
-                params.callType = EC_INDIR_R;
-                params.ireg     = REG_INDIRECT_CALL_TARGET_REG;
-                regSet.verifyRegUsed(params.ireg);
-                break;
+                default:
+                    NO_WAY("Unsupported JMP indirection");
+                    break;
+            }
 
-            default:
-                NO_WAY("Unsupported JMP indirection");
-                break;
+            genEmitCallWithCurrentGC(params);
         }
-
-        genPopCalleeSavedRegisters(/* jmpEpilog */ true);
-
-        params.isJump = true;
-        genEmitCallWithCurrentGC(params);
+#if FEATURE_FASTTAILCALL
+        else
+        {
+            genPopCalleeSavedRegisters(/* jmpEpilog */ true);
+            genCallInstruction(jmpNode->AsCall());
+        }
+#endif
     }
     else
     {
@@ -3614,15 +3629,27 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
 {
     assert(treeNode->OperIs(GT_PUTARG_STK));
 
+    unsigned varNumOut;
+    unsigned argOffsetMax;
+
     if (treeNode->putInIncomingArgArea())
     {
-        NYI_POWERPC64("fast tail call stack arguments");
+        varNumOut    = getFirstArgWithStackSlot();
+        argOffsetMax = m_compiler->lvaParameterStackSize;
+#if FEATURE_FASTTAILCALL
+        assert(treeNode->gtCall->IsFastTailCall());
+        assert(m_compiler->lvaGetDesc(varNumOut) != nullptr);
+#endif
+    }
+    else
+    {
+        varNumOut    = m_compiler->lvaOutgoingArgSpaceVar;
+        argOffsetMax = m_compiler->lvaOutgoingArgSpaceSize;
     }
 
-    unsigned varNumOut    = m_compiler->lvaOutgoingArgSpaceVar;
-    unsigned argOffsetOut = treeNode->getArgOffset();
-    unsigned argOffsetMax = m_compiler->lvaOutgoingArgSpaceSize;
-    GenTree* source       = treeNode->gtGetOp1();
+    unsigned varOffsetBias = (varNumOut == m_compiler->lvaOutgoingArgSpaceVar) ? FIRST_ARG_STACK_OFFS : 0;
+    unsigned argOffsetOut  = treeNode->getArgOffset();
+    GenTree* source        = treeNode->gtGetOp1();
 
     if (!source->TypeIs(TYP_STRUCT))
     {
@@ -3642,20 +3669,19 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
             assert(source->AsIntConCommon()->IconValue() == 0);
 
             instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_R0, 0);
-            regNumber tmpReg = ppcLclOffsetFitsInstruction(m_compiler, storeIns, varNumOut, argOffsetOut)
+            regNumber tmpReg = ppcLclOffsetFitsInstruction(m_compiler, storeIns, varNumOut, argOffsetOut + varOffsetBias)
                                    ? REG_NA
                                    : internalRegisters.GetSingle(treeNode);
-            GetEmitter()->emitIns_S_R(storeIns, storeAttr, REG_R0, varNumOut, argOffsetOut + FIRST_ARG_STACK_OFFS,
-                                      tmpReg);
+            GetEmitter()->emitIns_S_R(storeIns, storeAttr, REG_R0, varNumOut, argOffsetOut + varOffsetBias, tmpReg);
         }
         else
         {
             genConsumeReg(source);
-            regNumber tmpReg = ppcLclOffsetFitsInstruction(m_compiler, storeIns, varNumOut, argOffsetOut)
+            regNumber tmpReg = ppcLclOffsetFitsInstruction(m_compiler, storeIns, varNumOut, argOffsetOut + varOffsetBias)
                                    ? REG_NA
                                    : internalRegisters.GetSingle(treeNode);
-            GetEmitter()->emitIns_S_R(storeIns, storeAttr, source->GetRegNum(), varNumOut,
-                                      argOffsetOut + FIRST_ARG_STACK_OFFS, tmpReg);
+            GetEmitter()->emitIns_S_R(storeIns, storeAttr, source->GetRegNum(), varNumOut, argOffsetOut + varOffsetBias,
+                                      tmpReg);
         }
 
         argOffsetOut += EA_SIZE_IN_BYTES(storeAttr);
@@ -3680,10 +3706,10 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
             unsigned  offset = argOffset + use.GetOffset();
 
             instruction storeIns = ins_Store(type);
-            regNumber tmpReg = ppcLclOffsetFitsInstruction(m_compiler, storeIns, varNumOut, offset)
+            regNumber tmpReg = ppcLclOffsetFitsInstruction(m_compiler, storeIns, varNumOut, offset + varOffsetBias)
                                    ? REG_NA
                                    : internalRegisters.GetSingle(treeNode);
-            GetEmitter()->emitIns_S_R(storeIns, attr, reg, varNumOut, offset + FIRST_ARG_STACK_OFFS, tmpReg);
+            GetEmitter()->emitIns_S_R(storeIns, attr, reg, varNumOut, offset + varOffsetBias, tmpReg);
         }
         return;
     }
@@ -3777,8 +3803,7 @@ void CodeGen::genPutArgStk(GenTreePutArgStk* treeNode)
             genInstrWithConstant(loadIns, attr, loReg, addrReg, structOffset, loReg);
         }
 
-        GetEmitter()->emitIns_S_R(ins_Store(type), attr, loReg, varNumOut, argOffsetOut + FIRST_ARG_STACK_OFFS,
-                                  storeTmpReg);
+        GetEmitter()->emitIns_S_R(ins_Store(type), attr, loReg, varNumOut, argOffsetOut + varOffsetBias, storeTmpReg);
 
         argOffsetOut += moveSize;
         assert(argOffsetOut <= argOffsetMax);
@@ -3821,7 +3846,26 @@ void CodeGen::genCall(GenTreeCall* call)
 
     if (call->IsFastTailCall())
     {
-        NYI_POWERPC64("fast tail calls");
+        GenTree* target = getCallTarget(call, nullptr);
+        if (target != nullptr)
+        {
+            genConsumeReg(target);
+        }
+#ifdef FEATURE_READYTORUN
+        else if (call->IsR2ROrVirtualStubRelativeIndir())
+        {
+            assert((call->IsR2RRelativeIndir() && (call->gtEntryPoint.accessType == IAT_PVALUE)) ||
+                   (call->IsVirtualStubRelativeIndir() && (call->gtEntryPoint.accessType == IAT_VALUE)));
+            assert(call->gtControlExpr == nullptr);
+
+            regNumber tmpReg      = internalRegisters.GetSingle(call);
+            regNumber callAddrReg = call->IsVirtualStubRelativeIndir() ? m_compiler->virtualStubParamInfo->GetReg()
+                                                                       : REG_R2R_INDIRECT_PARAM;
+            GetEmitter()->emitIns_R_R_I(ins_Load(TYP_I_IMPL), emitActualTypeSize(TYP_I_IMPL), tmpReg, callAddrReg, 0);
+            internalRegisters.Add(call, genRegMask(tmpReg));
+        }
+#endif
+        return;
     }
 
     if (m_compiler->killGCRefs(call))
@@ -3907,6 +3951,7 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
         }
     }
 
+    params.isJump      = call->IsFastTailCall();
     params.hasAsyncRet = call->IsAsync();
 
     if (m_compiler->opts.compDbgInfo && (m_compiler->genCallSite2DebugInfoMap != nullptr) && !call->IsTailCall())
@@ -3921,6 +3966,30 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
     {
         params.sigInfo = call->callSig;
     }
+
+    if (call->IsFastTailCall())
+    {
+        regMaskTP trashedByEpilog = RBM_CALLEE_SAVED | genRegMask(REG_INDIRECT_CALL_TARGET_REG);
+        if (m_compiler->getNeedsGSSecurityCookie())
+        {
+            trashedByEpilog |= genGetGSCookieTempRegs(/* tailCall */ true);
+        }
+
+        for (CallArg& arg : call->gtArgs.Args())
+        {
+            for (unsigned i = 0; i < arg.AbiInfo.NumSegments; i++)
+            {
+                const ABIPassingSegment& seg = arg.AbiInfo.Segment(i);
+                if (seg.IsPassedInRegister() && ((trashedByEpilog & seg.GetRegisterMask()) != 0))
+                {
+                    JITDUMP("Tail call node:\n");
+                    DISPTREE(call);
+                    JITDUMP("Register used: %s\n", getRegName(seg.GetRegister()));
+                    assert(!"Argument to tailcall may be trashed by epilog");
+                }
+            }
+        }
+    }
 #endif
 
     regNumber callThroughIndirReg = REG_NA;
@@ -3934,7 +4003,10 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
     {
         if (!target->isContainedIntOrIImmed())
         {
-            genConsumeReg(target);
+            if (!call->IsFastTailCall())
+            {
+                genConsumeReg(target);
+            }
             params.ireg = target->GetRegNum();
         }
         else if (m_compiler->opts.compReloc && target->AsIntCon()->ImmedValNeedsReloc(m_compiler))
@@ -3953,8 +4025,11 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
         if (callThroughIndirReg != REG_NA)
         {
             params.ireg = internalRegisters.GetSingle(call);
-            GetEmitter()->emitIns_R_R_I(ins_Load(TYP_I_IMPL), emitActualTypeSize(TYP_I_IMPL), params.ireg,
-                                        callThroughIndirReg, 0);
+            if (!call->IsFastTailCall())
+            {
+                GetEmitter()->emitIns_R_R_I(ins_Load(TYP_I_IMPL), emitActualTypeSize(TYP_I_IMPL), params.ireg,
+                                            callThroughIndirReg, 0);
+            }
         }
         else
         {
@@ -4013,7 +4088,10 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
 
     genEmitCallWithCurrentGC(params);
 
-    genDefinePendingCallLabel(call);
+    if (!call->IsFastTailCall())
+    {
+        genDefinePendingCallLabel(call);
+    }
 
     if (restoreTocAfterExternalCall)
     {
@@ -4051,6 +4129,7 @@ void CodeGen::genPopCalleeSavedRegisters(bool jmpEpilog)
     assert(m_compiler->compGeneratingEpilog);
 
     regMaskTP regsToRestoreMask = regSet.rsGetModifiedCalleeSavedRegsMask();
+    regNumber tempReg           = jmpEpilog ? REG_INDIRECT_CALL_TARGET_REG : REG_TMP_0;
 
     if ((regsToRestoreMask & RBM_FLT_CALLEE_SAVED) != RBM_NONE)
     {
@@ -4073,8 +4152,8 @@ void CodeGen::genPopCalleeSavedRegisters(bool jmpEpilog)
             }
             else
             {
-                instGen_Set_Reg_To_Imm(EA_PTRSIZE, REG_TMP_0, spToFPDelta);
-                GetEmitter()->emitIns_R_R_R(INS_subf, EA_PTRSIZE, REG_SPBASE, REG_TMP_0, REG_FPBASE);
+                instGen_Set_Reg_To_Imm(EA_PTRSIZE, tempReg, spToFPDelta);
+                GetEmitter()->emitIns_R_R_R(INS_subf, EA_PTRSIZE, REG_SPBASE, tempReg, REG_FPBASE);
             }
             m_compiler->unwindSetFrameReg(REG_FPBASE, spToFPDelta);
         }
@@ -4105,7 +4184,7 @@ void CodeGen::genPopCalleeSavedRegisters(bool jmpEpilog)
             NYI_POWERPC64("large callee-saved register offset");
         }
 
-        genStackPointerAdjustment(deferredFrameSize, REG_TMP_0, nullptr, /* reportUnwindData */ true);
+        genStackPointerAdjustment(deferredFrameSize, tempReg, nullptr, /* reportUnwindData */ true);
     }
 
     genRestoreCalleeSavedRegistersHelp(regsToRestoreMask, REG_SPBASE, calleeSaveOffset, /* reportUnwindData */ true);
@@ -4134,7 +4213,7 @@ void CodeGen::genPopCalleeSavedRegisters(bool jmpEpilog)
     int totalFrameSize = genTotalFrameSize();
     if (totalFrameSize != 0)
     {
-        genStackPointerAdjustment(totalFrameSize - deferredFrameSize, REG_TMP_0, nullptr, /* reportUnwindData */ true);
+        genStackPointerAdjustment(totalFrameSize - deferredFrameSize, tempReg, nullptr, /* reportUnwindData */ true);
     }
 }
 

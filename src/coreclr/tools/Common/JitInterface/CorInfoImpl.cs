@@ -3653,8 +3653,43 @@ namespace Internal.JitInterface
 
         private void getFpStructLowering(CORINFO_CLASS_STRUCT_* structHnd, ref CORINFO_FPSTRUCT_LOWERING lowering)
         {
+            TypeDesc typeDesc = HandleToObject(structHnd);
+            if (_compilation.TypeSystemContext.Target.Architecture == TargetArchitecture.Ppc64le)
+            {
+                CorInfoType loweredType = getHFAType(structHnd) switch
+                {
+                    CorInfoHFAElemType.CORINFO_HFA_ELEM_FLOAT => CorInfoType.CORINFO_TYPE_FLOAT,
+                    CorInfoHFAElemType.CORINFO_HFA_ELEM_DOUBLE => CorInfoType.CORINFO_TYPE_DOUBLE,
+                    _ => CorInfoType.CORINFO_TYPE_UNDEF
+                };
+
+                int elemSize = loweredType switch
+                {
+                    CorInfoType.CORINFO_TYPE_FLOAT => sizeof(float),
+                    CorInfoType.CORINFO_TYPE_DOUBLE => sizeof(double),
+                    _ => 0
+                };
+
+                int size = typeDesc.GetElementSize().AsInt;
+                if (elemSize != 0 && (size % elemSize) == 0)
+                {
+                    int elemCount = size / elemSize;
+                    if (elemCount is >= 1 and <= 8)
+                    {
+                        lowering.byIntegerCallConv = false;
+                        lowering.numLoweredElements = elemCount;
+                        for (int i = 0; i < elemCount; i++)
+                        {
+                            lowering.LoweredElements[i] = loweredType;
+                            lowering.Offsets[i] = (uint)(i * elemSize);
+                        }
+                        return;
+                    }
+                }
+            }
+
             FpStructInRegistersInfo info = RiscVLoongArch64FpStruct.GetFpStructInRegistersInfo(
-                HandleToObject(structHnd), _compilation.TypeSystemContext.Target.Architecture);
+                typeDesc, _compilation.TypeSystemContext.Target.Architecture);
             if (info.flags != FpStruct.UseIntCallConv)
             {
                 lowering.byIntegerCallConv = false;

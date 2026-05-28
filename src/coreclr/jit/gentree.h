@@ -2075,7 +2075,7 @@ public:
     unsigned GetScaledIndex();
 
 public:
-    static unsigned char s_gtNodeSizes[];
+    static unsigned short s_gtNodeSizes[];
 #if NODEBASH_STATS || MEASURE_NODE_SIZE || COUNT_AST_OPERS
     static unsigned char s_gtTrueSizes[];
 #endif
@@ -3863,7 +3863,11 @@ public:
 // are stored here. We only need 2 bits per returned register,
 // so this is treated as a 2-bit array. No architecture needs more than 8 bits.
 //
+#if defined(TARGET_POWERPC64)
+typedef unsigned short MultiRegSpillFlags;
+#else
 typedef unsigned char MultiRegSpillFlags;
+#endif
 static const unsigned PACKED_GTF_SPILL   = 1;
 static const unsigned PACKED_GTF_SPILLED = 2;
 
@@ -3879,7 +3883,7 @@ static const unsigned PACKED_GTF_SPILLED = 2;
 //
 inline GenTreeFlags GetMultiRegSpillFlagsByIdx(MultiRegSpillFlags flags, unsigned idx)
 {
-    static_assert(MAX_MULTIREG_COUNT * 2 <= sizeof(unsigned char) * BITS_PER_BYTE);
+    static_assert(MAX_MULTIREG_COUNT * 2 <= sizeof(MultiRegSpillFlags) * BITS_PER_BYTE);
     assert(idx < MAX_MULTIREG_COUNT);
 
     unsigned     bits       = flags >> (idx * 2); // It doesn't matter that we possibly leave other high bits here.
@@ -3911,7 +3915,7 @@ inline GenTreeFlags GetMultiRegSpillFlagsByIdx(MultiRegSpillFlags flags, unsigne
 //
 inline MultiRegSpillFlags SetMultiRegSpillFlagsByIdx(MultiRegSpillFlags oldFlags, GenTreeFlags flagsToSet, unsigned idx)
 {
-    static_assert(MAX_MULTIREG_COUNT * 2 <= sizeof(unsigned char) * BITS_PER_BYTE);
+    static_assert(MAX_MULTIREG_COUNT * 2 <= sizeof(MultiRegSpillFlags) * BITS_PER_BYTE);
     assert(idx < MAX_MULTIREG_COUNT);
 
     MultiRegSpillFlags newFlags = oldFlags;
@@ -3925,10 +3929,10 @@ inline MultiRegSpillFlags SetMultiRegSpillFlagsByIdx(MultiRegSpillFlags oldFlags
         bits |= PACKED_GTF_SPILLED;
     }
 
-    const unsigned char packedFlags = PACKED_GTF_SPILL | PACKED_GTF_SPILLED;
+    const MultiRegSpillFlags packedFlags = PACKED_GTF_SPILL | PACKED_GTF_SPILLED;
 
     // Clear anything that was already there by masking out the bits before 'or'ing in what we want there.
-    newFlags = (unsigned char)((newFlags & ~(packedFlags << (idx * 2))) | (bits << (idx * 2)));
+    newFlags = (MultiRegSpillFlags)((newFlags & ~(packedFlags << (idx * 2))) | (bits << (idx * 2)));
     return newFlags;
 }
 
@@ -8999,7 +9003,7 @@ struct GenTreeCopyOrReload : public GenTreeUnOp
     {
         assert(OperGet() == from->OperGet());
 
-#ifdef UNIX_AMD64_ABI
+#if defined(UNIX_AMD64_ABI) || defined(TARGET_POWERPC64)
         for (unsigned i = 0; i < MAX_MULTIREG_COUNT - 1; ++i)
         {
             gtOtherRegs[i] = from->gtOtherRegs[i];

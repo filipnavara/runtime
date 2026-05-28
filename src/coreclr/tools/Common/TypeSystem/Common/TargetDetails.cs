@@ -349,6 +349,11 @@ namespace Internal.TypeSystem
         {
             get
             {
+                if (Architecture == TargetArchitecture.Ppc64le)
+                {
+                    return 8;
+                }
+
                 // There is a hard limit of 4 elements on an HFA/HVA type, see
                 // https://devblogs.microsoft.com/cppblog/introducing-vector-calling-convention/
                 // and Procedure Call Standard for the Arm 64-bit Architecture.

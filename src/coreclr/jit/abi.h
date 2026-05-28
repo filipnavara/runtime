@@ -104,6 +104,8 @@ public:
     // register segments
     // - On arm64/arm32, HFAs can be passed in up to four registers, giving
     // four register segments
+    // - On ppc64le, HFAs can be passed in up to eight registers, giving
+    // eight register segments
     // - On arm32, structs can be split out over register and stack, giving
     // multiple register segments and a struct segment.
     // - On Windows x64, all parameters always fit into one stack slot or

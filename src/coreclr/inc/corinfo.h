@@ -2028,9 +2028,11 @@ struct CORINFO_SWIFT_LOWERING
     size_t numLoweredElements;
 };
 
-#define MAX_FPSTRUCT_LOWERED_ELEMENTS 2
+#define MAX_FPSTRUCT_LOWERED_ELEMENTS 8
 
-// Lowering information on fields of a struct passed by hardware floating-point calling convention on RISC-V and LoongArch
+// Lowering information on fields of a struct passed by hardware floating-point calling convention.
+// RISC-V and LoongArch currently use this for up to two non-empty fields. PPC64LE also uses it
+// for homogeneous floating-point aggregates of up to eight elements.
 struct CORINFO_FPSTRUCT_LOWERING
 {
     // Whether the struct should be passed by integer calling convention (cannot be passed by FP calling convention).

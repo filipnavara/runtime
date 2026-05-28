@@ -61,7 +61,7 @@ struct ArgLocDesc
     SystemVEightByteRegistersInfo m_eightByteInfo;
 #endif // UNIX_AMD64_ABI
 
-#ifdef FEATURE_HFA
+#if defined(FEATURE_HFA) || defined(TARGET_POWERPC64)
     static unsigned getHFAFieldSize(CorInfoHFAElemType  hfaType)
     {
         switch (hfaType)
@@ -74,13 +74,13 @@ struct ArgLocDesc
         }
     }
 #endif
-#if defined(TARGET_ARM64)
+#if defined(TARGET_ARM64) || defined(TARGET_POWERPC64)
     unsigned m_hfaFieldSize;      // Size of HFA field in bytes.
     void setHFAFieldSize(CorInfoHFAElemType  hfaType)
     {
         m_hfaFieldSize = getHFAFieldSize(hfaType);
     }
-#endif // defined(TARGET_ARM64)
+#endif // defined(TARGET_ARM64) || defined(TARGET_POWERPC64)
 
 #if defined(TARGET_ARM)
     BOOL    m_fRequires64BitAlignment; // True if the argument should always be aligned (in registers or on the stack
@@ -103,9 +103,9 @@ struct ArgLocDesc
 #if defined(TARGET_ARM)
         m_fRequires64BitAlignment = FALSE;
 #endif
-#if defined(TARGET_ARM64)
+#if defined(TARGET_ARM64) || defined(TARGET_POWERPC64)
         m_hfaFieldSize = 0;
-#endif // defined(TARGET_ARM64)
+#endif // defined(TARGET_ARM64) || defined(TARGET_POWERPC64)
 #if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
         m_structFields = {};
 #endif
@@ -689,6 +689,13 @@ public:
         if (m_argType == ELEMENT_TYPE_VALUETYPE)
         {
             _ASSERTE(!m_argTypeHandle.IsNull());
+#ifdef TARGET_POWERPC64
+            if (m_argTypeHandle.IsHFA() && ((m_argSize <= ENREGISTERED_PARAMTYPE_MAXSIZE) ||
+                                            this->UsesUnmanagedCallingConvention()))
+            {
+                return FALSE;
+            }
+#endif
             return (m_argSize > ENREGISTERED_PARAMTYPE_MAXSIZE);
         }
         return FALSE;
@@ -1834,6 +1841,10 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
     assert(!this->IsVarArg()); // Varargs on RISC-V and LoongArch not supported yet
     int cFPRegs = 0;
     FpStructInRegistersInfo info = {};
+#ifdef TARGET_POWERPC64
+    bool isPpc64leHfa = false;
+    int ppc64leHfaFieldSize = 0;
+#endif
 
     switch (argType)
     {
@@ -1848,6 +1859,21 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
         // Handle struct which containing floats or doubles that can be passed
         // in FP registers if possible.
 
+#ifdef TARGET_POWERPC64
+        if (thValueType.IsHFA() &&
+            ((argSize <= ENREGISTERED_PARAMTYPE_MAXSIZE) || this->UsesUnmanagedCallingConvention()))
+        {
+            CorInfoHFAElemType hfaType = thValueType.GetHFAType();
+            ppc64leHfaFieldSize = ArgLocDesc::getHFAFieldSize(hfaType);
+            _ASSERTE(ppc64leHfaFieldSize == 4 || ppc64leHfaFieldSize == 8);
+            _ASSERTE((argSize % ppc64leHfaFieldSize) == 0);
+
+            cFPRegs = argSize / ppc64leHfaFieldSize;
+            _ASSERTE((cFPRegs > 0) && (cFPRegs <= 8));
+            isPpc64leHfa = true;
+        }
+        else
+#endif
         // Composite greater than 16bytes should be passed by reference
         if (argSize > ENREGISTERED_PARAMTYPE_MAXSIZE)
         {
@@ -1923,6 +1949,17 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
         else if (cFPRegs + m_idxFPReg <= NUM_FLOAT_ARGUMENT_REGISTERS)
         {
             int argOfs = TransitionBlock::GetOffsetOfFloatArgumentRegisters() + m_idxFPReg * FLOAT_REGISTER_SIZE;
+#ifdef TARGET_POWERPC64
+            if (isPpc64leHfa)
+            {
+                m_argLocDescForStructInRegs.Init();
+                m_hasArgLocDescForStructInRegs = true;
+                m_argLocDescForStructInRegs.m_idxFloatReg = m_idxFPReg;
+                m_argLocDescForStructInRegs.m_cFloatReg = cFPRegs;
+                m_argLocDescForStructInRegs.m_hfaFieldSize = ppc64leHfaFieldSize;
+            }
+            else
+#endif
             if (info.flags != FpStruct::UseIntCallConv)
             {
                 assert(info.flags & (FpStruct::OnlyOne | FpStruct::BothFloat));
@@ -2295,6 +2332,14 @@ void ArgIteratorTemplate<ARGITERATOR_BASE>::ForceSigWalk()
     // Clear the iterator started flag
     m_dwFlags &= ~ITERATION_STARTED;
 
+#ifdef TARGET_POWERPC64
+    // PPC64 ELFv2 gives every fixed argument an ordered parameter slot. Floating-point
+    // arguments may be carried in FPRs while still consuming stack parameter slots once
+    // the GPR save area is exhausted, so account for m_ofsStack even when GetNextOffset
+    // returned an FPR location for the last arguments.
+    maxOffset = max(maxOffset, TransitionBlock::GetOffsetOfArgs() + m_ofsStack);
+#endif
+
 #ifdef TARGET_WASM
     if (this->NumFixedArgs() == 0)
     {
@@ -2395,6 +2440,12 @@ public:
         return m_pSig->IsVarArg() || m_pSig->IsTreatAsVarArg();
     }
 
+    BOOL UsesUnmanagedCallingConvention()
+    {
+        LIMITED_METHOD_CONTRACT;
+        return FALSE;
+    }
+
     DWORD NumFixedArgs()
     {
         LIMITED_METHOD_CONTRACT;
@@ -2454,6 +2505,12 @@ protected:
 #if defined(UNIX_AMD64_ABI)
     SystemVEightByteRegistersInfo GetEightByteRegistersInfo(TypeHandle th);
 #endif
+
+    BOOL UsesUnmanagedCallingConvention()
+    {
+        LIMITED_METHOD_CONTRACT;
+        return TRUE;
+    }
 };
 
 class PInvokeArgIterator : public ArgIteratorTemplate<ArgIteratorBaseForPInvoke>

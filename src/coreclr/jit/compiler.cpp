@@ -863,7 +863,12 @@ var_types Compiler::getReturnTypeForStruct(CORINFO_CLASS_HANDLE     clsHnd,
         useType             = TYP_UNKNOWN;
     }
 #elif defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
-    if (structSize <= (TARGET_POINTER_SIZE * 2))
+#if defined(TARGET_POWERPC64)
+    const unsigned maxFpStructReturnBytes = MAX_RET_MULTIREG_BYTES;
+#else
+    const unsigned maxFpStructReturnBytes = TARGET_POINTER_SIZE * 2;
+#endif
+    if (structSize <= maxFpStructReturnBytes)
     {
         const CORINFO_FPSTRUCT_LOWERING* lowering = GetFpStructLowering(clsHnd);
         if (!lowering->byIntegerCallConv)
@@ -876,7 +881,11 @@ var_types Compiler::getReturnTypeForStruct(CORINFO_CLASS_HANDLE     clsHnd,
             }
             else
             {
+#if defined(TARGET_POWERPC64)
+                assert((lowering->numLoweredElements >= 2) && (lowering->numLoweredElements <= MAX_RET_REG_COUNT));
+#else
                 assert(lowering->numLoweredElements == 2);
+#endif
                 howToReturnStruct = SPK_ByValue;
                 useType           = TYP_STRUCT;
             }
@@ -1035,9 +1044,24 @@ var_types Compiler::getReturnTypeForStruct(CORINFO_CLASS_HANDLE     clsHnd,
 
 #elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
 
-                // On LOONGARCH64/RISCV64/PPC64 struct that is 1-16 bytes is returned by value in one/two register(s)
+#if defined(TARGET_POWERPC64)
+                // PPC64LE uses up to eight registers for HFA returns, but non-HFA integer aggregate returns
+                // are still limited to r3/r4.
+                if (structSize <= (TARGET_POINTER_SIZE * 2))
+                {
+                    howToReturnStruct = SPK_ByValue;
+                    useType           = TYP_STRUCT;
+                }
+                else
+                {
+                    howToReturnStruct = SPK_ByReference;
+                    useType           = TYP_UNKNOWN;
+                }
+#else
+                // On LOONGARCH64/RISCV64 struct that is 1-16 bytes is returned by value in one/two register(s)
                 howToReturnStruct = SPK_ByValue;
                 useType           = TYP_STRUCT;
+#endif
 
 #else //  TARGET_XXX
 

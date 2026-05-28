@@ -89,7 +89,46 @@ public:
         return m_argLocDescForStructInRegs != NULL;
     }
 
+#ifdef TARGET_POWERPC64
+    bool IsHFA()
+    {
+        return IsStructPassedInRegs() && (m_argLocDescForStructInRegs->m_hfaFieldSize != 0);
+    }
+#endif
+
 #ifndef DACCESS_COMPILE
+#ifdef TARGET_POWERPC64
+    // Copy a PPC64LE HFA argument into FPR save slots described by the current ArgDestination.
+    void CopyHFAStructToRegister(void* src, int fieldBytes)
+    {
+        _ASSERTE(IsHFA());
+
+        int floatRegCount = m_argLocDescForStructInRegs->m_cFloatReg;
+        int hfaFieldSize = m_argLocDescForStructInRegs->m_hfaFieldSize;
+        _ASSERTE(hfaFieldSize == 4 || hfaFieldSize == 8);
+        _ASSERTE(fieldBytes == floatRegCount * hfaFieldSize);
+
+        int floatRegOffset = TransitionBlock::GetOffsetOfFloatArgumentRegisters() +
+            m_argLocDescForStructInRegs->m_idxFloatReg * FLOAT_REGISTER_SIZE;
+        UINT64* dest = (UINT64*)((char*)m_base + floatRegOffset);
+
+        for (int i = 0; i < floatRegCount; i++)
+        {
+            if (hfaFieldSize == 4)
+            {
+                *(double*)dest = *(float*)src;
+            }
+            else
+            {
+                *dest = *(UINT64*)src;
+            }
+
+            dest++;
+            src = (void*)((char*)src + hfaFieldSize);
+        }
+    }
+#endif
+
     // Copy struct argument into registers described by the current ArgDestination.
     // Arguments:
     //  src = source data of the structure

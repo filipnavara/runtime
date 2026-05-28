@@ -401,13 +401,20 @@ void MethodDescCallSite::CallTargetWorker(const ARG_SLOT *pArguments, ARG_SLOT *
                 argDest.CopyStructToRegisters(pSrc, th.AsMethodTable()->GetNumInstanceFieldBytes(), 0);
             }
             else
-#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
             if (argDest.IsStructPassedInRegs())
             {
+#ifdef TARGET_POWERPC64
+                if (argDest.IsHFA())
+                {
+                    argDest.CopyHFAStructToRegister(pSrc, stackSize);
+                }
+                else
+#endif
                 argDest.CopyStructToRegisters(pSrc, stackSize, 0);
             }
             else
-#endif // TARGET_LOONGARCH64 || TARGET_RISCV64
+#endif // TARGET_LOONGARCH64 || TARGET_RISCV64 || TARGET_POWERPC64
             {
                 PVOID pDest = argDest.GetDestinationAddress();
 

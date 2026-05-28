@@ -7569,32 +7569,20 @@ void CodeGen::genStructReturn(GenTree* treeNode)
         assert(varDsc->lvIsMultiRegRet);
 
 #if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
-        var_types type   = retTypeDesc.GetReturnRegType(0);
-        unsigned  offset = retTypeDesc.GetReturnFieldOffset(0);
-        regNumber toReg  = retTypeDesc.GetABIReturnReg(0, m_compiler->info.compCallConv);
-
-#ifdef TARGET_POWERPC64
-        regNumber tmpReg = ppc64leGetLargeOffsetLoadTmpReg(type, lclNode->GetLclNum(), offset);
-        GetEmitter()->emitIns_R_S(ins_Load(type), emitTypeSize(type), toReg, lclNode->GetLclNum(), offset, tmpReg);
-#else
-        GetEmitter()->emitIns_R_S(ins_Load(type), emitTypeSize(type), toReg, lclNode->GetLclNum(), offset);
-#endif
-        if (regCount > 1)
+        for (unsigned i = 0; i < regCount; i++)
         {
-            assert(regCount == 2);
-            assert(offset + genTypeSize(type) <= retTypeDesc.GetReturnFieldOffset(1));
-            type   = retTypeDesc.GetReturnRegType(1);
-            offset = retTypeDesc.GetReturnFieldOffset(1);
-            toReg  = retTypeDesc.GetABIReturnReg(1, m_compiler->info.compCallConv);
+            var_types type   = retTypeDesc.GetReturnRegType(i);
+            unsigned  offset = retTypeDesc.GetReturnFieldOffset(i);
+            regNumber toReg  = retTypeDesc.GetABIReturnReg(i, m_compiler->info.compCallConv);
 
 #ifdef TARGET_POWERPC64
-            tmpReg = ppc64leGetLargeOffsetLoadTmpReg(type, lclNode->GetLclNum(), offset);
+            regNumber tmpReg = ppc64leGetLargeOffsetLoadTmpReg(type, lclNode->GetLclNum(), offset);
             GetEmitter()->emitIns_R_S(ins_Load(type), emitTypeSize(type), toReg, lclNode->GetLclNum(), offset, tmpReg);
 #else
             GetEmitter()->emitIns_R_S(ins_Load(type), emitTypeSize(type), toReg, lclNode->GetLclNum(), offset);
 #endif
         }
-#else // !TARGET_LOONGARCH64 && !TARGET_RISCV64
+#else // !TARGET_LOONGARCH64 && !TARGET_RISCV64 && !TARGET_POWERPC64
 
 #ifdef SWIFT_SUPPORT
         const uint32_t* offsets = nullptr;
@@ -7623,7 +7611,7 @@ void CodeGen::genStructReturn(GenTree* treeNode)
             GetEmitter()->emitIns_R_S(ins_Load(type), emitTypeSize(type), toReg, lclNode->GetLclNum(), offset);
             offset += genTypeSize(type);
         }
-#endif // !TARGET_LOONGARCH64 && !TARGET_RISCV64
+#endif // !TARGET_LOONGARCH64 && !TARGET_RISCV64 && !TARGET_POWERPC64
     }
     else
     {

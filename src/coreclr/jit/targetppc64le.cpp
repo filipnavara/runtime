@@ -85,7 +85,7 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
             lowering = comp->GetFpStructLowering(structLayout->GetClassHandle());
             if (!lowering->byIntegerCallConv)
             {
-                assert((lowering->numLoweredElements == 1) || (lowering->numLoweredElements == 2));
+                assert((lowering->numLoweredElements >= 1) && (lowering->numLoweredElements <= MAX_MULTIREG_COUNT));
                 INDEBUG(unsigned debugIntFields = 0;)
                 for (size_t i = 0; i < lowering->numLoweredElements; ++i)
                 {
@@ -188,24 +188,25 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
         else
         {
             assert(varTypeIsStruct(type));
-            assert((floatFields + intFields) == 2);
             assert(lowering != nullptr);
             assert(!lowering->byIntegerCallConv);
-            assert(lowering->numLoweredElements == 2);
+            assert((floatFields + intFields) == lowering->numLoweredElements);
+            assert(lowering->numLoweredElements <= MAX_MULTIREG_COUNT);
 
-            var_types type0 = JITtype2varType(lowering->loweredElements[0]);
-            var_types type1 = JITtype2varType(lowering->loweredElements[1]);
-            assert(varTypeIsFloating(type0) || varTypeIsFloating(type1));
-            RegisterQueue& queue0 = varTypeIsFloating(type0) ? m_floatRegs : m_intRegs;
-            RegisterQueue& queue1 = varTypeIsFloating(type1) ? m_floatRegs : m_intRegs;
-
-            auto seg0 = ABIPassingSegment::InRegister(queue0.Dequeue(), lowering->offsets[0], genTypeSize(type0));
-            auto seg1 = ABIPassingSegment::InRegister(queue1.Dequeue(), lowering->offsets[1], genTypeSize(type1));
+            ABIPassingInformation info(comp, lowering->numLoweredElements);
+            for (size_t i = 0; i < lowering->numLoweredElements; i++)
+            {
+                var_types loweredType = JITtype2varType(lowering->loweredElements[i]);
+                assert(varTypeIsFloating(loweredType) || varTypeIsIntegralOrI(loweredType));
+                RegisterQueue& queue = varTypeIsFloating(loweredType) ? m_floatRegs : m_intRegs;
+                info.Segment(i) = ABIPassingSegment::InRegister(queue.Dequeue(), lowering->offsets[i],
+                                                                 genTypeSize(loweredType));
+            }
             if (intFields == 0)
             {
                 consumeParameterSlots(roundUp(passedSize, TARGET_POINTER_SIZE) / TARGET_POINTER_SIZE);
             }
-            return ABIPassingInformation::FromSegments(comp, seg0, seg1);
+            return info;
         }
     }
 

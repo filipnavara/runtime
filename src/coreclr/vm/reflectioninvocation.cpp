@@ -272,6 +272,12 @@ public:
         return FALSE;
     }
 
+    BOOL UsesUnmanagedCallingConvention()
+    {
+        LIMITED_METHOD_CONTRACT;
+        return FALSE;
+    }
+
     DWORD NumFixedArgs()
     {
         LIMITED_METHOD_CONTRACT;

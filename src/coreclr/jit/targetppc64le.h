@@ -28,10 +28,10 @@
 #define FEATURE_MULTIREG_RET          1
 #define MAX_PASS_SINGLEREG_BYTES      8
 #define MAX_PASS_MULTIREG_BYTES       16
-#define MAX_RET_MULTIREG_BYTES        16
+#define MAX_RET_MULTIREG_BYTES        64
 #define MAX_ARG_REG_COUNT             8
-#define MAX_RET_REG_COUNT             2
-#define MAX_MULTIREG_COUNT            4
+#define MAX_RET_REG_COUNT             8
+#define MAX_MULTIREG_COUNT            8
 
 #define NOGC_WRITE_BARRIERS      1
 #define USER_ARGS_COME_LAST      1

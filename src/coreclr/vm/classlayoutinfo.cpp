@@ -1239,8 +1239,13 @@ CorInfoHFAElemType EEClassNativeLayoutInfo::GetNativeHFATypeRaw() const
     if (totalSize % elemSize != 0)
         return CORINFO_HFA_ELEM_NONE;
 
-    // On ARM, HFAs can have a maximum of four fields regardless of whether those are float or double.
-    if (totalSize / elemSize > 4)
+#ifdef TARGET_POWERPC64
+    const DWORD maxHFAElements = 8;
+#else
+    const DWORD maxHFAElements = 4;
+#endif
+
+    if (totalSize / elemSize > maxHFAElements)
         return CORINFO_HFA_ELEM_NONE;
 
 #endif // !DACCESS_COMPILE

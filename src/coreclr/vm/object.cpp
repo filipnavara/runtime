@@ -422,6 +422,13 @@ void CopyValueClassArgUnchecked(ArgDestination *argDest, void* src, MethodTable 
 
     if (argDest->IsStructPassedInRegs())
     {
+#ifdef TARGET_POWERPC64
+        if (argDest->IsHFA())
+        {
+            argDest->CopyHFAStructToRegister(src, pMT->GetNumInstanceFieldBytes());
+            return;
+        }
+#endif
         argDest->CopyStructToRegisters(src, pMT->GetNumInstanceFieldBytes(), destOffset);
         return;
     }
@@ -454,6 +461,15 @@ void InitValueClassArg(ArgDestination *argDest, MethodTable *pMT)
 #if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     if (argDest->IsStructPassedInRegs())
     {
+#ifdef TARGET_POWERPC64
+        if (argDest->IsHFA())
+        {
+            BYTE zeros[64] = {};
+            _ASSERTE(pMT->GetNumInstanceFieldBytes() <= sizeof(zeros));
+            argDest->CopyHFAStructToRegister(zeros, pMT->GetNumInstanceFieldBytes());
+            return;
+        }
+#endif
         *(UINT64*)(argDest->GetStructGenRegDestinationAddress()) = 0;
         *(UINT64*)(argDest->GetDestinationAddress()) = 0;
         return;

@@ -2090,8 +2090,13 @@ EEClass::CheckForHFA()
     if (totalSize % elemSize != 0)
         return false;
 
-    // On ARM, HFAs can have a maximum of four fields regardless of whether those are float or double.
-    if (totalSize / elemSize > 4)
+#ifdef TARGET_POWERPC64
+    const DWORD maxHFAElements = 8;
+#else
+    const DWORD maxHFAElements = 4;
+#endif
+
+    if (totalSize / elemSize > maxHFAElements)
         return false;
 
     // All the above tests passed. It's HFA(/HVA)!

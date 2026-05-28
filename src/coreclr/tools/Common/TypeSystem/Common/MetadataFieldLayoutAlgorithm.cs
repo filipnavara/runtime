@@ -1342,7 +1342,7 @@ namespace Internal.TypeSystem
                     if (totalSize % haElementSize != 0)
                         return NotHA;
 
-                    // On ARM, HFAs can have a maximum of four fields regardless of whether those are float or double.
+                    // Different ABIs cap homogeneous aggregates at different element counts.
                     if (totalSize > haElementSize * type.Context.Target.MaxHomogeneousAggregateElementCount)
                         return NotHA;
 

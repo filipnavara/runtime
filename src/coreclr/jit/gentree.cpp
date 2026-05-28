@@ -211,7 +211,7 @@ const char* GenTree::OpStructName(genTreeOps op)
 
 /* GT_COUNT'th oper is overloaded as 'undefined oper', so allocate storage for GT_COUNT'th oper also */
 /* static */
-unsigned char GenTree::s_gtNodeSizes[GT_COUNT + 1];
+unsigned short GenTree::s_gtNodeSizes[GT_COUNT + 1];
 
 #if NODEBASH_STATS || MEASURE_NODE_SIZE || COUNT_AST_OPERS
 
@@ -32517,6 +32517,9 @@ void ReturnTypeDesc::InitializeStructReturnType(Compiler*                comp,
             for (unsigned i = 0; i < hfaCount; ++i)
             {
                 m_regType[i] = hfaType;
+#if defined(TARGET_POWERPC64)
+                m_fieldOffset[i] = i * elemSize;
+#endif
             }
 
             comp->compFloatingPointUsed = true;
@@ -32562,16 +32565,15 @@ void ReturnTypeDesc::InitializeStructReturnType(Compiler*                comp,
 
 #elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
             assert(structSize > sizeof(float));
-            assert(structSize <= (2 * TARGET_POINTER_SIZE));
-            BYTE gcPtrs[2] = {TYPE_GC_NONE, TYPE_GC_NONE};
+            assert(structSize <= MAX_RET_MULTIREG_BYTES);
+            BYTE gcPtrs[MAX_RET_REG_COUNT] = {};
             comp->info.compCompHnd->getClassGClayout(retClsHnd, &gcPtrs[0]);
             const CORINFO_FPSTRUCT_LOWERING* lowering = comp->GetFpStructLowering(retClsHnd);
             if (!lowering->byIntegerCallConv)
             {
                 comp->compFloatingPointUsed = true;
-                assert(lowering->numLoweredElements == MAX_RET_REG_COUNT);
-                static_assert(MAX_RET_REG_COUNT == MAX_FPSTRUCT_LOWERED_ELEMENTS, "");
-                for (unsigned i = 0; i < MAX_RET_REG_COUNT; ++i)
+                assert((lowering->numLoweredElements >= 1) && (lowering->numLoweredElements <= MAX_RET_REG_COUNT));
+                for (unsigned i = 0; i < lowering->numLoweredElements; ++i)
                 {
                     m_regType[i]     = JITtype2varType(lowering->loweredElements[i]);
                     m_fieldOffset[i] = lowering->offsets[i];
@@ -32581,7 +32583,14 @@ void ReturnTypeDesc::InitializeStructReturnType(Compiler*                comp,
                         m_regType[i]  = comp->getJitGCType(gcPtrs[slot]);
                     }
                 }
-                assert(varTypeIsFloating(m_regType[0]) || varTypeIsFloating(m_regType[1]));
+#ifdef DEBUG
+                bool hasFloatReg = false;
+                for (unsigned i = 0; i < lowering->numLoweredElements; i++)
+                {
+                    hasFloatReg |= varTypeIsFloating(m_regType[i]);
+                }
+                assert(hasFloatReg);
+#endif
             }
             else
             {
@@ -32910,7 +32919,7 @@ regNumber ReturnTypeDesc::GetABIReturnReg(unsigned idx, CorInfoCallConvExtension
         resultReg = (regNumber)((unsigned)(REG_FLOATRET) + idx); // V0, V1, V2 or V3
     }
 
-#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
     var_types regType = GetReturnRegType(idx);
     if (idx == 0)
     {
@@ -32930,6 +32939,18 @@ regNumber ReturnTypeDesc::GetABIReturnReg(unsigned idx, CorInfoCallConvExtension
             assert(varTypeUsesFloatReg(regType));
             resultReg = varTypeIsIntegralOrI(GetReturnRegType(0)) ? REG_FLOATRET : REG_FLOATRET_1; // FA0 or FA1
         }
+    }
+#elif defined(TARGET_POWERPC64)
+    var_types regType = GetReturnRegType(idx);
+    if (varTypeUsesIntReg(regType))
+    {
+        noway_assert(idx < 2);
+        resultReg = (idx == 0) ? REG_INTRET : REG_INTRET_1;
+    }
+    else
+    {
+        noway_assert(idx < MAX_RET_REG_COUNT);
+        resultReg = (regNumber)((unsigned)REG_FLOATRET + idx);
     }
 #endif
 

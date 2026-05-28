@@ -7594,7 +7594,7 @@ GenTree* Lowering::LowerVirtualStubCall(GenTreeCall* call)
         else
         {
             bool shouldOptimizeVirtualStubCall = false;
-#if defined(TARGET_ARMARCH) || defined(TARGET_AMD64) || defined(TARGET_LOONGARCH64)
+#if defined(TARGET_ARMARCH) || defined(TARGET_AMD64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
             // Skip inserting the indirection node to load the address that is already
             // computed in the VSD stub arg register as a hidden parameter. Instead during the
             // codegen, just load the call target from there.

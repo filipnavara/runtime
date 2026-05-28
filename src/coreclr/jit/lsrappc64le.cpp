@@ -791,22 +791,19 @@ int LinearScan::BuildCall(GenTreeCall* call)
     }
     else if (call->IsR2ROrVirtualStubRelativeIndir())
     {
-        SingleTypeRegSet candidates = allRegs(TYP_INT);
-        if (call->IsFastTailCall())
+        if (!call->IsFastTailCall())
         {
-            candidates &= RBM_INT_CALLEE_TRASH.GetIntRegSet();
-            candidates &= ~genRegMask(REG_INDIRECT_CALL_TARGET_REG).GetIntRegSet();
+            SingleTypeRegSet candidates = genRegMask(REG_INDIRECT_CALL_TARGET_REG).GetIntRegSet();
+
+            SingleTypeRegSet indirectionCellReg =
+                (call->GetIndirectionCellArgKind() == WellKnownArg::VirtualStubCell)
+                    ? m_compiler->virtualStubParamInfo->GetRegMask().GetIntRegSet()
+                    : RBM_R2R_INDIRECT_PARAM.GetIntRegSet();
+            candidates &= ~indirectionCellReg;
             assert(candidates != RBM_NONE);
+
+            buildInternalIntRegisterDefForNode(call, candidates);
         }
-
-        SingleTypeRegSet indirectionCellReg =
-            (call->GetIndirectionCellArgKind() == WellKnownArg::VirtualStubCell)
-                ? m_compiler->virtualStubParamInfo->GetRegMask().GetIntRegSet()
-                : RBM_R2R_INDIRECT_PARAM.GetIntRegSet();
-        candidates &= ~indirectionCellReg;
-        assert(candidates != RBM_NONE);
-
-        buildInternalIntRegisterDefForNode(call, candidates);
     }
 
     RegisterType registerType = call->TypeGet();

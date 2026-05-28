@@ -3658,15 +3658,9 @@ void CodeGen::genCall(GenTreeCall* call)
 #ifdef FEATURE_READYTORUN
         else if (call->IsR2ROrVirtualStubRelativeIndir())
         {
-            assert((call->IsR2RRelativeIndir() && (call->gtEntryPoint.accessType == IAT_PVALUE)) ||
-                   (call->IsVirtualStubRelativeIndir() && (call->gtEntryPoint.accessType == IAT_VALUE)));
+            // The indirection cell argument remains live through the epilog. Load the final
+            // branch target from it after restoring the frame so the epilog can freely use r12.
             assert(call->gtControlExpr == nullptr);
-
-            regNumber tmpReg      = internalRegisters.GetSingle(call);
-            regNumber callAddrReg = call->IsVirtualStubRelativeIndir() ? m_compiler->virtualStubParamInfo->GetReg()
-                                                                       : REG_R2R_INDIRECT_PARAM;
-            GetEmitter()->emitIns_R_R_I(ins_Load(TYP_I_IMPL), emitActualTypeSize(TYP_I_IMPL), tmpReg, callAddrReg, 0);
-            internalRegisters.Add(call, genRegMask(tmpReg));
         }
 #endif
         return;
@@ -3836,9 +3830,15 @@ void CodeGen::genCallInstruction(GenTreeCall* call)
     {
         if (callThroughIndirReg != REG_NA)
         {
-            params.ireg = internalRegisters.GetSingle(call);
-            if (!call->IsFastTailCall())
+            if (call->IsFastTailCall())
             {
+                params.ireg = REG_INDIRECT_CALL_TARGET_REG;
+                GetEmitter()->emitIns_R_R_I(ins_Load(TYP_I_IMPL), emitActualTypeSize(TYP_I_IMPL), params.ireg,
+                                            callThroughIndirReg, 0);
+            }
+            else
+            {
+                params.ireg = internalRegisters.GetSingle(call);
                 GetEmitter()->emitIns_R_R_I(ins_Load(TYP_I_IMPL), emitActualTypeSize(TYP_I_IMPL), params.ireg,
                                             callThroughIndirReg, 0);
             }

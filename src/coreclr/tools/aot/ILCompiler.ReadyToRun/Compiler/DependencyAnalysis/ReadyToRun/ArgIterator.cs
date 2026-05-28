@@ -1422,7 +1422,9 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                                             _argTypeHandle.GetRuntimeTypeHandle(), _transitionBlock.Architecture);
                                         if (info.flags != FpStruct.UseIntCallConv)
                                         {
-                                            cFPRegs = ((info.flags & FpStruct.BothFloat) != 0) ? 2 : 1;
+                                            cFPRegs = info.IsPpc64leHfa()
+                                                ? (int)info.Ppc64leHfaElementCount()
+                                                : (((info.flags & FpStruct.BothFloat) != 0) ? 2 : 1);
                                         }
                                     }
 
@@ -1472,7 +1474,8 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                                 int argOfsInner = _transitionBlock.OffsetOfFloatArgumentRegisters + _rvLa64IdxFPReg * _transitionBlock.FloatRegisterSize;
                                 if (info.flags != FpStruct.UseIntCallConv)
                                 {
-                                    Debug.Assert((info.flags & (FpStruct.OnlyOne | FpStruct.BothFloat)) != 0);
+                                    Debug.Assert(((info.flags & (FpStruct.OnlyOne | FpStruct.BothFloat)) != 0) ||
+                                        info.IsPpc64leHfa());
                                     _argLocDescForStructInRegs = new ArgLocDesc();
                                     _hasArgLocDescForStructInRegs = true;
                                     _argLocDescForStructInRegs.m_idxFloatReg = _rvLa64IdxFPReg;

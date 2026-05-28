@@ -6146,7 +6146,7 @@ void Lowering::LowerCallStruct(GenTreeCall* call)
     {
         if (m_compiler->IsHfa(call->gtRetClsHnd))
         {
-#if defined(TARGET_ARM64)
+#if defined(TARGET_ARM64) || defined(TARGET_POWERPC64)
             assert(m_compiler->GetHfaCount(call->gtRetClsHnd) == 1);
 #elif defined(TARGET_ARM)
             // ARM returns double in 2 float registers, but

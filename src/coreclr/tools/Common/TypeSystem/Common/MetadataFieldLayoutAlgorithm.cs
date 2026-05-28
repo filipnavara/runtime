@@ -1254,8 +1254,11 @@ namespace Internal.TypeSystem
             Debug.Assert(type.IsValueType);
 
             TargetArchitecture targetArch = type.Context.Target.Architecture;
-            if ((targetArch != TargetArchitecture.ARM) && (targetArch != TargetArchitecture.ARM64))
+            if ((targetArch != TargetArchitecture.ARM) && (targetArch != TargetArchitecture.ARM64) &&
+                (targetArch != TargetArchitecture.Ppc64le))
+            {
                 return NotHA;
+            }
 
             if (type.Context.Target.Abi == TargetAbi.NativeAotArmel)
                 return NotHA;

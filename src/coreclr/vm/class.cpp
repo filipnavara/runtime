@@ -1808,6 +1808,11 @@ CorInfoHFAElemType MethodTable::GetVectorHFA()
     // This is supported for finding HVA types for Arm64. In order to support the altjit,
     // we support this on 64-bit platforms (i.e. Arm64 and X64).
     CorInfoHFAElemType hfaType = CORINFO_HFA_ELEM_NONE;
+#ifdef TARGET_POWERPC64
+    // PPC64LE SIMD/vector ABI support is not implemented yet. The scalar HFA path handles
+    // float/double aggregates such as Vector3; intrinsic vector wrappers must not be marked HFA.
+    return hfaType;
+#else
 #ifdef TARGET_64BIT
     if (IsIntrinsicType())
     {
@@ -1861,6 +1866,7 @@ CorInfoHFAElemType MethodTable::GetVectorHFA()
     }
 #endif // TARGET_64BIT
     return hfaType;
+#endif // TARGET_POWERPC64
 }
 
 //*******************************************************************************

@@ -13935,7 +13935,7 @@ BOOL TypeLayoutCheck(MethodTable * pMT, PCCOR_SIGNATURE pBlob, BOOL printDiff)
         }
     }
 
-#ifdef FEATURE_HFA
+#if defined(FEATURE_HFA)
     if (dwFlags & READYTORUN_LAYOUT_HFA)
     {
         uint32_t dwExpectedHFAType;

@@ -679,6 +679,199 @@ typedef struct _T_KNONVOLATILE_CONTEXT_POINTERS {
     PDWORD64 F27;
 } T_KNONVOLATILE_CONTEXT_POINTERS, *PT_KNONVOLATILE_CONTEXT_POINTERS;
 
+#elif defined(HOST_AMD64) && defined(TARGET_POWERPC64)  // Host amd64 managing POWERPC64 related code
+
+#ifndef CROSS_COMPILE
+#define CROSS_COMPILE
+#endif
+
+#ifndef CONTEXT_UNWOUND_TO_CALL
+#define CONTEXT_UNWOUND_TO_CALL 0x20000000
+#endif
+
+typedef struct DECLSPEC_ALIGN(16) _T_CONTEXT {
+    //
+    // Control flags.
+    //
+
+    DWORD ContextFlags;
+
+    //
+    // Integer Registers
+    //
+
+    DWORD64 R0;
+    DWORD64 R1;
+    DWORD64 R2;
+    DWORD64 R3;
+    DWORD64 R4;
+    DWORD64 R5;
+    DWORD64 R6;
+    DWORD64 R7;
+    DWORD64 R8;
+    DWORD64 R9;
+    DWORD64 R10;
+    DWORD64 R11;
+    DWORD64 R12;
+    DWORD64 R13;
+    DWORD64 R14;
+    DWORD64 R15;
+    DWORD64 R16;
+    DWORD64 R17;
+    DWORD64 R18;
+    DWORD64 R19;
+    DWORD64 R20;
+    DWORD64 R21;
+    DWORD64 R22;
+    DWORD64 R23;
+    DWORD64 R24;
+    DWORD64 R25;
+    DWORD64 R26;
+    DWORD64 R27;
+    DWORD64 R28;
+    DWORD64 R29;
+    DWORD64 R30;
+    DWORD64 R31;
+
+    //
+    // Floating Point Registers
+    //
+
+    DWORD64 F0;
+    DWORD64 F1;
+    DWORD64 F2;
+    DWORD64 F3;
+    DWORD64 F4;
+    DWORD64 F5;
+    DWORD64 F6;
+    DWORD64 F7;
+    DWORD64 F8;
+    DWORD64 F9;
+    DWORD64 F10;
+    DWORD64 F11;
+    DWORD64 F12;
+    DWORD64 F13;
+    DWORD64 F14;
+    DWORD64 F15;
+    DWORD64 F16;
+    DWORD64 F17;
+    DWORD64 F18;
+    DWORD64 F19;
+    DWORD64 F20;
+    DWORD64 F21;
+    DWORD64 F22;
+    DWORD64 F23;
+    DWORD64 F24;
+    DWORD64 F25;
+    DWORD64 F26;
+    DWORD64 F27;
+    DWORD64 F28;
+    DWORD64 F29;
+    DWORD64 F30;
+    DWORD64 F31;
+    DWORD64 Fpscr;
+
+    //
+    // Control Registers
+    //
+
+    DWORD64 Nip;
+    DWORD64 Msr;
+    DWORD64 Ctr;
+    DWORD64 Link;
+
+    DWORD Xer;
+    DWORD Ccr;
+
+} T_CONTEXT, *PT_CONTEXT;
+
+typedef struct _T_RUNTIME_FUNCTION {
+    DWORD BeginAddress;
+    DWORD UnwindData;
+} T_RUNTIME_FUNCTION, *PT_RUNTIME_FUNCTION;
+
+#ifdef HOST_UNIX
+typedef
+EXCEPTION_DISPOSITION
+(*PEXCEPTION_ROUTINE) (
+    PEXCEPTION_RECORD ExceptionRecord,
+    ULONG64 EstablisherFrame,
+    PCONTEXT ContextRecord,
+    PVOID DispatcherContext
+    );
+#endif
+
+//
+// Define exception dispatch context structure.
+//
+
+typedef struct _T_DISPATCHER_CONTEXT {
+    DWORD64 ControlPc;
+    DWORD64 ImageBase;
+    PT_RUNTIME_FUNCTION FunctionEntry;
+    DWORD64 EstablisherFrame;
+    DWORD64 TargetPc;
+    PCONTEXT ContextRecord;
+    PEXCEPTION_ROUTINE LanguageHandler;
+    PVOID HandlerData;
+    PVOID HistoryTable;
+    DWORD ScopeIndex;
+    BOOLEAN ControlPcIsUnwound;
+    PBYTE  NonVolatileRegisters;
+} T_DISPATCHER_CONTEXT, *PT_DISPATCHER_CONTEXT;
+
+//
+// Nonvolatile context pointer record.
+//
+
+typedef struct _T_KNONVOLATILE_CONTEXT_POINTERS {
+    PDWORD64 R14;
+    PDWORD64 R15;
+    PDWORD64 R16;
+    PDWORD64 R17;
+    PDWORD64 R18;
+    PDWORD64 R19;
+    PDWORD64 R20;
+    PDWORD64 R21;
+    PDWORD64 R22;
+    PDWORD64 R23;
+    PDWORD64 R24;
+    PDWORD64 R25;
+    PDWORD64 R26;
+    PDWORD64 R27;
+    PDWORD64 R28;
+    PDWORD64 R29;
+    PDWORD64 R30;
+    PDWORD64 R31;
+    PDWORD64 Link;
+} T_KNONVOLATILE_CONTEXT_POINTERS, *PT_KNONVOLATILE_CONTEXT_POINTERS;
+
+#if defined(HOST_UNIX) && !defined(HOST_POWERPC64)
+enum
+{
+    UNW_PPC64_R1  = 1,
+    UNW_PPC64_R14 = 14,
+    UNW_PPC64_R15 = 15,
+    UNW_PPC64_R16 = 16,
+    UNW_PPC64_R17 = 17,
+    UNW_PPC64_R18 = 18,
+    UNW_PPC64_R19 = 19,
+    UNW_PPC64_R20 = 20,
+    UNW_PPC64_R21 = 21,
+    UNW_PPC64_R22 = 22,
+    UNW_PPC64_R23 = 23,
+    UNW_PPC64_R24 = 24,
+    UNW_PPC64_R25 = 25,
+    UNW_PPC64_R26 = 26,
+    UNW_PPC64_R27 = 27,
+    UNW_PPC64_R28 = 28,
+    UNW_PPC64_R29 = 29,
+    UNW_PPC64_R30 = 30,
+    UNW_PPC64_R31 = 31,
+    UNW_PPC64_NIP = 114
+};
+#endif // HOST_UNIX && !HOST_POWERPC64
+
 #else
 
 #define T_CONTEXT CONTEXT

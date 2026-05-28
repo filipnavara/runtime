@@ -1838,7 +1838,6 @@ public class MarshalStructTest
     [ActiveIssue("https://github.com/dotnet/runtime/issues/82859", typeof(PlatformDetection), nameof(PlatformDetection.IsMonoMiniJIT), nameof(PlatformDetection.IsArm64Process))]
     [ActiveIssue("https://github.com/dotnet/runtime/issues/65695", TestRuntimes.Mono)]
     [ActiveIssue("https://github.com/dotnet/runtime/issues/91388", typeof(TestLibrary.PlatformDetection), nameof(TestLibrary.PlatformDetection.PlatformDoesNotSupportNativeTestAssets))]
-    [ActiveIssue("PPC64LE unmanaged struct by-value interop is not implemented yet", typeof(PlatformDetection), nameof(PlatformDetection.IsPpc64leProcess))]
     public static int TestEntryPoint()
     {
         try{

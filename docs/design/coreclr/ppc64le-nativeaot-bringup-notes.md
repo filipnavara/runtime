@@ -633,6 +633,10 @@ ABI stress:
 - Unmanaged integer aggregates can split as a register prefix plus one stack
   tail. Prolog homing and outgoing stack copies must handle stack segments
   larger than one pointer-sized slot.
+- Delegate/reverse P/Invoke by-value large struct marshalling uses the same
+  ELFv2 aggregate rule: unmanaged aggregates consume remaining `r3`-`r10`
+  slots and put the tail in the parameter save area. Large stack tails should
+  be copied as a block rather than expanded into a huge `FIELD_LIST`.
 
 ## Current Implementation Gaps
 
@@ -647,9 +651,6 @@ by useful validation.
 - Non-blittable by-value struct marshalling still has PPC64LE gaps. The
   `MarshalStructAsLayoutSeq` P/Invoke test skips only the `S8` by-value cases
   for now; by-ref cases and HFA/mixed aggregate cases are enabled.
-- Delegate/reverse P/Invoke by-value large struct marshalling still needs VM
-  stub and marshalling validation. The first exposed failure is the large `S3`
-  delegate P/Invoke by-value case.
 - Fast and portable tailcalls are enabled for managed calls. Keep split
   register/stack fast tailcall arguments rejected until the PPC64LE stack
   argument shuffle is designed and tested.

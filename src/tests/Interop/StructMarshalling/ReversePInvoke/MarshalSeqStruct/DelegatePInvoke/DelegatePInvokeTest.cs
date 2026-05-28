@@ -1419,7 +1419,6 @@ public class MarshalStructTest
     [ActiveIssue("needs triage", TestPlatforms.iOS | TestPlatforms.tvOS | TestPlatforms.MacCatalyst)]
     [Fact]
     [ActiveIssue("https://github.com/dotnet/runtime/issues/91388", typeof(TestLibrary.PlatformDetection), nameof(TestLibrary.PlatformDetection.PlatformDoesNotSupportNativeTestAssets))]
-    [ActiveIssue("PPC64LE delegate P/Invoke large struct by-value interop is not implemented yet", typeof(PlatformDetection), nameof(PlatformDetection.IsPpc64leProcess))]
     public static int TestEntryPoint()
     {
         try{

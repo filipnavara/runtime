@@ -871,46 +871,24 @@ var_types Compiler::getReturnTypeForStruct(CORINFO_CLASS_HANDLE     clsHnd,
 #endif
     if (structSize <= maxFpStructReturnBytes)
     {
-        const CORINFO_FPSTRUCT_LOWERING* lowering = GetFpStructLowering(clsHnd);
+        const CORINFO_FPSTRUCT_LOWERING* lowering = GetFpStructLowering(clsHnd, callConv);
         if (!lowering->byIntegerCallConv)
         {
-#if defined(TARGET_POWERPC64)
-            bool isMixedFpIntegerStruct = false;
-            if (!isManagedCall)
+            if (lowering->numLoweredElements == 1)
             {
-                bool hasFloat   = false;
-                bool hasInteger = false;
-                for (unsigned i = 0; i < lowering->numLoweredElements; i++)
-                {
-                    var_types loweredType = JITtype2varType(lowering->loweredElements[i]);
-                    hasFloat |= varTypeIsFloating(loweredType);
-                    hasInteger |= varTypeIsIntegralOrI(loweredType);
-                }
-
-                isMixedFpIntegerStruct = hasFloat && hasInteger;
+                useType = JITtype2varType(lowering->loweredElements[0]);
+                assert(varTypeIsFloating(useType));
+                howToReturnStruct = SPK_PrimitiveType;
             }
-
-            // Mixed floating-point/integer aggregates are not homogeneous floating aggregates in the PPC64
-            // ELFv2 ABI. Let the normal aggregate return logic below use integer return registers.
-            if (!isMixedFpIntegerStruct)
-#endif
+            else
             {
-                if (lowering->numLoweredElements == 1)
-                {
-                    useType = JITtype2varType(lowering->loweredElements[0]);
-                    assert(varTypeIsFloating(useType));
-                    howToReturnStruct = SPK_PrimitiveType;
-                }
-                else
-                {
 #if defined(TARGET_POWERPC64)
-                    assert((lowering->numLoweredElements >= 2) && (lowering->numLoweredElements <= MAX_RET_REG_COUNT));
+                assert((lowering->numLoweredElements >= 2) && (lowering->numLoweredElements <= MAX_RET_REG_COUNT));
 #else
-                    assert(lowering->numLoweredElements == 2);
+                assert(lowering->numLoweredElements == 2);
 #endif
-                    howToReturnStruct = SPK_ByValue;
-                    useType           = TYP_STRUCT;
-                }
+                howToReturnStruct = SPK_ByValue;
+                useType           = TYP_STRUCT;
             }
         }
     }
@@ -8063,6 +8041,49 @@ const CORINFO_FPSTRUCT_LOWERING* Compiler::GetFpStructLowering(CORINFO_CLASS_HAN
         }
 #endif // DEBUG
     }
+    return lowering;
+}
+
+//------------------------------------------------------------------------
+// GetFpStructLowering: Gets the call-convention-adjusted information on passing
+// a struct according to hardware floating-point calling convention.
+//
+// Arguments:
+//      structHandle - type handle
+//      callConv     - call convention for the ABI classification
+//
+// Return value:
+//      Lowering info for the struct fields
+const CORINFO_FPSTRUCT_LOWERING* Compiler::GetFpStructLowering(CORINFO_CLASS_HANDLE     structHandle,
+                                                               CorInfoCallConvExtension callConv)
+{
+    const CORINFO_FPSTRUCT_LOWERING* lowering = GetFpStructLowering(structHandle);
+
+#if defined(TARGET_POWERPC64)
+    if ((callConv != CorInfoCallConvExtension::Managed) && !lowering->byIntegerCallConv)
+    {
+        bool hasFloat   = false;
+        bool hasInteger = false;
+        for (unsigned i = 0; i < lowering->numLoweredElements; i++)
+        {
+            const var_types loweredType = JITtype2varType(lowering->loweredElements[i]);
+            hasFloat |= varTypeIsFloating(loweredType);
+            hasInteger |= varTypeIsIntegralOrI(loweredType);
+        }
+
+        if (hasFloat && hasInteger)
+        {
+            // PPC64 ELFv2 only uses the FP aggregate convention for homogeneous
+            // floating-point aggregates. Mixed FP/integer aggregates use the
+            // integer aggregate convention.
+            CORINFO_FPSTRUCT_LOWERING* integerLowering = new (this, CMK_CallArgs) CORINFO_FPSTRUCT_LOWERING;
+            *integerLowering                            = *lowering;
+            integerLowering->byIntegerCallConv          = true;
+            return integerLowering;
+        }
+    }
+#endif
+
     return lowering;
 }
 

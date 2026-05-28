@@ -12555,6 +12555,8 @@ public:
                                      FpStructLoweringMap;
     FpStructLoweringMap*             m_fpStructLoweringCache = nullptr;
     const CORINFO_FPSTRUCT_LOWERING* GetFpStructLowering(CORINFO_CLASS_HANDLE structHandle);
+    const CORINFO_FPSTRUCT_LOWERING* GetFpStructLowering(CORINFO_CLASS_HANDLE     structHandle,
+                                                         CorInfoCallConvExtension callConv);
 #endif // defined(UNIX_AMD64_ABI)
 
     bool fgTryMorphStructArg(CallArg* arg);

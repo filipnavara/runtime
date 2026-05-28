@@ -705,6 +705,11 @@ public:
         {
             _ASSERTE(!m_argTypeHandle.IsNull());
 #ifdef TARGET_POWERPC64
+            if (this->UsesUnmanagedCallingConvention())
+            {
+                return FALSE;
+            }
+
             if (IsPpc64leFloatHfa(m_argTypeHandle) && ((m_argSize <= ENREGISTERED_PARAMTYPE_MAXSIZE) ||
                                                         this->UsesUnmanagedCallingConvention()))
             {
@@ -1889,8 +1894,12 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
         }
         else
 #endif
-        // Composite greater than 16bytes should be passed by reference
+        // Composite greater than 16 bytes should be passed by reference in the managed ABI.
+#ifdef TARGET_POWERPC64
+        if ((argSize > ENREGISTERED_PARAMTYPE_MAXSIZE) && !this->UsesUnmanagedCallingConvention())
+#else
         if (argSize > ENREGISTERED_PARAMTYPE_MAXSIZE)
+#endif
         {
             argSize = sizeof(TADDR);
         }
@@ -2007,21 +2016,35 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
         else if (m_idxGenReg < NUM_ARGUMENT_REGISTERS)
         {
             // Split argument
+            assert(m_ofsStack == 0); // pass tail in first stack slot
+
+            const int firstReg      = m_idxGenReg;
+            const int availableRegs = NUM_ARGUMENT_REGISTERS - m_idxGenReg;
+
+#ifndef TARGET_POWERPC64
             assert(regSlots == 2);
             static const int lastReg = NUM_ARGUMENT_REGISTERS - 1;
             assert(m_idxGenReg == lastReg); // pass head in last register
-            assert(m_ofsStack == 0); // pass tail in first stack slot
+#else
+            assert(availableRegs > 0);
+            assert(regSlots > availableRegs);
+#endif
 
             m_argLocDescForStructInRegs.Init();
-            m_argLocDescForStructInRegs.m_idxGenReg      = lastReg;
+            m_argLocDescForStructInRegs.m_idxGenReg      = firstReg;
+#ifdef TARGET_POWERPC64
+            m_argLocDescForStructInRegs.m_cGenReg        = availableRegs;
+#else
             m_argLocDescForStructInRegs.m_cGenReg        = 1;
+#endif
             m_argLocDescForStructInRegs.m_byteStackIndex = 0;
-            m_argLocDescForStructInRegs.m_byteStackSize  = argSize - TARGET_POINTER_SIZE;
+            m_argLocDescForStructInRegs.m_byteStackSize =
+                argSize - (m_argLocDescForStructInRegs.m_cGenReg * TARGET_POINTER_SIZE);
             m_hasArgLocDescForStructInRegs               = true;
 
-            int argOfs = TransitionBlock::GetOffsetOfArgumentRegisters() + lastReg * TARGET_POINTER_SIZE;
+            int argOfs = TransitionBlock::GetOffsetOfArgumentRegisters() + firstReg * TARGET_POINTER_SIZE;
             m_idxGenReg = NUM_ARGUMENT_REGISTERS;
-            m_ofsStack = TARGET_POINTER_SIZE;
+            m_ofsStack = ALIGN_UP(m_argLocDescForStructInRegs.m_byteStackSize, TARGET_POINTER_SIZE);
             return argOfs;
         }
     }

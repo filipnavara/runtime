@@ -146,28 +146,37 @@ public:
 
         _ASSERTE(IsStructPassedInRegs());
         _ASSERTE(destOffset == 0);
+#ifdef TARGET_POWERPC64
+        _ASSERTE((fieldBytes <= 16) || (m_argLocDescForStructInRegs->m_cFloatReg == 0));
+#else
         _ASSERTE(fieldBytes <= 16);
+#endif
 
 #ifdef TARGET_POWERPC64
         if ((m_argLocDescForStructInRegs->m_cFloatReg == 0) &&
-            (m_argLocDescForStructInRegs->m_byteStackSize > 0))
+            ((m_argLocDescForStructInRegs->m_cGenReg > 0) ||
+             (m_argLocDescForStructInRegs->m_byteStackSize > 0)))
         {
-            _ASSERTE(m_argLocDescForStructInRegs->m_cGenReg == 1);
             _ASSERTE(m_argLocDescForStructInRegs->m_idxGenReg >= 0);
-            _ASSERTE(m_argLocDescForStructInRegs->m_byteStackIndex >= 0);
+            _ASSERTE(m_argLocDescForStructInRegs->m_cGenReg > 0);
+
+            const int regBytes = min(fieldBytes, m_argLocDescForStructInRegs->m_cGenReg * TARGET_POINTER_SIZE);
 
             int intRegOffset = TransitionBlock::GetOffsetOfArgumentRegisters() +
                 m_argLocDescForStructInRegs->m_idxGenReg * TARGET_POINTER_SIZE;
             void* intReg = (char*)m_base + intRegOffset;
-            memcpyNoGCRefs(intReg, src, TARGET_POINTER_SIZE);
+            memcpyNoGCRefs(intReg, src, regBytes);
 
-            const int stackBytes = min(fieldBytes - TARGET_POINTER_SIZE,
-                                       m_argLocDescForStructInRegs->m_byteStackSize);
-            _ASSERTE(stackBytes > 0);
+            const int stackBytes = min(fieldBytes - regBytes, m_argLocDescForStructInRegs->m_byteStackSize);
+            if (stackBytes == 0)
+            {
+                return;
+            }
 
+            _ASSERTE(m_argLocDescForStructInRegs->m_byteStackIndex >= 0);
             int stackOffset = TransitionBlock::GetOffsetOfArgs() + m_argLocDescForStructInRegs->m_byteStackIndex;
             void* stack = (char*)m_base + stackOffset;
-            memcpyNoGCRefs(stack, (char*)src + TARGET_POINTER_SIZE, stackBytes);
+            memcpyNoGCRefs(stack, (char*)src + regBytes, stackBytes);
             return;
         }
 #endif

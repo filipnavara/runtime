@@ -1733,17 +1733,54 @@ void Lowering::SplitArgumentBetweenRegistersAndStack(GenTreeCall* call, CallArg*
             }
         }
 
-        if (splitPoint == nullptr)
+        const bool spillFieldList =
+            (splitPoint == nullptr)
+#ifdef TARGET_POWERPC64
+            // PPC64LE unmanaged aggregates may split a large stack tail after
+            // the register part. Keeping that stack tail as a FIELD_LIST makes
+            // every tail field live at the PUTARG_STK node.
+            || (stackSeg.Size > TARGET_POINTER_SIZE)
+#endif
+            ;
+
+        if (spillFieldList)
         {
-            JITDUMP("No clean split point found, spilling FIELD_LIST\n", splitPoint->GetOffset());
+            JITDUMP("Spilling FIELD_LIST for split argument\n");
 
             unsigned int newLcl =
                 StoreFieldListToNewLocal(m_compiler->typGetObjLayout(callArg->GetSignatureClassHandle()),
                                          arg->AsFieldList());
             stackNode     = m_compiler->gtNewLclFldNode(newLcl, TYP_STRUCT, stackSeg.Offset, stackLayout);
-            registersNode = m_compiler->gtNewLclFldNode(newLcl, TYP_STRUCT, 0, registersLayout);
             BlockRange().InsertBefore(arg, stackNode);
-            BlockRange().InsertBefore(arg, registersNode);
+
+            bool insertedRegistersNode = false;
+#ifdef TARGET_POWERPC64
+            if (numRegs > 1)
+            {
+                registersNode = m_compiler->gtNewFieldList();
+                BlockRange().InsertBefore(arg, registersNode);
+                insertedRegistersNode = true;
+
+                for (unsigned i = 0; i < numRegs; i++)
+                {
+                    const ABIPassingSegment& seg = abiInfo.Segment(i);
+                    GenTree*                 fldNode =
+                        m_compiler->gtNewLclFldNode(newLcl, seg.GetRegisterType(callArg->GetSignatureLayout()),
+                                                    seg.Offset);
+                    registersNode->AsFieldList()->AddFieldLIR(m_compiler, fldNode, seg.Offset, fldNode->TypeGet());
+                    BlockRange().InsertBefore(registersNode, fldNode);
+                }
+            }
+            else
+#endif
+            {
+                registersNode = m_compiler->gtNewLclFldNode(newLcl, TYP_STRUCT, 0, registersLayout);
+            }
+
+            if (!insertedRegistersNode)
+            {
+                BlockRange().InsertBefore(arg, registersNode);
+            }
         }
         else
         {

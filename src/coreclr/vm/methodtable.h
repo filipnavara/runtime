@@ -834,7 +834,7 @@ namespace FpStruct
         PosIntFloat     = 3,
         PosSizeShift1st = 4, // 2 bits
         PosSizeShift2nd = 6, // 2 bits
-        PosPpc64leHfaCount = 9, // 4 bits
+        PosHomogeneousAggregateCount = 9, // 4 bits
 
         UseIntCallConv = 0, // struct is passed according to integer calling convention
 
@@ -845,15 +845,15 @@ namespace FpStruct
         IntFloat         =    1 << PosIntFloat,     // has two fields, 2nd is floating and 1st is integer
         SizeShift1stMask = 0b11 << PosSizeShift1st, // log2(size) of 1st field
         SizeShift2ndMask = 0b11 << PosSizeShift2nd, // log2(size) of 2nd field
-        Ppc64leHfa       =    1 << 8,               // PPC64LE HFA with more than two elements
-        Ppc64leHfaCountMask = 0b1111 << PosPpc64leHfaCount,
+        HomogeneousAggregate          =    1 << 8,               // Homogeneous aggregate with explicit element count
+        HomogeneousAggregateCountMask = 0b1111 << PosHomogeneousAggregateCount,
         // Note: flags OnlyOne, BothFloat, FloatInt, and IntFloat are mutually exclusive
     };
 }
 
 // On RISC-V, LoongArch, and PPC64LE a struct with up to two non-empty fields, at least one of them floating-point,
 // can be passed in registers according to hardware FP calling convention. PPC64LE also uses this to represent
-// homogeneous floating-point aggregates with more than two elements.
+// homogeneous floating-point aggregates with an explicit element count.
 struct FpStructInRegistersInfo
 {
     FpStruct::Flags flags;
@@ -866,19 +866,33 @@ struct FpStructInRegistersInfo
     unsigned Size1st() const { return 1u << SizeShift1st(); }
     unsigned Size2nd() const { return 1u << SizeShift2nd(); }
 
-    bool IsPpc64leHfa() const { return (flags & FpStruct::Ppc64leHfa) != 0; }
-    unsigned Ppc64leHfaElementCount() const
+    bool IsHomogeneousAggregate() const { return (flags & FpStruct::HomogeneousAggregate) != 0; }
+    unsigned HomogeneousAggregateElementCount() const
     {
-        assert(IsPpc64leHfa());
-        return (flags & FpStruct::Ppc64leHfaCountMask) >> FpStruct::PosPpc64leHfaCount;
+        assert(IsHomogeneousAggregate());
+        return (flags & FpStruct::HomogeneousAggregateCountMask) >> FpStruct::PosHomogeneousAggregateCount;
     }
-    unsigned Ppc64leHfaElementSize() const { assert(IsPpc64leHfa()); return Size1st(); }
+    unsigned HomogeneousAggregateElementSize() const
+    {
+        assert(IsHomogeneousAggregate());
+        return Size1st();
+    }
+    unsigned FloatRegisterCount() const
+    {
+        assert(flags != FpStruct::UseIntCallConv);
+        if (IsHomogeneousAggregate())
+        {
+            return HomogeneousAggregateElementCount();
+        }
+
+        return (flags & FpStruct::BothFloat) ? 2 : 1;
+    }
 
     const char* FlagName() const
     {
-        if (IsPpc64leHfa())
+        if (IsHomogeneousAggregate())
         {
-            return "Ppc64leHfa";
+            return "HomogeneousAggregate";
         }
 
         switch (flags & (FpStruct::OnlyOne | FpStruct::BothFloat | FpStruct::FloatInt | FpStruct::IntFloat))

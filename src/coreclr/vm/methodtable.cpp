@@ -2734,7 +2734,7 @@ static void SetFpStructInRegistersInfoField(FpStructInRegistersInfo& info, int i
 }
 
 #ifdef TARGET_POWERPC64
-static bool GetPpc64leHfaInRegistersInfo(TypeHandle th, FpStructInRegistersInfo& info)
+static bool GetHomogeneousAggregateInRegistersInfo(TypeHandle th, FpStructInRegistersInfo& info)
 {
     if (!th.IsHFA())
     {
@@ -2781,9 +2781,9 @@ static bool GetPpc64leHfaInRegistersInfo(TypeHandle th, FpStructInRegistersInfo&
     }
     else
     {
-        info.flags = FpStruct::Flags(FpStruct::Ppc64leHfa |
+        info.flags = FpStruct::Flags(FpStruct::HomogeneousAggregate |
                                      (GetFpStructFieldSizeShift(elemSize) << FpStruct::PosSizeShift1st) |
-                                     (elemCount << FpStruct::PosPpc64leHfaCount));
+                                     (elemCount << FpStruct::PosHomogeneousAggregateCount));
         info.offset1st      = 0;
         info.offset2nd      = elemSize;
     }
@@ -3005,7 +3005,7 @@ FpStructInRegistersInfo MethodTable::GetFpStructInRegistersInfo(TypeHandle th)
 {
 #ifdef TARGET_POWERPC64
     FpStructInRegistersInfo hfaInfo = {};
-    if (GetPpc64leHfaInRegistersInfo(th, hfaInfo))
+    if (GetHomogeneousAggregateInRegistersInfo(th, hfaInfo))
     {
         return hfaInfo;
     }

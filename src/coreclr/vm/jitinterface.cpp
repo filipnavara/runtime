@@ -9793,16 +9793,16 @@ void CEEInfo::getFpStructLowering(CORINFO_CLASS_HANDLE structHnd, CORINFO_FPSTRU
         pLowering->byIntegerCallConv = false;
 
 #ifdef TARGET_POWERPC64
-        if (info.IsPpc64leHfa())
+        if (info.IsHomogeneousAggregate())
         {
-            CorInfoType loweredType = (info.Ppc64leHfaElementSize() == sizeof(double)) ? CORINFO_TYPE_DOUBLE
-                                                                                       : CORINFO_TYPE_FLOAT;
+            CorInfoType loweredType = (info.HomogeneousAggregateElementSize() == sizeof(double)) ? CORINFO_TYPE_DOUBLE
+                                                                                                 : CORINFO_TYPE_FLOAT;
 
-            pLowering->numLoweredElements = info.Ppc64leHfaElementCount();
-            for (unsigned i = 0; i < info.Ppc64leHfaElementCount(); i++)
+            pLowering->numLoweredElements = info.HomogeneousAggregateElementCount();
+            for (unsigned i = 0; i < info.HomogeneousAggregateElementCount(); i++)
             {
                 pLowering->loweredElements[i] = loweredType;
-                pLowering->offsets[i]         = i * info.Ppc64leHfaElementSize();
+                pLowering->offsets[i]         = i * info.HomogeneousAggregateElementSize();
             }
         }
         else

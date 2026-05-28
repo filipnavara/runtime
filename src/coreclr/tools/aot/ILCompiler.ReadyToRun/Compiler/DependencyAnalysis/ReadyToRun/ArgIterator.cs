@@ -1422,9 +1422,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                                             _argTypeHandle.GetRuntimeTypeHandle(), _transitionBlock.Architecture);
                                         if (info.flags != FpStruct.UseIntCallConv)
                                         {
-                                            cFPRegs = info.IsPpc64leHfa()
-                                                ? (int)info.Ppc64leHfaElementCount()
-                                                : (((info.flags & FpStruct.BothFloat) != 0) ? 2 : 1);
+                                            cFPRegs = (int)info.FloatRegisterCount();
                                         }
                                     }
 
@@ -1475,7 +1473,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                                 if (info.flags != FpStruct.UseIntCallConv)
                                 {
                                     Debug.Assert(((info.flags & (FpStruct.OnlyOne | FpStruct.BothFloat)) != 0) ||
-                                        info.IsPpc64leHfa());
+                                        info.IsHomogeneousAggregate());
                                     _argLocDescForStructInRegs = new ArgLocDesc();
                                     _hasArgLocDescForStructInRegs = true;
                                     _argLocDescForStructInRegs.m_idxFloatReg = _rvLa64IdxFPReg;

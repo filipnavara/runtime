@@ -20,7 +20,7 @@ namespace Internal.JitInterface
         PosIntFloat     = 3,
         PosSizeShift1st = 4, // 2 bits
         PosSizeShift2nd = 6, // 2 bits
-        PosPpc64leHfaCount = 9, // 4 bits
+        PosHomogeneousAggregateCount = 9, // 4 bits
 
         UseIntCallConv = 0, // struct is passed according to integer calling convention
 
@@ -31,14 +31,14 @@ namespace Internal.JitInterface
         IntFloat         =    1 << PosIntFloat,     // has two fields, 2nd is floating and 1st is integer
         SizeShift1stMask = 0b11 << PosSizeShift1st, // log2(size) of 1st field
         SizeShift2ndMask = 0b11 << PosSizeShift2nd, // log2(size) of 2nd field
-        Ppc64leHfa       =    1 << 8,               // PPC64LE HFA with more than two elements
-        Ppc64leHfaCountMask = 0b1111 << PosPpc64leHfaCount,
+        HomogeneousAggregate          =    1 << 8,               // Homogeneous aggregate with explicit element count
+        HomogeneousAggregateCountMask = 0b1111 << PosHomogeneousAggregateCount,
         // Note: flags OnlyOne, BothFloat, FloatInt, and IntFloat are mutually exclusive
     }
 
     // On RISC-V, LoongArch, and PPC64LE a struct with up to two non-empty fields, at least one of them
     // floating-point, can be passed in registers according to hardware FP calling convention. PPC64LE also
-    // uses this to represent homogeneous floating-point aggregates with more than two elements.
+    // uses this to represent homogeneous floating-point aggregates with an explicit element count.
     // FpStructInRegistersInfo represents passing information for such parameters.
     public struct FpStructInRegistersInfo
     {
@@ -52,16 +52,27 @@ namespace Internal.JitInterface
         public uint Size1st() { return 1u << (int)SizeShift1st(); }
         public uint Size2nd() { return 1u << (int)SizeShift2nd(); }
 
-        public bool IsPpc64leHfa() { return (flags & FpStruct.Ppc64leHfa) != 0; }
-        public uint Ppc64leHfaElementCount()
+        public bool IsHomogeneousAggregate() { return (flags & FpStruct.HomogeneousAggregate) != 0; }
+        public uint HomogeneousAggregateElementCount()
         {
-            Debug.Assert(IsPpc64leHfa());
-            return (uint)((int)(flags & FpStruct.Ppc64leHfaCountMask) >> (int)FpStruct.PosPpc64leHfaCount);
+            Debug.Assert(IsHomogeneousAggregate());
+            return (uint)((int)(flags & FpStruct.HomogeneousAggregateCountMask) >>
+                (int)FpStruct.PosHomogeneousAggregateCount);
         }
-        public uint Ppc64leHfaElementSize()
+        public uint HomogeneousAggregateElementSize()
         {
-            Debug.Assert(IsPpc64leHfa());
+            Debug.Assert(IsHomogeneousAggregate());
             return Size1st();
+        }
+        public uint FloatRegisterCount()
+        {
+            Debug.Assert(flags != FpStruct.UseIntCallConv);
+            if (IsHomogeneousAggregate())
+            {
+                return HomogeneousAggregateElementCount();
+            }
+
+            return ((flags & FpStruct.BothFloat) != 0) ? 2u : 1u;
         }
     }
 
@@ -102,7 +113,7 @@ namespace Internal.JitInterface
             (index == 0 ? ref info.offset1st : ref info.offset2nd) = offset;
         }
 
-        private static bool GetPpc64leHfaInRegistersInfo(TypeDesc td, out FpStructInRegistersInfo info)
+        private static bool GetHomogeneousAggregateInRegistersInfo(TypeDesc td, out FpStructInRegistersInfo info)
         {
             info = new FpStructInRegistersInfo{};
 
@@ -139,9 +150,9 @@ namespace Internal.JitInterface
             }
             else
             {
-                info.flags = Ppc64leHfa |
+                info.flags = HomogeneousAggregate |
                     (FpStruct)(GetFpStructFieldSizeShift((uint)elemSize) << (int)PosSizeShift1st) |
-                    (FpStruct)(elemCount << (int)PosPpc64leHfaCount);
+                    (FpStruct)(elemCount << (int)PosHomogeneousAggregateCount);
                 info.offset1st = 0;
                 info.offset2nd = (uint)elemSize;
             }
@@ -266,7 +277,7 @@ namespace Internal.JitInterface
         {
             Debug.Assert(arch is TargetArchitecture.RiscV64 or TargetArchitecture.LoongArch64 or TargetArchitecture.Ppc64le);
 
-            if ((arch == TargetArchitecture.Ppc64le) && GetPpc64leHfaInRegistersInfo(td, out FpStructInRegistersInfo hfaInfo))
+            if ((arch == TargetArchitecture.Ppc64le) && GetHomogeneousAggregateInRegistersInfo(td, out FpStructInRegistersInfo hfaInfo))
                 return hfaInfo;
 
             if (td.GetElementSize().AsInt > ENREGISTERED_PARAMTYPE_MAXSIZE)

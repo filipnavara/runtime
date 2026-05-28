@@ -3660,13 +3660,13 @@ namespace Internal.JitInterface
             {
                 lowering.byIntegerCallConv = false;
 
-                if (info.IsPpc64leHfa())
+                if (info.IsHomogeneousAggregate())
                 {
-                    CorInfoType loweredType = (info.Ppc64leHfaElementSize() == sizeof(double)) ?
+                    CorInfoType loweredType = (info.HomogeneousAggregateElementSize() == sizeof(double)) ?
                         CorInfoType.CORINFO_TYPE_DOUBLE : CorInfoType.CORINFO_TYPE_FLOAT;
 
-                    int elemCount = (int)info.Ppc64leHfaElementCount();
-                    uint elemSize = info.Ppc64leHfaElementSize();
+                    int elemCount = (int)info.HomogeneousAggregateElementCount();
+                    uint elemSize = info.HomogeneousAggregateElementSize();
                     lowering.numLoweredElements = elemCount;
                     for (int i = 0; i < elemCount; i++)
                     {

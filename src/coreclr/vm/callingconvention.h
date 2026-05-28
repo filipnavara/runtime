@@ -61,7 +61,7 @@ struct ArgLocDesc
     SystemVEightByteRegistersInfo m_eightByteInfo;
 #endif // UNIX_AMD64_ABI
 
-#if defined(FEATURE_HFA) || defined(TARGET_POWERPC64)
+#if defined(FEATURE_HFA)
     static unsigned getHFAFieldSize(CorInfoHFAElemType  hfaType)
     {
         switch (hfaType)
@@ -1856,10 +1856,10 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
 
 #ifdef TARGET_POWERPC64
         info = MethodTable::GetFpStructInRegistersInfo(thValueType);
-        if (info.IsPpc64leHfa() &&
+        if (info.IsHomogeneousAggregate() &&
             ((argSize <= ENREGISTERED_PARAMTYPE_MAXSIZE) || this->UsesUnmanagedCallingConvention()))
         {
-            cFPRegs = info.Ppc64leHfaElementCount();
+            cFPRegs = info.HomogeneousAggregateElementCount();
             _ASSERTE((cFPRegs > 0) && (cFPRegs <= 8));
         }
         else
@@ -1880,7 +1880,7 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
 #endif
             if (info.flags != FpStruct::UseIntCallConv)
             {
-                cFPRegs = (info.flags & FpStruct::BothFloat) ? 2 : 1;
+                cFPRegs = info.FloatRegisterCount();
             }
         }
 
@@ -1946,13 +1946,13 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
         {
             int argOfs = TransitionBlock::GetOffsetOfFloatArgumentRegisters() + m_idxFPReg * FLOAT_REGISTER_SIZE;
 #ifdef TARGET_POWERPC64
-            if (info.IsPpc64leHfa())
+            if (info.IsHomogeneousAggregate())
             {
                 m_argLocDescForStructInRegs.Init();
                 m_hasArgLocDescForStructInRegs = true;
                 m_argLocDescForStructInRegs.m_idxFloatReg = m_idxFPReg;
                 m_argLocDescForStructInRegs.m_cFloatReg = cFPRegs;
-                m_argLocDescForStructInRegs.m_hfaFieldSize = info.Ppc64leHfaElementSize();
+                m_argLocDescForStructInRegs.m_hfaFieldSize = info.HomogeneousAggregateElementSize();
             }
             else
 #endif

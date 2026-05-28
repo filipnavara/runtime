@@ -864,7 +864,8 @@ var_types Compiler::getReturnTypeForStruct(CORINFO_CLASS_HANDLE     clsHnd,
     }
 #elif defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
 #if defined(TARGET_POWERPC64)
-    const unsigned maxFpStructReturnBytes = MAX_RET_MULTIREG_BYTES;
+    const bool     isManagedCall           = callConv == CorInfoCallConvExtension::Managed;
+    const unsigned maxFpStructReturnBytes  = isManagedCall ? (TARGET_POINTER_SIZE * 2) : MAX_RET_MULTIREG_BYTES;
 #else
     const unsigned maxFpStructReturnBytes = TARGET_POINTER_SIZE * 2;
 #endif
@@ -960,7 +961,12 @@ var_types Compiler::getReturnTypeForStruct(CORINFO_CLASS_HANDLE     clsHnd,
         // See if we can return this struct by value, possibly in multiple registers
         // or if we should return it using a return buffer register
         //
-        if ((FEATURE_MULTIREG_RET == 1) && (structSize <= MAX_RET_MULTIREG_BYTES))
+#if defined(TARGET_POWERPC64)
+        const unsigned maxMultiregReturnBytes = isManagedCall ? (TARGET_POINTER_SIZE * 2) : MAX_RET_MULTIREG_BYTES;
+#else
+        const unsigned maxMultiregReturnBytes = MAX_RET_MULTIREG_BYTES;
+#endif
+        if ((FEATURE_MULTIREG_RET == 1) && (structSize <= maxMultiregReturnBytes))
         {
             // Structs that are HFA's are returned in multiple registers
             if (IsHfa(clsHnd))

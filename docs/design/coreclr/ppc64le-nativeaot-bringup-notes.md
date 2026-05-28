@@ -540,6 +540,9 @@ Struct classification:
 - `VarTypeIsMultiByteAndCanEnreg` must match the PPC64LE ABI.
 - Small aggregates may use multiple integer/floating return registers.
 - Larger or non-enregisterable structs use hidden return buffers.
+- Managed aggregate returns use the CoreCLR managed ABI cap of two eight-byte
+  return slots. PPC64LE HFA returns larger than 16 bytes are native interop ABI
+  shapes only; managed calls must use a hidden return buffer for those structs.
 - Split multireg struct parameters should not overlap callee-saved save slots.
 - If a struct contains GC references, every intermediate copy location must be
   non-GC by construction or reported for the full live range.

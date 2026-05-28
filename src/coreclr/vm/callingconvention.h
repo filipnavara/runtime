@@ -2140,9 +2140,21 @@ void ArgIteratorTemplate<ARGITERATOR_BASE>::ComputeReturnFlags()
             }
 #else // UNIX_AMD64_ABI
 
+            size_t size = thValueType.GetSize();
+
 #ifdef FEATURE_HFA
             if (thValueType.IsHFA() && !this->IsVarArg())
             {
+#if defined(TARGET_POWERPC64)
+                // The PPC64LE managed JIT returns larger HFAs through a hidden retbuf. Keep the VM's
+                // transition-frame argument scanner aligned with that managed ABI; unmanaged calls still
+                // use the platform HFA return rules below.
+                if (!this->UsesUnmanagedCallingConvention() && (size > ENREGISTERED_RETURNTYPE_MAXSIZE))
+                {
+                    flags |= RETURN_HAS_RET_BUFFER;
+                    break;
+                }
+#endif
                 CorInfoHFAElemType hfaType = thValueType.GetHFAType();
 
                 int hfaFieldSize = ArgLocDesc::getHFAFieldSize(hfaType);
@@ -2150,8 +2162,6 @@ void ArgIteratorTemplate<ARGITERATOR_BASE>::ComputeReturnFlags()
                 break;
             }
 #endif
-
-            size_t size = thValueType.GetSize();
 
 #if defined(TARGET_X86) || defined(TARGET_AMD64)
             // Return value types of size which are not powers of 2 using a RetBuffArg

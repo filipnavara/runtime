@@ -1343,9 +1343,9 @@ public unsafe partial class StructPacking
             );
         }
         else if (RuntimeInformation.ProcessArchitecture == Architecture.Arm64 || RuntimeInformation.ProcessArchitecture == Architecture.RiscV64
-                || RuntimeInformation.ProcessArchitecture == Architecture.LoongArch64)
+                || RuntimeInformation.ProcessArchitecture == Architecture.LoongArch64 || RuntimeInformation.ProcessArchitecture == Architecture.Ppc64le)
         {
-            // The Procedure Call Standard for ARM64, RiscV64, LoongArch64 defines this type as having 16-byte alignment
+            // The Procedure Call Standard for ARM64, RiscV64, LoongArch64, PPC64LE defines this type as having 16-byte alignment
 
             succeeded &= Test<DefaultLayoutDefaultPacking<Vector256<byte>>>(
                 expectedSize: 48,

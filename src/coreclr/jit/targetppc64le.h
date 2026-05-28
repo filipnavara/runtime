@@ -105,6 +105,9 @@
 
 #define REG_TMP_0                REG_R11
 
+#define REG_OPT_RSVD             REG_R12
+#define RBM_OPT_RSVD             RBM_R12
+
 #define RBM_GSCOOKIE_TMP         (RBM_R11 | RBM_R12)
 
 #define REG_SHIFT                REG_NA

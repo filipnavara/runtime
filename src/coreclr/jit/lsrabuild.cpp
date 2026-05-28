@@ -4183,7 +4183,7 @@ int LinearScan::BuildStoreLoc(GenTreeLclVarCommon* storeLoc)
             }
         }
     }
-    else if (!storeLoc->TypeIs(TYP_STRUCT))
+    else
     {
         bool fpBased = false;
         int  offset  = m_compiler->lvaFrameAddress(storeLoc->GetLclNum(), &fpBased) + storeLoc->GetLclOffs();

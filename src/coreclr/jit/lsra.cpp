@@ -2592,9 +2592,14 @@ void LinearScan::setFrameType()
 #endif // TARGET_ARMARCH || TARGET_RISCV64
 
 #if defined(TARGET_POWERPC64)
-    // PPC64LE LSRA checks stack local offsets to decide whether individual
-    // memory nodes need an internal register for large displacements.
-    (void)m_compiler->lvaFrameSize(Compiler::REGALLOC_FRAME_LAYOUT);
+    unsigned frameSize = m_compiler->lvaFrameSize(Compiler::REGALLOC_FRAME_LAYOUT);
+    if (frameSize > 0x7FFF)
+    {
+        m_compiler->codeGen->regSet.rsMaskResvd |= RBM_OPT_RSVD;
+        assert(REG_OPT_RSVD != REG_FP);
+        JITDUMP("  Reserved REG_OPT_RSVD (%s) due to large frame\n", getRegName(REG_OPT_RSVD));
+        removeMask |= RBM_OPT_RSVD.GetIntRegSet();
+    }
 #endif // TARGET_POWERPC64
 
 #ifdef TARGET_ARM

@@ -29,6 +29,8 @@
     <ItemGroup>
       <_MergedTestAssemblyMarkers Include="$(_TestSearchRoot)\*.MergedTestAssembly" />
       <MergedTestWrapperScripts Include="$([System.IO.Path]::ChangeExtension('%(_MergedTestAssemblyMarkers.Identity)', '.$(TestScriptExtension)'))" />
+      <MergedTestWrapperScripts Remove="@(MergedTestWrapperScripts)" Condition="'$(RunningGCSimulatorTests)' != '1' and '%(Filename)' == 'GC-simulator'" />
+      <MergedTestWrapperScripts Remove="@(MergedTestWrapperScripts)" Condition="'$(RunningGCSimulatorTests)' == '1' and '%(Filename)' != 'GC-simulator'" />
       <MergedTestWrapperScripts Update="@(MergedTestWrapperScripts)">
         <RedirectOutputToFile>$([System.IO.Path]::ChangeExtension('%(MergedTestWrapperScripts.Identity)', '.log'))</RedirectOutputToFile>
         <TestResultsXmlFile>$([System.IO.Path]::ChangeExtension('%(MergedTestWrapperScripts.Identity)', '.testResults.xml'))</TestResultsXmlFile>

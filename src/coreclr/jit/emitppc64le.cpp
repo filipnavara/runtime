@@ -712,7 +712,14 @@ void emitter::emitIns_R_S(instruction ins, emitAttr attr, regNumber ireg, int va
 
         if (addrReg == REG_NA)
         {
-            addrReg = (isLea || isGeneralRegister(ireg)) ? ireg : REG_NA;
+            if ((codeGen->regSet.rsMaskResvd & RBM_OPT_RSVD) != 0)
+            {
+                addrReg = codeGen->rsGetRsvdReg();
+            }
+            else
+            {
+                addrReg = (isLea || isGeneralRegister(ireg)) ? ireg : REG_NA;
+            }
         }
 
         if (addrReg == REG_NA)
@@ -793,6 +800,11 @@ void emitter::emitIns_S_R(instruction ins, emitAttr attr, regNumber ireg, int va
             // Prolog stores are emitted outside LSRA, so use a volatile scratch
             // register for large frame offsets when the caller cannot provide one.
             tmpReg = (ireg != REG_SCRATCH) ? REG_SCRATCH : REG_TMP_0;
+        }
+
+        if ((tmpReg == REG_NA) && ((codeGen->regSet.rsMaskResvd & RBM_OPT_RSVD) != 0))
+        {
+            tmpReg = codeGen->rsGetRsvdReg();
         }
 
         if (tmpReg == REG_NA)

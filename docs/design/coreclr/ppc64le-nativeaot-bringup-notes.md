@@ -658,9 +658,6 @@ by useful validation.
   blocked.
 - Varargs are not implemented in the PPC64LE ABI classifier and
   `genJmpPlaceVarArgs`.
-- Non-blittable by-value struct marshalling still has PPC64LE gaps. The
-  `MarshalStructAsLayoutSeq` P/Invoke test skips only the `S8` by-value cases
-  for now; by-ref cases and HFA/mixed aggregate cases are enabled.
 - Fast and portable tailcalls are enabled for managed calls. Keep split
   register/stack fast tailcall arguments rejected until the PPC64LE stack
   argument shuffle is designed and tested.

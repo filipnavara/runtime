@@ -3009,6 +3009,11 @@ FpStructInRegistersInfo MethodTable::GetFpStructInRegistersInfo(TypeHandle th)
     {
         return hfaInfo;
     }
+
+    // PPC64 ELFv2 only uses the floating-point aggregate convention for homogeneous aggregates.
+    // Non-HFA structs with floating fields, including C++ structs with empty subobjects, are
+    // passed using the integer aggregate convention.
+    return FpStructInRegistersInfo{};
 #endif // TARGET_POWERPC64
 
     if (th.GetSize() > ENREGISTERED_PARAMTYPE_MAXSIZE)

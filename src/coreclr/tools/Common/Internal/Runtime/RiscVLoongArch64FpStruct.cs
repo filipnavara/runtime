@@ -280,6 +280,11 @@ namespace Internal.JitInterface
             if ((arch == TargetArchitecture.Ppc64le) && GetHomogeneousAggregateInRegistersInfo(td, out FpStructInRegistersInfo hfaInfo))
                 return hfaInfo;
 
+            // PPC64 ELFv2 only uses floating-point registers for homogeneous aggregates.
+            // Non-HFA structs with floating fields are passed by the integer aggregate convention.
+            if (arch == TargetArchitecture.Ppc64le)
+                return new FpStructInRegistersInfo{};
+
             if (td.GetElementSize().AsInt > ENREGISTERED_PARAMTYPE_MAXSIZE)
                 return new FpStructInRegistersInfo{};
 

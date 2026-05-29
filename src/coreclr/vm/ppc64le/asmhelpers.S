@@ -275,7 +275,7 @@ LOCAL_LABEL(CallDescrWorkerInternalReturnAddress):
     cmpwi 5, 0
     beq LOCAL_LABEL(IntReturn)
 
-    andi. 6, 5, FpStruct__HomogeneousAggregate
+    andi. 6, 5, Ppc64leHomogeneousAggregate__HomogeneousAggregate
     bne LOCAL_LABEL(HomogeneousAggregateReturn)
 
     stfd 1, CallDescrData__returnValue(31)
@@ -297,7 +297,7 @@ LOCAL_LABEL(HomogeneousAggregateReturn):
     stfs 2, CallDescrData__returnValue + 4(31)
     stfs 3, CallDescrData__returnValue + 8(31)
 
-    srwi 6, 5, FpStruct__PosHomogeneousAggregateCount
+    srwi 6, 5, Ppc64leHomogeneousAggregate__PosElementCount
     andi. 6, 6, 0xF
     cmpwi 6, 3
     beq LOCAL_LABEL(ReturnDone)

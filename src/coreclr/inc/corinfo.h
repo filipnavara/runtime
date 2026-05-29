@@ -3205,8 +3205,8 @@ public:
     // Classifies a swift structure into primitives or an implicit byref for ABI purposes.
     virtual void getSwiftLowering(CORINFO_CLASS_HANDLE structHnd, CORINFO_SWIFT_LOWERING* pLowering) = 0;
 
-    // Returns lowering info for fields of a RISC-V/LoongArch struct passed in registers according to
-    // hardware floating-point calling convention.
+    // Returns lowering info for fields of a RISC-V/LoongArch struct or PPC64LE homogeneous aggregate passed
+    // in registers according to hardware floating-point calling convention.
     virtual void getFpStructLowering(CORINFO_CLASS_HANDLE structHnd, CORINFO_FPSTRUCT_LOWERING* pLowering) = 0;
 
     // Returns the primitive type for passing/returning a Wasm struct by value,

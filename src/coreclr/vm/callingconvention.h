@@ -48,7 +48,7 @@ struct ArgLocDesc
 
     int     m_byteStackIndex;     // Stack offset in bytes (or -1)
     int     m_byteStackSize;      // Stack size in bytes
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
     FpStructInRegistersInfo m_structFields; // Struct field info when using floating-point register(s)
 #endif
 
@@ -106,7 +106,7 @@ struct ArgLocDesc
 #if defined(TARGET_ARM64) || defined(TARGET_POWERPC64)
         m_hfaFieldSize = 0;
 #endif // defined(TARGET_ARM64) || defined(TARGET_POWERPC64)
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
         m_structFields = {};
 #endif
 #if defined(UNIX_AMD64_ABI)
@@ -504,7 +504,7 @@ public:
         return m_dwFlags >> RETURN_FP_SIZE_SHIFT;
     }
 
-#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
     FpStructInRegistersInfo GetReturnFpStructInRegistersInfo()
     {
         WRAPPER_NO_CONTRACT;
@@ -517,7 +517,7 @@ public:
             m_returnedFpFieldOffsets[1],
         };
     }
-#endif // defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
+#endif // defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
 
 #ifdef TARGET_X86
     //=========================================================================
@@ -1839,7 +1839,12 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
 #elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     assert(!this->IsVarArg()); // Varargs on RISC-V and LoongArch not supported yet
     int cFPRegs = 0;
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
     FpStructInRegistersInfo info = {};
+#endif
+#ifdef TARGET_POWERPC64
+    Ppc64leHomogeneousAggregateInfo hfaInfo = {};
+#endif
 
     switch (argType)
     {
@@ -1855,11 +1860,10 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
         // in FP registers if possible.
 
 #ifdef TARGET_POWERPC64
-        info = MethodTable::GetFpStructInRegistersInfo(thValueType);
-        if (info.IsHomogeneousAggregate() &&
+        if (MethodTable::GetPpc64leHomogeneousAggregateInfo(thValueType, &hfaInfo) &&
             ((argSize <= ENREGISTERED_PARAMTYPE_MAXSIZE) || this->UsesUnmanagedCallingConvention()))
         {
-            cFPRegs = info.HomogeneousAggregateElementCount();
+            cFPRegs = hfaInfo.elementCount;
             _ASSERTE((cFPRegs > 0) && (cFPRegs <= 8));
         }
         else
@@ -1877,11 +1881,11 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
         {
 #ifndef TARGET_POWERPC64
             info = MethodTable::GetFpStructInRegistersInfo(thValueType);
-#endif
             if (info.flags != FpStruct::UseIntCallConv)
             {
                 cFPRegs = info.FloatRegisterCount();
             }
+#endif
         }
 
         break;
@@ -1915,6 +1919,7 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
     {
         // If there's enough free registers, pass according to hardware floating-point calling convention
 
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
         if (info.flags & (FpStruct::FloatInt | FpStruct::IntFloat))
         {
             assert(cFPRegs == 1);
@@ -1942,20 +1947,22 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
                 return argOfs;
             }
         }
-        else if (cFPRegs + m_idxFPReg <= NUM_FLOAT_ARGUMENT_REGISTERS)
+        else
+#endif
+        if (cFPRegs + m_idxFPReg <= NUM_FLOAT_ARGUMENT_REGISTERS)
         {
             int argOfs = TransitionBlock::GetOffsetOfFloatArgumentRegisters() + m_idxFPReg * FLOAT_REGISTER_SIZE;
 #ifdef TARGET_POWERPC64
-            if (info.IsHomogeneousAggregate())
+            if (hfaInfo.IsHomogeneousAggregate())
             {
                 m_argLocDescForStructInRegs.Init();
                 m_hasArgLocDescForStructInRegs = true;
                 m_argLocDescForStructInRegs.m_idxFloatReg = m_idxFPReg;
                 m_argLocDescForStructInRegs.m_cFloatReg = cFPRegs;
-                m_argLocDescForStructInRegs.m_hfaFieldSize = info.HomogeneousAggregateElementSize();
+                m_argLocDescForStructInRegs.m_hfaFieldSize = hfaInfo.elementSize;
             }
-            else
 #endif
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
             if (info.flags != FpStruct::UseIntCallConv)
             {
                 assert(info.flags & (FpStruct::OnlyOne | FpStruct::BothFloat));
@@ -1965,6 +1972,7 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
                 m_argLocDescForStructInRegs.m_cFloatReg = cFPRegs;
                 m_argLocDescForStructInRegs.m_structFields = info;
             }
+#endif
             m_idxFPReg += cFPRegs;
 #ifdef TARGET_POWERPC64
             consumePpc64leParameterSlots(ALIGN_UP(cbArg, TARGET_POINTER_SIZE) / TARGET_POINTER_SIZE);
@@ -2155,10 +2163,10 @@ void ArgIteratorTemplate<ARGITERATOR_BASE>::ComputeReturnFlags()
                     break;
                 }
 
-                FpStructInRegistersInfo info = MethodTable::GetFpStructInRegistersInfo(thValueType);
-                flags |= info.flags << RETURN_FP_SIZE_SHIFT;
-                m_returnedFpFieldOffsets[0] = info.offset1st;
-                m_returnedFpFieldOffsets[1] = info.offset2nd;
+                Ppc64leHomogeneousAggregateInfo hfaInfo = {};
+                bool isHfa = MethodTable::GetPpc64leHomogeneousAggregateInfo(thValueType, &hfaInfo);
+                _ASSERTE(isHfa);
+                flags |= hfaInfo.EncodeAsFpReturnSize() << RETURN_FP_SIZE_SHIFT;
                 break;
 #else
                 CorInfoHFAElemType hfaType = thValueType.GetHFAType();
@@ -2179,7 +2187,7 @@ void ArgIteratorTemplate<ARGITERATOR_BASE>::ComputeReturnFlags()
             }
 #endif // defined(TARGET_X86) || defined(TARGET_AMD64)
 
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
             if  (size <= ENREGISTERED_RETURNTYPE_INTEGER_MAXSIZE)
             {
                 assert(!thValueType.IsTypeDesc());

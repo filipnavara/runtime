@@ -237,6 +237,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
 
         public uint m_floatFlags;        // struct with two-fields can be passed by registers.
         public FpStructInRegistersInfo m_structFields; // RISC-V and LoongArch - Struct field info when using floating-point register(s)
+        public int m_hfaFieldSize;       // PPC64LE - HFA element size when using floating-point register(s)
 
         // Initialize to represent a non-placed argument (no register or stack slots referenced).
         public void Init()
@@ -249,6 +250,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
             m_byteStackSize = 0;
             m_floatFlags = 0;
             m_structFields = new FpStructInRegistersInfo();
+            m_hfaFieldSize = 0;
 
             m_fRequires64BitAlignment = false;
         }
@@ -1399,6 +1401,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
 
                         int cFPRegs = 0;
                         FpStructInRegistersInfo info = new FpStructInRegistersInfo{};
+                        Ppc64leHomogeneousAggregateInfo hfaInfo = default;
                         _hasArgLocDescForStructInRegs = false;
 
                         switch (argType)
@@ -1411,18 +1414,27 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
 
                             case CorElementType.ELEMENT_TYPE_VALUETYPE:
                                 {
+                                    if (_transitionBlock.IsPpc64le &&
+                                        (argSize <= _transitionBlock.EnregisteredParamTypeMaxSize) &&
+                                        Ppc64leHomogeneousAggregateInfo.TryGet(_argTypeHandle.GetRuntimeTypeHandle(), out hfaInfo))
+                                    {
+                                        cFPRegs = (int)hfaInfo.ElementCount;
+                                    }
                                     // Composite greater than 16 bytes should be passed by reference
-                                    if (argSize > _transitionBlock.EnregisteredParamTypeMaxSize)
+                                    else if (argSize > _transitionBlock.EnregisteredParamTypeMaxSize)
                                     {
                                         argSize = _transitionBlock.PointerSize;
                                     }
                                     else
                                     {
-                                        info = RiscVLoongArch64FpStruct.GetFpStructInRegistersInfo(
-                                            _argTypeHandle.GetRuntimeTypeHandle(), _transitionBlock.Architecture);
-                                        if (info.flags != FpStruct.UseIntCallConv)
+                                        if (!_transitionBlock.IsPpc64le)
                                         {
-                                            cFPRegs = (int)info.FloatRegisterCount();
+                                            info = RiscVLoongArch64FpStruct.GetFpStructInRegistersInfo(
+                                                _argTypeHandle.GetRuntimeTypeHandle(), _transitionBlock.Architecture);
+                                            if (info.flags != FpStruct.UseIntCallConv)
+                                            {
+                                                cFPRegs = (int)info.FloatRegisterCount();
+                                            }
                                         }
                                     }
 
@@ -1440,7 +1452,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                         {
                             // If there's enough free registers, pass according to hardware floating-point calling convention
 
-                            if ((info.flags & (FpStruct.FloatInt | FpStruct.IntFloat)) != 0)
+                            if (!_transitionBlock.IsPpc64le && ((info.flags & (FpStruct.FloatInt | FpStruct.IntFloat)) != 0))
                             {
                                 Debug.Assert(cFPRegs == 1);
                                 Debug.Assert((info.flags & (FpStruct.OnlyOne | FpStruct.BothFloat)) == 0);
@@ -1470,10 +1482,17 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                             else if (cFPRegs + _rvLa64IdxFPReg <= _transitionBlock.NumFloatArgumentRegisters)
                             {
                                 int argOfsInner = _transitionBlock.OffsetOfFloatArgumentRegisters + _rvLa64IdxFPReg * _transitionBlock.FloatRegisterSize;
-                                if (info.flags != FpStruct.UseIntCallConv)
+                                if (_transitionBlock.IsPpc64le && hfaInfo.IsHomogeneousAggregate)
                                 {
-                                    Debug.Assert(((info.flags & (FpStruct.OnlyOne | FpStruct.BothFloat)) != 0) ||
-                                        info.IsHomogeneousAggregate());
+                                    _argLocDescForStructInRegs = new ArgLocDesc();
+                                    _hasArgLocDescForStructInRegs = true;
+                                    _argLocDescForStructInRegs.m_idxFloatReg = _rvLa64IdxFPReg;
+                                    _argLocDescForStructInRegs.m_cFloatReg = cFPRegs;
+                                    _argLocDescForStructInRegs.m_hfaFieldSize = (int)hfaInfo.ElementSize;
+                                }
+                                else if (info.flags != FpStruct.UseIntCallConv)
+                                {
+                                    Debug.Assert((info.flags & (FpStruct.OnlyOne | FpStruct.BothFloat)) != 0);
                                     _argLocDescForStructInRegs = new ArgLocDesc();
                                     _hasArgLocDescForStructInRegs = true;
                                     _argLocDescForStructInRegs.m_idxFloatReg = _rvLa64IdxFPReg;

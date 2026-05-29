@@ -165,6 +165,7 @@
     <Compile Include="..\..\Common\JitInterface\CorInfoTypes.VarInfo.cs" Link="JitInterface\CorInfoTypes.VarInfo.cs" />
     <Compile Include="..\..\Common\JitInterface\SystemVStructClassificator.cs" Link="JitInterface\SystemVStructClassificator.cs" />
     <Compile Include="..\..\Common\Internal\Runtime\RiscVLoongArch64FpStruct.cs" Link="Common\RiscVLoongArch64FpStruct.cs" />
+    <Compile Include="..\..\Common\Internal\Runtime\Ppc64leHomogeneousAggregateInfo.cs" Link="Common\Ppc64leHomogeneousAggregateInfo.cs" />
     <Compile Include="..\..\Common\JitInterface\SwiftPhysicalLowering.cs" Link="JitInterface\SwiftPhysicalLowering.cs" />
     <Compile Include="..\..\Common\JitInterface\WasmLowering.cs" Link="JitInterface\WasmLowering.cs" />
     <Compile Include="..\..\Common\TypeSystem\Interop\InteropTypes.cs" Link="Interop\InteropTypes.cs" />

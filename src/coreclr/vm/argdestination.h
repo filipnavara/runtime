@@ -153,6 +153,12 @@ public:
 #endif
 
 #ifdef TARGET_POWERPC64
+        if (m_argLocDescForStructInRegs->m_hfaFieldSize != 0)
+        {
+            CopyHFAStructToRegister(src, fieldBytes);
+            return;
+        }
+
         if ((m_argLocDescForStructInRegs->m_cFloatReg == 0) &&
             ((m_argLocDescForStructInRegs->m_cGenReg > 0) ||
              (m_argLocDescForStructInRegs->m_byteStackSize > 0)))
@@ -181,6 +187,7 @@ public:
         }
 #endif
 
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
         using namespace FpStruct;
         FpStructInRegistersInfo info = m_argLocDescForStructInRegs->m_structFields;
         _ASSERTE(m_argLocDescForStructInRegs->m_cFloatReg == ((info.flags & BothFloat) ? 2 : 1));
@@ -227,6 +234,9 @@ public:
                 default: _ASSERTE(false);
             }
         }
+#else
+        _ASSERTE(!"Unexpected struct-in-registers argument shape");
+#endif
     }
 
 #if defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)

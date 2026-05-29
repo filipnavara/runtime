@@ -77,17 +77,17 @@ ASMCONSTANTS_C_ASSERT(CallDescrData__returnValue          == offsetof(CallDescrD
 #define FpStruct__BothFloat 0b10
 ASMCONSTANTS_C_ASSERT(FpStruct__BothFloat == (int)FpStruct::BothFloat)
 
-#define FpStruct__HomogeneousAggregate 0x100
-ASMCONSTANTS_C_ASSERT(FpStruct__HomogeneousAggregate == (int)FpStruct::HomogeneousAggregate)
+#define Ppc64leHomogeneousAggregate__HomogeneousAggregate 0x100
+ASMCONSTANTS_C_ASSERT(Ppc64leHomogeneousAggregate__HomogeneousAggregate == (int)Ppc64leHomogeneousAggregate::HomogeneousAggregate)
 
 #define FpStruct__SizeShift1stMask 0x30
 ASMCONSTANTS_C_ASSERT(FpStruct__SizeShift1stMask == (int)FpStruct::SizeShift1stMask)
 
-#define FpStruct__HomogeneousAggregateCountMask 0x1E00
-ASMCONSTANTS_C_ASSERT(FpStruct__HomogeneousAggregateCountMask == (int)FpStruct::HomogeneousAggregateCountMask)
+#define Ppc64leHomogeneousAggregate__ElementCountMask 0x1E00
+ASMCONSTANTS_C_ASSERT(Ppc64leHomogeneousAggregate__ElementCountMask == (int)Ppc64leHomogeneousAggregate::ElementCountMask)
 
-#define FpStruct__PosHomogeneousAggregateCount 9
-ASMCONSTANTS_C_ASSERT(FpStruct__PosHomogeneousAggregateCount == (int)FpStruct::PosHomogeneousAggregateCount)
+#define Ppc64leHomogeneousAggregate__PosElementCount 9
+ASMCONSTANTS_C_ASSERT(Ppc64leHomogeneousAggregate__PosElementCount == (int)Ppc64leHomogeneousAggregate::PosElementCount)
 
 #define PROFILE_ENTER    1
 #define PROFILE_LEAVE    2

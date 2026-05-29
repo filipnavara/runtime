@@ -20,8 +20,6 @@ namespace Internal.JitInterface
         PosIntFloat     = 3,
         PosSizeShift1st = 4, // 2 bits
         PosSizeShift2nd = 6, // 2 bits
-        PosHomogeneousAggregateCount = 9, // 4 bits
-
         UseIntCallConv = 0, // struct is passed according to integer calling convention
 
         // The flags and bitfields
@@ -31,14 +29,11 @@ namespace Internal.JitInterface
         IntFloat         =    1 << PosIntFloat,     // has two fields, 2nd is floating and 1st is integer
         SizeShift1stMask = 0b11 << PosSizeShift1st, // log2(size) of 1st field
         SizeShift2ndMask = 0b11 << PosSizeShift2nd, // log2(size) of 2nd field
-        HomogeneousAggregate          =    1 << 8,               // Homogeneous aggregate with explicit element count
-        HomogeneousAggregateCountMask = 0b1111 << PosHomogeneousAggregateCount,
         // Note: flags OnlyOne, BothFloat, FloatInt, and IntFloat are mutually exclusive
     }
 
-    // On RISC-V, LoongArch, and PPC64LE a struct with up to two non-empty fields, at least one of them
-    // floating-point, can be passed in registers according to hardware FP calling convention. PPC64LE also
-    // uses this to represent homogeneous floating-point aggregates with an explicit element count.
+    // On RISC-V and LoongArch64 a struct with up to two non-empty fields, at least one of them floating-point,
+    // can be passed in registers according to hardware FP calling convention.
     // FpStructInRegistersInfo represents passing information for such parameters.
     public struct FpStructInRegistersInfo
     {
@@ -52,26 +47,9 @@ namespace Internal.JitInterface
         public uint Size1st() { return 1u << (int)SizeShift1st(); }
         public uint Size2nd() { return 1u << (int)SizeShift2nd(); }
 
-        public bool IsHomogeneousAggregate() { return (flags & FpStruct.HomogeneousAggregate) != 0; }
-        public uint HomogeneousAggregateElementCount()
-        {
-            Debug.Assert(IsHomogeneousAggregate());
-            return (uint)((int)(flags & FpStruct.HomogeneousAggregateCountMask) >>
-                (int)FpStruct.PosHomogeneousAggregateCount);
-        }
-        public uint HomogeneousAggregateElementSize()
-        {
-            Debug.Assert(IsHomogeneousAggregate());
-            return Size1st();
-        }
         public uint FloatRegisterCount()
         {
             Debug.Assert(flags != FpStruct.UseIntCallConv);
-            if (IsHomogeneousAggregate())
-            {
-                return HomogeneousAggregateElementCount();
-            }
-
             return ((flags & FpStruct.BothFloat) != 0) ? 2u : 1u;
         }
     }
@@ -80,7 +58,6 @@ namespace Internal.JitInterface
     {
         private const int
             ENREGISTERED_PARAMTYPE_MAXSIZE = 16,
-            MAX_FPSTRUCT_LOWERED_ELEMENTS = 8,
             TARGET_POINTER_SIZE = 8;
 
         private static uint GetFpStructFieldSizeShift(uint size)
@@ -111,53 +88,6 @@ namespace Internal.JitInterface
 
             info.flags |= (FpStruct)(floatFlag | sizeShiftMask);
             (index == 0 ? ref info.offset1st : ref info.offset2nd) = offset;
-        }
-
-        private static bool GetHomogeneousAggregateInRegistersInfo(TypeDesc td, out FpStructInRegistersInfo info)
-        {
-            info = new FpStructInRegistersInfo{};
-
-            if (td is not DefType defType)
-                return false;
-
-            int elemSize = (defType.ValueTypeShapeCharacteristics & ValueTypeShapeCharacteristics.AggregateMask) switch
-            {
-                ValueTypeShapeCharacteristics.Float32Aggregate => sizeof(float),
-                ValueTypeShapeCharacteristics.Float64Aggregate => sizeof(double),
-                _ => 0
-            };
-
-            int size = td.GetElementSize().AsInt;
-            if (elemSize == 0 || (size % elemSize) != 0)
-                return false;
-
-            int elemCount = size / elemSize;
-            if (elemCount is < 1 or > MAX_FPSTRUCT_LOWERED_ELEMENTS)
-                return false;
-
-            if (elemCount <= 2)
-            {
-                SetFpStructInRegistersInfoField(ref info, 0, true, (uint)elemSize, 0);
-                if (elemCount == 1)
-                {
-                    info.flags ^= FloatInt | OnlyOne;
-                }
-                else
-                {
-                    SetFpStructInRegistersInfoField(ref info, 1, true, (uint)elemSize, (uint)elemSize);
-                    info.flags ^= FloatInt | IntFloat | BothFloat;
-                }
-            }
-            else
-            {
-                info.flags = HomogeneousAggregate |
-                    (FpStruct)(GetFpStructFieldSizeShift((uint)elemSize) << (int)PosSizeShift1st) |
-                    (FpStruct)(elemCount << (int)PosHomogeneousAggregateCount);
-                info.offset1st = 0;
-                info.offset2nd = (uint)elemSize;
-            }
-
-            return true;
         }
 
         private static bool HandleInlineArray(int elementTypeIndex, int nElements,
@@ -275,15 +205,7 @@ namespace Internal.JitInterface
 
         public static FpStructInRegistersInfo GetFpStructInRegistersInfo(TypeDesc td, TargetArchitecture arch)
         {
-            Debug.Assert(arch is TargetArchitecture.RiscV64 or TargetArchitecture.LoongArch64 or TargetArchitecture.Ppc64le);
-
-            if ((arch == TargetArchitecture.Ppc64le) && GetHomogeneousAggregateInRegistersInfo(td, out FpStructInRegistersInfo hfaInfo))
-                return hfaInfo;
-
-            // PPC64 ELFv2 only uses floating-point registers for homogeneous aggregates.
-            // Non-HFA structs with floating fields are passed by the integer aggregate convention.
-            if (arch == TargetArchitecture.Ppc64le)
-                return new FpStructInRegistersInfo{};
+            Debug.Assert(arch is TargetArchitecture.RiscV64 or TargetArchitecture.LoongArch64);
 
             if (td.GetElementSize().AsInt > ENREGISTERED_PARAMTYPE_MAXSIZE)
                 return new FpStructInRegistersInfo{};

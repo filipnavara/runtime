@@ -387,7 +387,22 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                         }
                         else
                         {
-                            if (thRetType.IsHomogeneousAggregate() && !isVarArgMethod)
+                            if (IsPpc64le &&
+                                Ppc64leHomogeneousAggregateInfo.TryGet(thRetType.GetRuntimeTypeHandle(), out Ppc64leHomogeneousAggregateInfo hfaInfo) &&
+                                !isVarArgMethod)
+                            {
+                                if (thRetType.GetSize() > EnregisteredReturnTypeIntegerMaxSize)
+                                {
+                                    usesRetBuffer = true;
+                                }
+                                else
+                                {
+                                    fpReturnSize = hfaInfo.EncodeAsFpReturnSize();
+                                }
+                                break;
+                            }
+
+                            if (!IsPpc64le && thRetType.IsHomogeneousAggregate() && !isVarArgMethod)
                             {
                                 int haElementSize = thRetType.GetHomogeneousAggregateElementSize();
                                 fpReturnSize = 4 * (uint)haElementSize;
@@ -414,7 +429,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
 
                             if (size <= EnregisteredReturnTypeIntegerMaxSize)
                             {
-                                if (IsLoongArch64 || IsPpc64le || IsRiscV64)
+                                if (IsLoongArch64 || IsRiscV64)
                                 {
                                     FpStructInRegistersInfo info = RiscVLoongArch64FpStruct.GetFpStructInRegistersInfo(
                                         thRetType.GetRuntimeTypeHandle(), Architecture);

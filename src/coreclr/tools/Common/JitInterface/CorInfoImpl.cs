@@ -3654,50 +3654,58 @@ namespace Internal.JitInterface
         private void getFpStructLowering(CORINFO_CLASS_STRUCT_* structHnd, ref CORINFO_FPSTRUCT_LOWERING lowering)
         {
             TypeDesc typeDesc = HandleToObject(structHnd);
+            if (_compilation.TypeSystemContext.Target.Architecture == TargetArchitecture.Ppc64le)
+            {
+                if (Ppc64leHomogeneousAggregateInfo.TryGet(typeDesc, out Ppc64leHomogeneousAggregateInfo hfaInfo))
+                {
+                    lowering.byIntegerCallConv = false;
+                    int elemCount = (int)hfaInfo.ElementCount;
+                    lowering.numLoweredElements = elemCount;
+
+                    CorInfoType loweredType = (hfaInfo.ElementSize == sizeof(double)) ?
+                        CorInfoType.CORINFO_TYPE_DOUBLE : CorInfoType.CORINFO_TYPE_FLOAT;
+
+                    for (int i = 0; i < elemCount; i++)
+                    {
+                        lowering.LoweredElements[i] = loweredType;
+                        lowering.Offsets[i] = (uint)(i * hfaInfo.ElementSize);
+                    }
+                }
+                else
+                {
+                    lowering.byIntegerCallConv = true;
+                }
+
+                return;
+            }
+
             FpStructInRegistersInfo info = RiscVLoongArch64FpStruct.GetFpStructInRegistersInfo(
                 typeDesc, _compilation.TypeSystemContext.Target.Architecture);
             if (info.flags != FpStruct.UseIntCallConv)
             {
                 lowering.byIntegerCallConv = false;
 
-                if (info.IsHomogeneousAggregate())
+                lowering.Offsets[0] = info.offset1st;
+                lowering.Offsets[1] = info.offset2nd;
+                lowering.numLoweredElements = ((info.flags & FpStruct.OnlyOne) != 0) ? 1 : 2;
+
+                if ((info.flags & (FpStruct.BothFloat | FpStruct.FloatInt | FpStruct.OnlyOne)) != 0)
+                    lowering.LoweredElements[0] = (info.SizeShift1st() == 3) ? CorInfoType.CORINFO_TYPE_DOUBLE : CorInfoType.CORINFO_TYPE_FLOAT;
+
+                if ((info.flags & (FpStruct.BothFloat | FpStruct.IntFloat)) != 0)
+                    lowering.LoweredElements[1] = (info.SizeShift2nd() == 3) ? CorInfoType.CORINFO_TYPE_DOUBLE : CorInfoType.CORINFO_TYPE_FLOAT;
+
+                if ((info.flags & (FpStruct.FloatInt | FpStruct.IntFloat)) != 0)
                 {
-                    CorInfoType loweredType = (info.HomogeneousAggregateElementSize() == sizeof(double)) ?
-                        CorInfoType.CORINFO_TYPE_DOUBLE : CorInfoType.CORINFO_TYPE_FLOAT;
+                    int index = ((info.flags & FpStruct.FloatInt) != 0) ? 1 : 0;
+                    uint sizeShift = (index == 0) ? info.SizeShift1st() : info.SizeShift2nd();
+                    lowering.LoweredElements[index] = (CorInfoType)((int)CorInfoType.CORINFO_TYPE_BYTE + sizeShift * 2);
 
-                    int elemCount = (int)info.HomogeneousAggregateElementCount();
-                    uint elemSize = info.HomogeneousAggregateElementSize();
-                    lowering.numLoweredElements = elemCount;
-                    for (int i = 0; i < elemCount; i++)
-                    {
-                        lowering.LoweredElements[i] = loweredType;
-                        lowering.Offsets[i] = (uint)(i * elemSize);
-                    }
-                }
-                else
-                {
-                    lowering.Offsets[0] = info.offset1st;
-                    lowering.Offsets[1] = info.offset2nd;
-                    lowering.numLoweredElements = ((info.flags & FpStruct.OnlyOne) != 0) ? 1 : 2;
-
-                    if ((info.flags & (FpStruct.BothFloat | FpStruct.FloatInt | FpStruct.OnlyOne)) != 0)
-                        lowering.LoweredElements[0] = (info.SizeShift1st() == 3) ? CorInfoType.CORINFO_TYPE_DOUBLE : CorInfoType.CORINFO_TYPE_FLOAT;
-
-                    if ((info.flags & (FpStruct.BothFloat | FpStruct.IntFloat)) != 0)
-                        lowering.LoweredElements[1] = (info.SizeShift2nd() == 3) ? CorInfoType.CORINFO_TYPE_DOUBLE : CorInfoType.CORINFO_TYPE_FLOAT;
-
-                    if ((info.flags & (FpStruct.FloatInt | FpStruct.IntFloat)) != 0)
-                    {
-                        int index = ((info.flags & FpStruct.FloatInt) != 0) ? 1 : 0;
-                        uint sizeShift = (index == 0) ? info.SizeShift1st() : info.SizeShift2nd();
-                        lowering.LoweredElements[index] = (CorInfoType)((int)CorInfoType.CORINFO_TYPE_BYTE + sizeShift * 2);
-
-                        // unittests
-                        Debug.Assert((int)CorInfoType.CORINFO_TYPE_BYTE + 0 * 2 == (int)CorInfoType.CORINFO_TYPE_BYTE);
-                        Debug.Assert((int)CorInfoType.CORINFO_TYPE_BYTE + 1 * 2 == (int)CorInfoType.CORINFO_TYPE_SHORT);
-                        Debug.Assert((int)CorInfoType.CORINFO_TYPE_BYTE + 2 * 2 == (int)CorInfoType.CORINFO_TYPE_INT);
-                        Debug.Assert((int)CorInfoType.CORINFO_TYPE_BYTE + 3 * 2 == (int)CorInfoType.CORINFO_TYPE_LONG);
-                    }
+                    // unittests
+                    Debug.Assert((int)CorInfoType.CORINFO_TYPE_BYTE + 0 * 2 == (int)CorInfoType.CORINFO_TYPE_BYTE);
+                    Debug.Assert((int)CorInfoType.CORINFO_TYPE_BYTE + 1 * 2 == (int)CorInfoType.CORINFO_TYPE_SHORT);
+                    Debug.Assert((int)CorInfoType.CORINFO_TYPE_BYTE + 2 * 2 == (int)CorInfoType.CORINFO_TYPE_INT);
+                    Debug.Assert((int)CorInfoType.CORINFO_TYPE_BYTE + 3 * 2 == (int)CorInfoType.CORINFO_TYPE_LONG);
                 }
             }
             else

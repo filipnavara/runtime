@@ -92,6 +92,9 @@
     <Compile Include="..\..\Common\Internal\Runtime\RiscVLoongArch64FpStruct.cs">
       <Link>Common\RiscVLoongArch64FpStruct.cs</Link>
     </Compile>
+    <Compile Include="..\..\Common\Internal\Runtime\Ppc64leHomogeneousAggregateInfo.cs">
+      <Link>Common\Ppc64leHomogeneousAggregateInfo.cs</Link>
+    </Compile>
     <Compile Include="..\..\Common\JitInterface\SwiftPhysicalLowering.cs">
       <Link>JitInterface\SwiftPhysicalLowering.cs</Link>
     </Compile>

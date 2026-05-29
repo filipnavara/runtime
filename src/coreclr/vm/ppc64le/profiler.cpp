@@ -135,7 +135,7 @@ LPVOID ProfileArgIterator::CopyStructFromRegisters(const ArgLocDesc* sir)
         return CopyStructFromFPRegs(sir->m_idxFloatReg, sir->m_cFloatReg, sir->m_hfaFieldSize);
     }
 
-    if (sir->m_structFields.flags == FpStruct::UseIntCallConv)
+    if ((sir->m_cFloatReg == 0) && ((sir->m_cGenReg > 0) || (sir->m_byteStackSize > 0)))
     {
         _ASSERTE(sir->m_cGenReg > 0);
         _ASSERTE(sir->m_byteStackSize > 0);
@@ -153,58 +153,8 @@ LPVOID ProfileArgIterator::CopyStructFromRegisters(const ArgLocDesc* sir)
         return dest;
     }
 
-    struct
-    {
-        bool     isFloat;
-        bool     is8;
-        unsigned offset;
-    } fields[] = {
-        {(bool)(sir->m_structFields.flags & (FpStruct::FloatInt | FpStruct::BothFloat | FpStruct::OnlyOne)),
-         (sir->m_structFields.SizeShift1st() == 3), sir->m_structFields.offset1st},
-        {(bool)(sir->m_structFields.flags & (FpStruct::IntFloat | FpStruct::BothFloat)),
-         (sir->m_structFields.SizeShift2nd() == 3), sir->m_structFields.offset2nd},
-    };
-
-    int fieldCount = (sir->m_structFields.flags & FpStruct::OnlyOne) ? 1 : 2;
-
-    const double* fReg = &pData->floatArgumentRegisters.f[sir->m_idxFloatReg];
-    const INT64*  rReg = &pData->argumentRegisters.r[sir->m_idxGenReg];
-
-    UINT64 bufferPosBegin = ALIGN_UP(m_bufferPos, 8);
-    m_bufferPos           = bufferPosBegin;
-    for (int i = 0; i < fieldCount; i++)
-    {
-        BYTE* dest = &pData->buffer[bufferPosBegin + fields[i].offset];
-
-        if (fields[i].isFloat)
-        {
-            if (fields[i].is8)
-            {
-                *(UINT64*)dest = *(const UINT64*)fReg;
-            }
-            else
-            {
-                *(float*)dest = (float)*fReg;
-            }
-            fReg++;
-        }
-        else
-        {
-            if (fields[i].is8)
-            {
-                *(INT64*)dest = *rReg;
-            }
-            else
-            {
-                *(INT32*)dest = *(const INT32*)rReg;
-            }
-            rReg++;
-        }
-    }
-
-    m_bufferPos += max(sir->m_structFields.offset1st + sir->m_structFields.Size1st(),
-                       sir->m_structFields.offset2nd + sir->m_structFields.Size2nd());
-    return &pData->buffer[bufferPosBegin];
+    _ASSERTE(!"Unexpected PPC64LE struct-in-registers argument shape");
+    return nullptr;
 }
 
 LPVOID ProfileArgIterator::GetNextArgAddr()
@@ -350,39 +300,32 @@ LPVOID ProfileArgIterator::GetReturnBufferAddr(void)
         return (LPVOID)pData->argumentRegisters.r[0];
     }
 
-    FpStructInRegistersInfo info = m_argIterator.GetReturnFpStructInRegistersInfo();
-    if (info.flags != FpStruct::UseIntCallConv)
+    const UINT fpReturnSize = m_argIterator.GetFPReturnSize();
+    if (fpReturnSize != FpStruct::UseIntCallConv)
     {
-        if (info.IsHomogeneousAggregate())
+        if ((fpReturnSize & Ppc64leHomogeneousAggregate::HomogeneousAggregate) != 0)
         {
-            return CopyStructFromFPRegs(0, info.HomogeneousAggregateElementCount(),
-                                        info.HomogeneousAggregateElementSize());
+            const UINT elemCount =
+                (fpReturnSize & Ppc64leHomogeneousAggregate::ElementCountMask) >>
+                Ppc64leHomogeneousAggregate::PosElementCount;
+            const UINT elemSizeShift =
+                (fpReturnSize & FpStruct::SizeShift1stMask) >> FpStruct::PosSizeShift1st;
+            const UINT elemSize = 1u << elemSizeShift;
+            return CopyStructFromFPRegs(0, elemCount, elemSize);
         }
 
-        if (info.flags & FpStruct::OnlyOne)
+        if (fpReturnSize & FpStruct::OnlyOne)
         {
-            if (info.Size1st() == sizeof(float))
+            const UINT elemSizeShift = (fpReturnSize & FpStruct::SizeShift1stMask) >> FpStruct::PosSizeShift1st;
+            const UINT elemSize      = 1u << elemSizeShift;
+            if (elemSize == sizeof(float))
             {
                 return CopyStructFromFPRegs(0, 1, sizeof(float));
             }
 
-            _ASSERTE(info.Size1st() == sizeof(double));
+            _ASSERTE(elemSize == sizeof(double));
             return &pData->floatArgumentRegisters.f[0];
         }
-
-        if ((info.flags & FpStruct::BothFloat) && info.SizeShift1st() == 3 && info.SizeShift2nd() == 3)
-        {
-            return &pData->floatArgumentRegisters.f[0];
-        }
-
-        ArgLocDesc sir;
-        sir.Init();
-        sir.m_idxFloatReg = 0;
-        sir.m_cFloatReg   = -1;
-        sir.m_idxGenReg   = 0;
-        sir.m_cGenReg     = -1;
-        sir.m_structFields = info;
-        return CopyStructFromRegisters(&sir);
     }
 
     if (!m_argIterator.GetSig()->IsReturnTypeVoid())

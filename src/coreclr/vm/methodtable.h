@@ -834,7 +834,6 @@ namespace FpStruct
         PosIntFloat     = 3,
         PosSizeShift1st = 4, // 2 bits
         PosSizeShift2nd = 6, // 2 bits
-        PosHomogeneousAggregateCount = 9, // 4 bits
 
         UseIntCallConv = 0, // struct is passed according to integer calling convention
 
@@ -845,15 +844,45 @@ namespace FpStruct
         IntFloat         =    1 << PosIntFloat,     // has two fields, 2nd is floating and 1st is integer
         SizeShift1stMask = 0b11 << PosSizeShift1st, // log2(size) of 1st field
         SizeShift2ndMask = 0b11 << PosSizeShift2nd, // log2(size) of 2nd field
-        HomogeneousAggregate          =    1 << 8,               // Homogeneous aggregate with explicit element count
-        HomogeneousAggregateCountMask = 0b1111 << PosHomogeneousAggregateCount,
         // Note: flags OnlyOne, BothFloat, FloatInt, and IntFloat are mutually exclusive
     };
 }
 
-// On RISC-V, LoongArch, and PPC64LE a struct with up to two non-empty fields, at least one of them floating-point,
-// can be passed in registers according to hardware FP calling convention. PPC64LE also uses this to represent
-// homogeneous floating-point aggregates with an explicit element count.
+#ifdef TARGET_POWERPC64
+namespace Ppc64leHomogeneousAggregate
+{
+    enum Flags
+    {
+        PosElementCount = 9, // 4 bits
+
+        HomogeneousAggregate = 1 << 8,
+        ElementCountMask     = 0b1111 << PosElementCount,
+    };
+}
+
+struct Ppc64leHomogeneousAggregateInfo
+{
+    unsigned elementSize;
+    unsigned elementCount;
+
+    bool IsHomogeneousAggregate() const
+    {
+        return elementCount != 0;
+    }
+
+    unsigned EncodeAsFpReturnSize() const
+    {
+        assert(IsHomogeneousAggregate());
+        return Ppc64leHomogeneousAggregate::HomogeneousAggregate |
+               (elementCount << Ppc64leHomogeneousAggregate::PosElementCount) |
+               (((elementSize == sizeof(double)) ? 3 : 2) << FpStruct::PosSizeShift1st);
+    }
+};
+#endif // TARGET_POWERPC64
+
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+// On RISC-V and LoongArch64 a struct with up to two non-empty fields, at least one of them floating-point,
+// can be passed in registers according to hardware FP calling convention.
 struct FpStructInRegistersInfo
 {
     FpStruct::Flags flags;
@@ -866,35 +895,14 @@ struct FpStructInRegistersInfo
     unsigned Size1st() const { return 1u << SizeShift1st(); }
     unsigned Size2nd() const { return 1u << SizeShift2nd(); }
 
-    bool IsHomogeneousAggregate() const { return (flags & FpStruct::HomogeneousAggregate) != 0; }
-    unsigned HomogeneousAggregateElementCount() const
-    {
-        assert(IsHomogeneousAggregate());
-        return (flags & FpStruct::HomogeneousAggregateCountMask) >> FpStruct::PosHomogeneousAggregateCount;
-    }
-    unsigned HomogeneousAggregateElementSize() const
-    {
-        assert(IsHomogeneousAggregate());
-        return Size1st();
-    }
     unsigned FloatRegisterCount() const
     {
         assert(flags != FpStruct::UseIntCallConv);
-        if (IsHomogeneousAggregate())
-        {
-            return HomogeneousAggregateElementCount();
-        }
-
         return (flags & FpStruct::BothFloat) ? 2 : 1;
     }
 
     const char* FlagName() const
     {
-        if (IsHomogeneousAggregate())
-        {
-            return "HomogeneousAggregate";
-        }
-
         switch (flags & (FpStruct::OnlyOne | FpStruct::BothFloat | FpStruct::FloatInt | FpStruct::IntFloat))
         {
             case FpStruct::OnlyOne: return "OnlyOne";
@@ -905,6 +913,7 @@ struct FpStructInRegistersInfo
         }
     }
 };
+#endif // defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
 #endif // defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
 
 #ifdef UNIX_AMD64_ABI_ITF
@@ -1203,8 +1212,11 @@ public:
     // during object construction.
     void CheckRunClassInitAsIfConstructingThrowing();
 
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
     static FpStructInRegistersInfo GetFpStructInRegistersInfo(TypeHandle th);
+#endif
+#if defined(TARGET_POWERPC64)
+    static bool GetPpc64leHomogeneousAggregateInfo(TypeHandle th, Ppc64leHomogeneousAggregateInfo* info);
 #endif
 
 #if defined(UNIX_AMD64_ABI_ITF)

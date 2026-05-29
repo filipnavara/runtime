@@ -2710,6 +2710,7 @@ static unsigned GetFpStructFieldSizeShift(unsigned size)
     return (sizeShiftLUT >> (size * 2)) & 0b11;
 }
 
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
 static void SetFpStructInRegistersInfoField(FpStructInRegistersInfo& info, int index,
     bool isFloating, unsigned size, uint32_t offset)
 {
@@ -2732,9 +2733,10 @@ static void SetFpStructInRegistersInfoField(FpStructInRegistersInfo& info, int i
     info.flags = FpStruct::Flags(info.flags | floatFlag | sizeShiftMask);
     (index == 0 ? info.offset1st : info.offset2nd) = offset;
 }
+#endif // defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
 
 #ifdef TARGET_POWERPC64
-static bool GetHomogeneousAggregateInRegistersInfo(TypeHandle th, FpStructInRegistersInfo& info)
+bool MethodTable::GetPpc64leHomogeneousAggregateInfo(TypeHandle th, Ppc64leHomogeneousAggregateInfo* info)
 {
     if (!th.IsHFA())
     {
@@ -2766,32 +2768,14 @@ static bool GetHomogeneousAggregateInRegistersInfo(TypeHandle th, FpStructInRegi
         return false;
     }
 
-    if (elemCount <= 2)
-    {
-        SetFpStructInRegistersInfoField(info, 0, /* isFloating */ true, elemSize, 0);
-        if (elemCount == 1)
-        {
-            info.flags = FpStruct::Flags(info.flags ^ (FpStruct::FloatInt | FpStruct::OnlyOne));
-        }
-        else
-        {
-            SetFpStructInRegistersInfoField(info, 1, /* isFloating */ true, elemSize, elemSize);
-            info.flags = FpStruct::Flags(info.flags ^ (FpStruct::FloatInt | FpStruct::IntFloat | FpStruct::BothFloat));
-        }
-    }
-    else
-    {
-        info.flags = FpStruct::Flags(FpStruct::HomogeneousAggregate |
-                                     (GetFpStructFieldSizeShift(elemSize) << FpStruct::PosSizeShift1st) |
-                                     (elemCount << FpStruct::PosHomogeneousAggregateCount));
-        info.offset1st      = 0;
-        info.offset2nd      = elemSize;
-    }
+    info->elementSize  = elemSize;
+    info->elementCount = elemCount;
 
     return true;
 }
 #endif // TARGET_POWERPC64
 
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
 static bool HandleInlineArray(int elementTypeIndex, int nElements,
     FpStructInRegistersInfo& info, int& typeIndex, uint32_t& occupiedBytesMap DEBUG_ARG(int nestingLevel))
 {
@@ -3003,19 +2987,6 @@ static bool FlattenFields(TypeHandle th, uint32_t structOffset, FpStructInRegist
 
 FpStructInRegistersInfo MethodTable::GetFpStructInRegistersInfo(TypeHandle th)
 {
-#ifdef TARGET_POWERPC64
-    FpStructInRegistersInfo hfaInfo = {};
-    if (GetHomogeneousAggregateInRegistersInfo(th, hfaInfo))
-    {
-        return hfaInfo;
-    }
-
-    // PPC64 ELFv2 only uses the floating-point aggregate convention for homogeneous aggregates.
-    // Non-HFA structs with floating fields, including C++ structs with empty subobjects, are
-    // passed using the integer aggregate convention.
-    return FpStructInRegistersInfo{};
-#endif // TARGET_POWERPC64
-
     if (th.GetSize() > ENREGISTERED_PARAMTYPE_MAXSIZE)
     {
         LOG((LF_JIT, LL_EVERYTHING, "FpStructInRegistersInfo: struct %s (%u bytes) is too big\n",
@@ -3086,6 +3057,7 @@ FpStructInRegistersInfo MethodTable::GetFpStructInRegistersInfo(TypeHandle th)
     ));
     return info;
 }
+#endif // defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
 #endif // defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
 
 #if !defined(DACCESS_COMPILE)

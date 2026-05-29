@@ -9770,9 +9770,9 @@ CorInfoTypeWithMod CEEInfo::getArgType (
     return result;
 }
 
-// Now the implementation is only focused on the float and int fields info,
-// while a struct-arg has no more than two fields and total size is no larger than two-pointer-size.
-// These depends on the platform's ABI rules.
+// Now the implementation is focused on architecture-specific aggregate lowering:
+// - RISC-V and LoongArch64 lower up to two flattened fields containing at least one FP field.
+// - PPC64LE lowers only homogeneous floating-point aggregates.
 //
 // The returned value's encoding details how a struct argument uses float and int registers:
 // see the struct `CORINFO_FPSTRUCT_LOWERING`.
@@ -9786,57 +9786,58 @@ void CEEInfo::getFpStructLowering(CORINFO_CLASS_HANDLE structHnd, CORINFO_FPSTRU
 
     JIT_TO_EE_TRANSITION();
 
-#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
-    FpStructInRegistersInfo info = MethodTable::GetFpStructInRegistersInfo(TypeHandle(structHnd));
-    if (info.flags != FpStruct::UseIntCallConv)
+#if defined(TARGET_POWERPC64)
+    Ppc64leHomogeneousAggregateInfo hfaInfo = {};
+    if (MethodTable::GetPpc64leHomogeneousAggregateInfo(TypeHandle(structHnd), &hfaInfo))
     {
-        pLowering->byIntegerCallConv = false;
-
-#ifdef TARGET_POWERPC64
-        if (info.IsHomogeneousAggregate())
+        pLowering->byIntegerCallConv  = false;
+        pLowering->numLoweredElements = hfaInfo.elementCount;
+        CorInfoType loweredType       = (hfaInfo.elementSize == sizeof(double)) ? CORINFO_TYPE_DOUBLE
+                                                                                : CORINFO_TYPE_FLOAT;
+        for (unsigned i = 0; i < hfaInfo.elementCount; i++)
         {
-            CorInfoType loweredType = (info.HomogeneousAggregateElementSize() == sizeof(double)) ? CORINFO_TYPE_DOUBLE
-                                                                                                 : CORINFO_TYPE_FLOAT;
-
-            pLowering->numLoweredElements = info.HomogeneousAggregateElementCount();
-            for (unsigned i = 0; i < info.HomogeneousAggregateElementCount(); i++)
-            {
-                pLowering->loweredElements[i] = loweredType;
-                pLowering->offsets[i]         = i * info.HomogeneousAggregateElementSize();
-            }
-        }
-        else
-#endif // TARGET_POWERPC64
-        {
-            pLowering->offsets[0]           = info.offset1st;
-            pLowering->offsets[1]           = info.offset2nd;
-            pLowering->numLoweredElements   = (info.flags & FpStruct::OnlyOne) ? 1ul : 2ul;
-
-            if (info.flags & (FpStruct::BothFloat | FpStruct::FloatInt | FpStruct::OnlyOne))
-                pLowering->loweredElements[0] = (info.SizeShift1st() == 3) ? CORINFO_TYPE_DOUBLE : CORINFO_TYPE_FLOAT;
-
-            if (info.flags & (FpStruct::BothFloat | FpStruct::IntFloat))
-                pLowering->loweredElements[1] = (info.SizeShift2nd() == 3) ? CORINFO_TYPE_DOUBLE : CORINFO_TYPE_FLOAT;
-
-            if (info.flags & (FpStruct::FloatInt | FpStruct::IntFloat))
-            {
-                size_t index = ((info.flags & FpStruct::FloatInt) != 0) ? 1 : 0;
-                unsigned sizeShift = (index == 0) ? info.SizeShift1st() : info.SizeShift2nd();
-                pLowering->loweredElements[index] = (CorInfoType)(CORINFO_TYPE_BYTE + sizeShift * 2);
-
-                // unittests
-                static_assert(CORINFO_TYPE_BYTE + 0 * 2 == CORINFO_TYPE_BYTE, "");
-                static_assert(CORINFO_TYPE_BYTE + 1 * 2 == CORINFO_TYPE_SHORT, "");
-                static_assert(CORINFO_TYPE_BYTE + 2 * 2 == CORINFO_TYPE_INT, "");
-                static_assert(CORINFO_TYPE_BYTE + 3 * 2 == CORINFO_TYPE_LONG, "");
-            }
+            pLowering->loweredElements[i] = loweredType;
+            pLowering->offsets[i]         = i * hfaInfo.elementSize;
         }
     }
     else
     {
         pLowering->byIntegerCallConv = true;
     }
-#endif // TARGET_RISCV64 || TARGET_LOONGARCH64 || TARGET_POWERPC64
+#elif defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+    FpStructInRegistersInfo info = MethodTable::GetFpStructInRegistersInfo(TypeHandle(structHnd));
+    if (info.flags != FpStruct::UseIntCallConv)
+    {
+        pLowering->byIntegerCallConv = false;
+
+        pLowering->offsets[0]         = info.offset1st;
+        pLowering->offsets[1]         = info.offset2nd;
+        pLowering->numLoweredElements = (info.flags & FpStruct::OnlyOne) ? 1ul : 2ul;
+
+        if (info.flags & (FpStruct::BothFloat | FpStruct::FloatInt | FpStruct::OnlyOne))
+            pLowering->loweredElements[0] = (info.SizeShift1st() == 3) ? CORINFO_TYPE_DOUBLE : CORINFO_TYPE_FLOAT;
+
+        if (info.flags & (FpStruct::BothFloat | FpStruct::IntFloat))
+            pLowering->loweredElements[1] = (info.SizeShift2nd() == 3) ? CORINFO_TYPE_DOUBLE : CORINFO_TYPE_FLOAT;
+
+        if (info.flags & (FpStruct::FloatInt | FpStruct::IntFloat))
+        {
+            size_t index = ((info.flags & FpStruct::FloatInt) != 0) ? 1 : 0;
+            unsigned sizeShift = (index == 0) ? info.SizeShift1st() : info.SizeShift2nd();
+            pLowering->loweredElements[index] = (CorInfoType)(CORINFO_TYPE_BYTE + sizeShift * 2);
+
+            // unittests
+            static_assert(CORINFO_TYPE_BYTE + 0 * 2 == CORINFO_TYPE_BYTE, "");
+            static_assert(CORINFO_TYPE_BYTE + 1 * 2 == CORINFO_TYPE_SHORT, "");
+            static_assert(CORINFO_TYPE_BYTE + 2 * 2 == CORINFO_TYPE_INT, "");
+            static_assert(CORINFO_TYPE_BYTE + 3 * 2 == CORINFO_TYPE_LONG, "");
+        }
+    }
+    else
+    {
+        pLowering->byIntegerCallConv = true;
+    }
+#endif // TARGET_POWERPC64 / TARGET_RISCV64 / TARGET_LOONGARCH64
 
     EE_TO_JIT_TRANSITION();
 }

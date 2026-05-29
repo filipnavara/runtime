@@ -795,47 +795,6 @@ int SwitchToNonWriteWatchBarrier(bool isRuntimeSuspended)
 }
 #endif // FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
 
-#ifdef PROFILING_SUPPORTED
-UINT_PTR ProfileGetIPFromPlatformSpecificHandle(void* pPlatformSpecificHandle)
-{
-    return 0;
-}
-
-void ProfileSetFunctionIDInPlatformSpecificHandle(void* pPlatformSpecificHandle, FunctionID functionId)
-{
-}
-
-ProfileArgIterator::ProfileArgIterator(MetaSig* pSig, void* pPlatformSpecificHandle)
-    : m_handle(pPlatformSpecificHandle), m_argIterator(pSig)
-{
-}
-
-ProfileArgIterator::~ProfileArgIterator()
-{
-    m_handle = nullptr;
-}
-
-LPVOID ProfileArgIterator::GetHiddenArgValue(void)
-{
-    return nullptr;
-}
-
-LPVOID ProfileArgIterator::GetThis(void)
-{
-    return nullptr;
-}
-
-LPVOID ProfileArgIterator::GetNextArgAddr(void)
-{
-    return nullptr;
-}
-
-LPVOID ProfileArgIterator::GetReturnBufferAddr(void)
-{
-    return nullptr;
-}
-#endif // PROFILING_SUPPORTED
-
 EXTERN_C void _Uppc64_init_remote()
 {
 }

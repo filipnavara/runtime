@@ -2154,12 +2154,19 @@ void ArgIteratorTemplate<ARGITERATOR_BASE>::ComputeReturnFlags()
                     flags |= RETURN_HAS_RET_BUFFER;
                     break;
                 }
-#endif
+
+                FpStructInRegistersInfo info = MethodTable::GetFpStructInRegistersInfo(thValueType);
+                flags |= info.flags << RETURN_FP_SIZE_SHIFT;
+                m_returnedFpFieldOffsets[0] = info.offset1st;
+                m_returnedFpFieldOffsets[1] = info.offset2nd;
+                break;
+#else
                 CorInfoHFAElemType hfaType = thValueType.GetHFAType();
 
                 int hfaFieldSize = ArgLocDesc::getHFAFieldSize(hfaType);
                 flags |= ((4 * hfaFieldSize) << RETURN_FP_SIZE_SHIFT);
                 break;
+#endif
             }
 #endif
 

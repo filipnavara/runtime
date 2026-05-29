@@ -648,6 +648,25 @@ ABI stress:
   slots and put the tail in the parameter save area. Large stack tails should
   be copied as a block rather than expanded into a huge `FIELD_LIST`.
 
+Profiler enter/leave/tailcall hooks:
+
+- PPC64LE supports the slow-path ICorProfiler ELT hooks through
+  `ProfileEnterNaked`, `ProfileLeaveNaked`, and `ProfileTailcallNaked`.
+- The JIT stages the profiler function id in `r12` and the profiled caller SP
+  in `r0`, then stores both in the caller linkage/parameter area before
+  calling the naked helper. The helper reloads these values before allocating
+  its own profiler frame.
+- The naked helper saves `r3`-`r10` and `f1`-`f13` into
+  `PROFILE_PLATFORM_SPECIFIC_DATA`, calls the shared profiler helper, and
+  restores those registers before returning. This preserves argument registers
+  for enter hooks and return registers for leave hooks.
+- Save the incoming `r11` before using it as helper scratch. Leave/tailcall
+  probes are injected late and PPC64LE codegen can still have a live helper
+  byref or tailcall target in `r11` around the probe.
+- PPC64LE profiler return-value classification uses
+  `ArgIterator::GetReturnFpStructInRegistersInfo()` so HFA and mixed FP/integer
+  return values follow the same central ABI classification used by calls.
+
 ## Current Implementation Gaps
 
 Keep this list current. Remove items when the code path is enabled and covered
@@ -669,11 +688,9 @@ by useful validation.
   managed-method stub path emits absolute target materialization and branch
   instructions directly, but generic label-ref call emission should be added
   before relying on VM stub-linker code paths that require it.
-- ICorProfiler enter/leave/tailcall hooks are not implemented. The PPC64LE VM
-  currently has placeholder `Profile*Help` support in `ppc64le/stubs.cpp` and
-  empty `ProfileEnterNaked`, `ProfileLeaveNaked`, and `ProfileTailcallNaked`
-  stubs, so ELT/inlining profiler tests should remain skipped until the naked
-  stubs and `ProfileArgIterator` support are implemented.
+- Profiler hook validation should be broadened beyond the focused ELT and
+  inlining tests. In particular, recheck unwind/prolog agreement for the naked
+  profiler helpers before relying on profiler stack walking diagnostics.
 - SIMD/VSX and hardware intrinsics are not implemented.
 - Floating-point callee-saved registers F14-F31 are not available to LSRA until
   prolog/epilog save and restore support is implemented.

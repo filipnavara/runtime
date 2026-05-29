@@ -56,27 +56,27 @@ class ProfileArgIterator
 private:
     void        *m_handle;
     ArgIterator  m_argIterator;
-#if defined(UNIX_AMD64_ABI) || defined(TARGET_ARM64) || defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#if defined(UNIX_AMD64_ABI) || defined(TARGET_ARM64) || defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
     UINT64       m_bufferPos;
 
-#if defined(UNIX_AMD64_ABI) || defined(TARGET_RISCV64)
+#if defined(UNIX_AMD64_ABI) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
     // On certain architectures we can pass args in non-sequential registers,
     // this function will copy the struct so it is laid out as it would be in memory
     // so it can be passed to the profiler
     LPVOID CopyStructFromRegisters(
-#ifdef TARGET_RISCV64
+#if defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
         const ArgLocDesc* argLocDesc
 #endif
     );
 #endif
 
-#if defined(TARGET_ARM64)
+#if defined(TARGET_ARM64) || defined(TARGET_POWERPC64)
     // On Arm64 the fields an HFA or an HVA argument will need to be copied
     // to a temporary buffer in memory, so they are laid out contiguously in memory.
     LPVOID CopyStructFromFPRegs(int idxFPReg, int cntFPRegs, int hfaFieldSize);
 #endif
 
-#endif // UNIX_AMD64_ABI || TARGET_ARM64 || TARGET_RISCV64 || TARGET_LOONGARCH64
+#endif // UNIX_AMD64_ABI || TARGET_ARM64 || TARGET_RISCV64 || TARGET_LOONGARCH64 || TARGET_POWERPC64
 
 public:
     ProfileArgIterator(MetaSig * pMetaSig, void* platformSpecificHandle);
@@ -804,5 +804,4 @@ protected:
 #endif // PROFILING_SUPPORTED
 
 #endif // __PROFTOEEINTERFACEIMPL_H__
-
 

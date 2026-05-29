@@ -171,10 +171,15 @@
 #define REG_NEXT(reg)           ((regNumber)((unsigned)(reg) + 1))
 #define REG_PREV(reg)           ((regNumber)((unsigned)(reg) - 1))
 
-#define REG_PROFILER_ENTER_ARG_FUNC_ID    REG_R11
-#define RBM_PROFILER_ENTER_ARG_FUNC_ID    RBM_R11
-#define REG_PROFILER_ENTER_ARG_CALLER_SP  REG_R12
-#define RBM_PROFILER_ENTER_ARG_CALLER_SP  RBM_R12
+// Profiler callbacks are injected late in codegen, including around return and
+// tailcall sequences that may already have scratch values in r11. Stage the
+// function id through r12 and the caller SP through r0, save both to the caller
+// linkage area, and let the naked helper reload them before it allocates its
+// own frame. r12 is then reused as the normal ELFv2 helper call target.
+#define REG_PROFILER_ENTER_ARG_FUNC_ID    REG_R12
+#define RBM_PROFILER_ENTER_ARG_FUNC_ID    RBM_R12
+#define REG_PROFILER_ENTER_ARG_CALLER_SP  REG_R0
+#define RBM_PROFILER_ENTER_ARG_CALLER_SP  RBM_R0
 #define REG_PROFILER_LEAVE_ARG_FUNC_ID    REG_PROFILER_ENTER_ARG_FUNC_ID
 #define RBM_PROFILER_LEAVE_ARG_FUNC_ID    RBM_PROFILER_ENTER_ARG_FUNC_ID
 #define REG_PROFILER_LEAVE_ARG_CALLER_SP  REG_PROFILER_ENTER_ARG_CALLER_SP

@@ -962,6 +962,7 @@ elseif(CLR_CMAKE_TARGET_ARCH_POWERPC64)
     )
 
     set(VM_SOURCES_WKS_ARCH
+        ${ARCH_SOURCES_DIR}/profiler.cpp
         gcinfodecoder.cpp
     )
 elseif(CLR_CMAKE_TARGET_ARCH_WASM)

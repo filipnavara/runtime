@@ -17,6 +17,8 @@ static constexpr int PPC_LINK_REGISTER_SAVE_SIZE = REGSIZE_BYTES;
 static constexpr int PPC_FRAME_POINTER_SAVE_SIZE = REGSIZE_BYTES;
 static constexpr int PPC_MAX_UNWIND_SAVE_OFFSET  = 2047;
 static constexpr int PPC_TOC_SAVE_OFFSET         = 24;
+static constexpr int PPC_PROFILE_FUNC_ID_SAVE_OFFSET   = 80;
+static constexpr int PPC_PROFILE_CALLER_SP_SAVE_OFFSET = 88;
 
 static instruction ppcCompareInsForCondition(GenCondition cond, emitAttr cmpSize)
 {
@@ -4256,10 +4258,17 @@ void CodeGen::genProfilingEnterCallback(regNumber initReg, bool* pInitRegZeroed)
         GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_PROFILER_ENTER_ARG_FUNC_ID,
                                     REG_PROFILER_ENTER_ARG_FUNC_ID, 0);
     }
+    GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_PROFILER_ENTER_ARG_FUNC_ID, REG_SPBASE,
+                                PPC_PROFILE_FUNC_ID_SAVE_OFFSET);
 
+    // The profiler helper expects the profiled method's caller SP. The PPC64LE
+    // profiler argument iterator accounts for the ELFv2 linkage/parameter-save
+    // area when resolving stack arguments from that SP.
     ssize_t callerSPOffset = -m_compiler->lvaToCallerSPRelativeOffset(0, isFramePointerUsed());
     genInstrWithConstant(INS_addi, EA_PTRSIZE, REG_PROFILER_ENTER_ARG_CALLER_SP, genFramePointerReg(),
                          callerSPOffset, REG_PROFILER_ENTER_ARG_CALLER_SP);
+    GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_PROFILER_ENTER_ARG_CALLER_SP, REG_SPBASE,
+                                PPC_PROFILE_CALLER_SP_SAVE_OFFSET);
 
     genEmitHelperCall(CORINFO_HELP_PROF_FCN_ENTER, 0, EA_UNKNOWN);
 
@@ -4289,12 +4298,17 @@ void CodeGen::genProfilingLeaveCallback(unsigned helper)
         GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_PROFILER_LEAVE_ARG_FUNC_ID,
                                     REG_PROFILER_LEAVE_ARG_FUNC_ID, 0);
     }
+    GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_PROFILER_LEAVE_ARG_FUNC_ID, REG_SPBASE,
+                                PPC_PROFILE_FUNC_ID_SAVE_OFFSET);
 
     gcInfo.gcMarkRegSetNpt(RBM_PROFILER_LEAVE_ARG_FUNC_ID);
 
+    // See genProfilingEnterCallback for the PPC64LE stack-argument base.
     ssize_t callerSPOffset = -m_compiler->lvaToCallerSPRelativeOffset(0, isFramePointerUsed());
     genInstrWithConstant(INS_addi, EA_PTRSIZE, REG_PROFILER_LEAVE_ARG_CALLER_SP, genFramePointerReg(), callerSPOffset,
                          REG_PROFILER_LEAVE_ARG_CALLER_SP);
+    GetEmitter()->emitIns_R_R_I(INS_std, EA_PTRSIZE, REG_PROFILER_LEAVE_ARG_CALLER_SP, REG_SPBASE,
+                                PPC_PROFILE_CALLER_SP_SAVE_OFFSET);
 
     gcInfo.gcMarkRegSetNpt(RBM_PROFILER_LEAVE_ARG_CALLER_SP);
 

@@ -1,7 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk.IL">
   <PropertyGroup>
-    <!-- PPC64LE profiler enter/leave/tailcall hooks are still a bringup gap. -->
-    <CLRTestTargetUnsupported Condition="'$(TargetArchitecture)' == 'ppc64le'">true</CLRTestTargetUnsupported>
     <DebugType>Full</DebugType>
     <Optimize>False</Optimize>
   </PropertyGroup>

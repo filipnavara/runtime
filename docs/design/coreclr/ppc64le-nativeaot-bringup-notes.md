@@ -243,9 +243,8 @@ These defaults and guards are intentional during bring-up:
 - `EnableWriteXorExecute` defaults to `0` on PPC64LE during qemu/binfmt
   testing.
 - CoreCLR R2R reverse P/Invoke remains unsupported.
-- CoreCLR R2R PPC64LE TOC/GOT relocation forms are guarded against. R2R PE
-  images must not produce `PPC64_TOC16`, `PPC64_REL16_TOC`,
-  `PPC64_GOT_TPREL16`, or `PPC64_GOT16`.
+- CoreCLR R2R PPC64LE TOC/GOT relocation forms are guarded against. See the
+  [PPC64LE ABI](jit/ppc64le-abi.md) for the relocation contract.
 - SIMD/VSX is blocked for PPC64LE until JIT and runtime support are implemented.
 
 Do not remove a gate without adding a focused validation plan for the code path
@@ -253,53 +252,10 @@ being enabled.
 
 ## TOC And Entry-Point Rules
 
-See `docs/design/coreclr/ppc64le-toc-abi.md` for the detailed CoreCLR R2R/JIT
-TOC ABI. This section is the short operational version.
-
-PPC64LE ELFv2 uses `r2` as the TOC pointer. Cross-module calls enter global
-entry points with `r12` holding the callee entry address, allowing the callee to
-derive its own TOC. Same-module calls may enter the local entry when the caller
-already has the callee TOC in `r2`.
-
-CoreCLR managed ABI:
-
-- JIT and R2R managed code preserve `r2` as the `libcoreclr.so` runtime TOC.
-- Managed-to-managed calls preserve the runtime TOC.
-- Calls to runtime helpers may expose raw local-entry assembly helper labels
-  only when the managed caller already has the runtime TOC.
-- Any branch to a native global entry must put the target address in `r12`
-  before `bctr`/`bctrl`.
-- `r12` is reserved for the next branch target. Stub secret parameters and
-  call-counting tokens use `r11`.
-- R2R PE images must not pretend to have an ELF `.TOC.`. Introduce explicit
-  file-format support before adding any PPC64LE TOC-like R2R relocation model.
-
-NativeAOT ABI:
-
-- NativeAOT follows the platform ELFv2 TOC model.
-- Reverse P/Invoke / `[UnmanagedCallersOnly]` global entries establish `r2`
-  from `r12`.
-- The ELF writer annotates matching symbols with localentry 8 so same-module
-  calls can skip the global-entry TOC setup.
-- NativeAOT runtime wrappers should own calls to true external libc/libm
-  symbols when managed/JIT helper call sites need to remain in-module.
-
-Assembly helper rules:
-
-- `LEAF_ENTRY`/`NESTED_ENTRY` helpers are local-entry-only unless the source
-  explicitly emits a TOC setup.
-- Helpers that call C++ from a managed/R2R entry domain must save caller `r2`,
-  establish the runtime TOC, call the VM worker, then restore caller `r2` before
-  returning or tailcalling.
-- Delay-load helper paths that tailcall must establish the TOC expected by the
-  final target before branching.
-
-P/Invoke rules:
-
-- Save managed `r2`.
-- Put the unmanaged target address in `r12`.
-- Branch through CTR.
-- Restore managed `r2` after return.
+The authoritative TOC, entry-point, helper, P/Invoke, reverse P/Invoke, and
+tailcall contract is [PPC64LE ABI](jit/ppc64le-abi.md). Keep ABI decisions
+there; keep this bring-up document focused on test commands, failure diagnosis,
+and remaining implementation gaps.
 
 ## Frame, Unwind, And Hijacking Rules
 
@@ -583,73 +539,8 @@ Calls and helpers:
 - Helper kill sets, `GT_START_NONGC`/`GT_START_PREEMPTGC`, and call-site GC
   labels must be audited together.
 
-Address materialization:
-
-- PPC64LE HA/LO relocation pairs should be represented as one logical
-  relocation at the JIT/object-writer boundary.
-- The object writer may expand a logical relocation into `_HA` and `_LO`
-  records, but generic relocation records should not carry ad hoc half-pair
-  addends.
-- CoreCLR R2R should use explicit non-TOC file-format concepts if new PPC64LE
-  relocation support is needed.
-
-Dispatch and stubs:
-
-- Interface dispatch keeps the dispatch cell in `r11`.
-- Dispatch stubs use `r12` for cache/target scratch so fast-path and slow-path
-  calls branch with `r12` set to the callee entry.
-- Instantiating method stubs shuffle arguments, materialize the hidden
-  instantiation argument, adjust boxed `this` for unboxing stubs, and tailcall
-  through `r12`.
-- Precode and call-counting stubs keep secret parameters or tokens in `r11`,
-  leaving `r12` for the branch target.
-
-Register selection decisions:
-
-- `r12` is the canonical ELFv2 branch-target register. Any indirect branch or
-  global-entry call/jump that can cross into ELFv2 code must branch through
-  `r12`, and the callee may use it to establish its TOC.
-- `r11` carries CoreCLR non-standard call state: secret stub parameters, R2R
-  indirection cells, virtual-stub dispatch cells, P/Invoke cookies, precode
-  tokens, and call-counting state. Do not use `r11` as general epilog or branch
-  scratch when any of those paths can still be live.
-- The P/Invoke calli unmanaged target is staged in `r12` for LSRA, then copied
-  to `r0` immediately before the helper call because `r12` must contain the
-  ELFv2 helper entry point on entry. The helper consumes `r0` as the target and
-  uses `r11` for the VASigCookie before publishing the generated-stub secret
-  argument in `r11`. This keeps the private helper state out of the native
-  argument register set, including native argument `r10`.
-- Write barriers use `r11` for the destination/byref destination, `r10` for the
-  normal source, and `r9` for the byref source. These registers match the
-  assembly helper contracts and helper kill sets.
-- Tailcall epilogs may use `r12` as scratch only before the final target is
-  materialized. The final target load or move must happen after the epilog has
-  restored callee-saves, SP, and LR.
-
-Fast tailcalls:
-
-- Managed fast tailcalls preserve the CoreCLR runtime TOC in `r2`.
-- `r11` is not available as a tailcall epilog scratch register. Virtual-stub
-  dispatch cells, R2R indirection cells, and other non-standard arguments can
-  remain live in `r11` until the final branch.
-- `r12` is the ELFv2 branch-target register. The JIT may use `r12` as a
-  tailcall epilog scratch register, but only before it materializes the final
-  call target; the emitted branch must still be `mtctr r12; bctr`.
-- Fast-tailcall control expressions and temporary loaded call targets must avoid
-  `r12`, because the epilog can clobber it before the final target load/move.
-- Delegate invokes are currently rejected for PPC64LE fast tailcall formation.
-  A `test76531` hang showed that the epilog+jump path still has an unresolved
-  interaction with delegate invoke targets that can enter VSD resolve/shuffle
-  stubs. Normal delegate invokes and explicit tailcalls through the helper path
-  remain the conservative route until that stub contract is audited.
-- PPC64LE call lowering distinguishes the ABI-mandated 64-byte parameter save
-  area from actual stack-passed arguments. Fast-tailcall stack-space checks use
-  only the raw classified stack-argument byte count; normal outgoing call frame
-  sizing still reserves the full save area.
-- Fast tailcalls that need stack arguments require a materialized incoming
-  stack-argument local at offset zero. If the caller's first stack slots are
-  consumed only by FPR parameter slots, the JIT rejects the fast tailcall and
-  uses the helper path instead.
+TOC, branch-target, dispatch-stub, and fast-tailcall register-selection rules
+are documented in [PPC64LE ABI](jit/ppc64le-abi.md).
 
 ABI stress:
 
@@ -699,11 +590,6 @@ by useful validation.
   in the VSD resolve/shuffle-stub path. Re-enable only after a targeted stub
   audit explains the epilog+jump interaction and covers open-interface
   delegates.
-- Stub-linker label calls and tailcalls materialize the label through an
-  adjacent literal, leave the final target in `r12`, and branch with
-  `mtctr r12; bctr/bctrl`. This matches the managed TOC rule because `r2` is
-  not touched, and it matches the ELFv2 branch-target rule because global
-  entries observe `r12` holding the target address.
 - Profiler hook validation should be broadened beyond the focused ELT and
   inlining tests. In particular, recheck unwind/prolog agreement for the naked
   profiler helpers before relying on profiler stack walking diagnostics.
@@ -717,8 +603,8 @@ by useful validation.
   whenever another large-offset NYI is found; fixes should preserve emitter
   local-var metadata rather than falling back to raw base+offset stores.
 - CoreCLR R2R reverse P/Invoke needs a loader/JIT/runtime entrypoint design
-  before it is enabled.
-- CoreCLR R2R PPC64LE TOC/GOT relocation forms are intentionally blocked until
-  the file-format contract is explicit.
+  before it is enabled. See [PPC64LE ABI](jit/ppc64le-abi.md).
+- CoreCLR R2R PPC64LE TOC/GOT relocation forms are intentionally blocked. See
+  [PPC64LE ABI](jit/ppc64le-abi.md) for the file-format contract.
 - Inline TLS access sequences need continued validation; the glibc static-TLS
   tunable is only a test-environment workaround.

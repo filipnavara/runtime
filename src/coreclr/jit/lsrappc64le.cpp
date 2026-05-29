@@ -139,6 +139,25 @@ static bool ppc64leContainedCpBlkDstNeedsOffsetTemp(GenTree* addr, unsigned size
     return true;
 }
 
+static unsigned ppc64leGetFirstArgWithStackSlot(Compiler* compiler)
+{
+    for (unsigned i = 0; i < compiler->info.compArgsCount; i++)
+    {
+        assert(compiler->lvaGetDesc(i)->lvIsParam);
+
+        const ABIPassingInformation& abiInfo = compiler->lvaGetParameterABIInfo(i);
+        assert(!abiInfo.IsSplitAcrossRegistersAndStack());
+
+        if (abiInfo.HasAnyStackSegment())
+        {
+            return i;
+        }
+    }
+
+    assert(!"Expected to find a parameter passed on the stack");
+    return BAD_VAR_NUM;
+}
+
 int LinearScan::BuildNode(GenTree* tree)
 {
     assert(!tree->isContained());
@@ -871,6 +890,10 @@ int LinearScan::BuildPutArgStk(GenTreePutArgStk* argNode)
     GenTree* src      = argNode->gtGetOp1();
     int      srcCount = 0;
 
+    const unsigned varNumOut =
+        argNode->putInIncomingArgArea() ? ppc64leGetFirstArgWithStackSlot(m_compiler) : m_compiler->lvaOutgoingArgSpaceVar;
+    const unsigned varOffsetBias = (varNumOut == m_compiler->lvaOutgoingArgSpaceVar) ? FIRST_ARG_STACK_OFFS : 0;
+
     if (src->TypeIs(TYP_STRUCT))
     {
         if (src->OperIs(GT_FIELD_LIST))
@@ -884,8 +907,8 @@ int LinearScan::BuildPutArgStk(GenTreePutArgStk* argNode)
                 srcCount++;
 
                 bool fpBased = false;
-                int  offset  = m_compiler->lvaFrameAddress(m_compiler->lvaOutgoingArgSpaceVar, &fpBased) +
-                              static_cast<int>(argNode->getArgOffset() + use.GetOffset() + FIRST_ARG_STACK_OFFS);
+                int  offset  = m_compiler->lvaFrameAddress(varNumOut, &fpBased) +
+                              static_cast<int>(argNode->getArgOffset() + use.GetOffset() + varOffsetBias);
 
                 instruction storeIns = m_compiler->codeGen->ins_Store(use.GetType());
                 if (!ppc64leOffsetFitsInstruction(storeIns, offset))
@@ -918,8 +941,8 @@ int LinearScan::BuildPutArgStk(GenTreePutArgStk* argNode)
     else
     {
         bool fpBased = false;
-        int  offset = m_compiler->lvaFrameAddress(m_compiler->lvaOutgoingArgSpaceVar, &fpBased) +
-                     static_cast<int>(argNode->getArgOffset() + FIRST_ARG_STACK_OFFS);
+        int  offset = m_compiler->lvaFrameAddress(varNumOut, &fpBased) +
+                     static_cast<int>(argNode->getArgOffset() + varOffsetBias);
         instruction storeIns = m_compiler->codeGen->ins_Store(genActualType(src));
         emitAttr    storeAttr = emitTypeSize(genActualType(src));
 

@@ -1950,11 +1950,8 @@ void CodeGen::genCodeForStoreLclFld(GenTreeLclFld* tree)
     }
     else
     {
-        regNumber baseReg = REG_NA;
-        int       offset  = ppcGetLclFrameOffset(m_compiler, tree, &baseReg);
-        regNumber tmpReg  = internalRegisters.GetSingle(tree);
-
-        genInstrWithConstant(storeIns, attr, dataReg, baseReg, offset, tmpReg);
+        regNumber tmpReg = internalRegisters.GetSingle(tree);
+        GetEmitter()->emitIns_S_R(storeIns, attr, dataReg, tree->GetLclNum(), tree->GetLclOffs(), tmpReg);
     }
 
     genUpdateLife(tree);
@@ -2018,11 +2015,8 @@ void CodeGen::genCodeForStoreLclVar(GenTreeLclVar* lclNode)
         }
         else
         {
-            regNumber baseReg = REG_NA;
-            int       offset  = ppcGetLclFrameOffset(m_compiler, lclNode, &baseReg);
-            regNumber tmpReg  = internalRegisters.GetSingle(lclNode);
-
-            genInstrWithConstant(storeIns, attr, dataReg, baseReg, offset, tmpReg);
+            regNumber tmpReg = internalRegisters.GetSingle(lclNode);
+            GetEmitter()->emitIns_S_R(storeIns, attr, dataReg, lclNode->GetLclNum(), lclNode->GetLclOffs(), tmpReg);
         }
 
         genUpdateLife(lclNode);

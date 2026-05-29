@@ -678,9 +678,11 @@ by useful validation.
 - Floating-point callee-saved registers F14-F31 are not available to LSRA until
   prolog/epilog save and restore support is implemented.
 - Byte and short `Interlocked.*` overloads still fall back to helpers.
-- Large stack-frame and large local-offset cases still have NYI paths. Prefer
-  fixing address lowering, LSRA temporary allocation, or frame layout instead
-  of hiding special cases in individual codegen sites.
+- Large stack-frame and large local-offset coverage exists for local GC ref
+  stores, contained local addresses, outgoing stack argument copies, and
+  unaligned signed 32-bit loads. Keep extending `JIT/Methodical/largeframes`
+  whenever another large-offset NYI is found; fixes should preserve emitter
+  local-var metadata rather than falling back to raw base+offset stores.
 - CoreCLR R2R reverse P/Invoke needs a loader/JIT/runtime entrypoint design
   before it is enabled.
 - CoreCLR R2R PPC64LE TOC/GOT relocation forms are intentionally blocked until

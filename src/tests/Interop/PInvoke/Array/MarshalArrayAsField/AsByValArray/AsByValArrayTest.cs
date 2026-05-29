@@ -1181,7 +1181,6 @@ public class Test
     [Fact]
     [SkipOnMono("needs triage")]
     [ActiveIssue("https://github.com/dotnet/runtime/issues/91388", typeof(TestLibrary.PlatformDetection), nameof(TestLibrary.PlatformDetection.PlatformDoesNotSupportNativeTestAssets))]
-    [ActiveIssue("PPC64LE unmanaged large struct by-value interop is not implemented yet", typeof(TestLibrary.PlatformDetection), nameof(TestLibrary.PlatformDetection.IsPpc64leProcess))]
     public static int TestEntryPoint()
     {
         try

@@ -72,6 +72,21 @@ for t in d r ro; do
 done
 ```
 
+Run the OSR test set with tiering enabled. Low counters are useful when
+validating patchpoint transition mechanics:
+
+```sh
+find artifacts/tests/coreclr/linux.ppc64le.Checked/JIT/opt/OSR -name '*.sh' | sort |
+while read t; do
+    CORE_ROOT=$PWD/artifacts/tests/coreclr/linux.ppc64le.Checked/Tests/Core_Root \
+    DOTNET_ReadyToRun=0 \
+    DOTNET_EnableWriteXorExecute=0 \
+    DOTNET_TC_OnStackReplacement_InitialCounter=1 \
+    DOTNET_OSR_HitLimit=2 \
+    "$t"
+done
+```
+
 Skip tests that depend on launching `ilasm`/`ildasm` inside the emulated
 PPC64LE CoreCLR process for now. That path is not a useful runtime signal in
 the current qemu-user setup.
@@ -218,10 +233,13 @@ access sequences.
 
 These defaults and guards are intentional during bring-up:
 
-- OSR is disabled for PPC64LE via `FEATURE_ON_STACK_REPLACEMENT`,
-  `Compiler::compCanHavePatchpoints()`, and `TC_OnStackReplacement=0`.
-- `TC_QuickJitForLoops` defaults to `0` on PPC64LE until OSR prolog/epilog,
-  patchpoint frame layout, and stack walking are validated.
+- OSR and `TC_QuickJitForLoops` use the shared defaults on PPC64LE. OSR root
+  prologs inherit the Tier0 frame, restore Tier0 callee-saves from the inherited
+  frame pointer, restore LR from `8(FP)`, and report phantom unwind allocation
+  for the Tier0 frame.
+- PPC64LE patchpoints call the helper via `mtctr; bctrl`; the helper sees the
+  return address immediately after `bctrl`. The no-transition continuation skips
+  the generated `mtctr; bctr` tail.
 - `EnableWriteXorExecute` defaults to `0` on PPC64LE during qemu/binfmt
   testing.
 - CoreCLR R2R reverse P/Invoke remains unsupported.
@@ -672,9 +690,6 @@ Profiler enter/leave/tailcall hooks:
 Keep this list current. Remove items when the code path is enabled and covered
 by useful validation.
 
-- OSR root frames need PPC64LE-specific handling in
-  `genOSRHandleTier0CalleeSavedRegistersAndFrame`, or OSR should remain
-  blocked.
 - Varargs are not implemented in the PPC64LE ABI classifier and
   `genJmpPlaceVarArgs`.
 - Fast and portable tailcalls are enabled for managed calls. Keep split
@@ -684,10 +699,11 @@ by useful validation.
   in the VSD resolve/shuffle-stub path. Re-enable only after a targeted stub
   audit explains the epilog+jump interaction and covers open-interface
   delegates.
-- `StubLinkerCPU::EmitCallLabel` is still not implemented. The current PPC64LE
-  managed-method stub path emits absolute target materialization and branch
-  instructions directly, but generic label-ref call emission should be added
-  before relying on VM stub-linker code paths that require it.
+- Stub-linker label calls and tailcalls materialize the label through an
+  adjacent literal, leave the final target in `r12`, and branch with
+  `mtctr r12; bctr/bctrl`. This matches the managed TOC rule because `r2` is
+  not touched, and it matches the ELFv2 branch-target rule because global
+  entries observe `r12` holding the target address.
 - Profiler hook validation should be broadened beyond the focused ELT and
   inlining tests. In particular, recheck unwind/prolog agreement for the naked
   profiler helpers before relying on profiler stack walking diagnostics.

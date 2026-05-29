@@ -14,6 +14,136 @@
 #include "proftoeeinterfaceimpl.h"
 #endif
 
+#ifndef DACCESS_COMPILE
+//-----------------------------------------------------------------------
+// InstructionFormat for PPC64LE label calls and tailcalls.
+//-----------------------------------------------------------------------
+class BranchInstructionFormat : public InstructionFormat
+{
+    // Encoding of the VariationCode:
+    // bit(0) indicates whether this is a direct or an indirect jump.
+    // bit(1) indicates whether this is a branch with link, i.e. a call.
+public:
+    enum VariationCodes
+    {
+        BIF_VAR_INDIRECT      = 0x00000001,
+        BIF_VAR_CALL          = 0x00000002,
+        BIF_VAR_JUMP          = 0x00000000,
+        BIF_VAR_INDIRECT_CALL = 0x00000003,
+    };
+
+private:
+    static bool IsIndirect(UINT variationCode)
+    {
+        return (variationCode & BIF_VAR_INDIRECT) != 0;
+    }
+
+    static bool IsCall(UINT variationCode)
+    {
+        return (variationCode & BIF_VAR_CALL) != 0;
+    }
+
+    static DWORD DForm(unsigned opcode, int rt, int ra, int imm)
+    {
+        _ASSERTE(opcode <= 0x3f);
+        _ASSERTE((rt >= 0) && (rt <= 31));
+        _ASSERTE((ra >= 0) && (ra <= 31));
+        return (opcode << 26) | (rt << 21) | (ra << 16) | (imm & 0xffff);
+    }
+
+    static void Emit32(BYTE*& pOutBufferRW, DWORD instruction)
+    {
+        *(DWORD*)pOutBufferRW = instruction;
+        pOutBufferRW += sizeof(DWORD);
+    }
+
+public:
+    BranchInstructionFormat() : InstructionFormat(InstructionFormat::k64)
+    {
+        LIMITED_METHOD_CONTRACT;
+    }
+
+    virtual UINT GetSizeOfInstruction(UINT refSize, UINT variationCode)
+    {
+        LIMITED_METHOD_CONTRACT;
+        _ASSERTE(refSize == InstructionFormat::k64);
+
+        // bl .+4; mflr r12; addis r12,r12,ha(data); ld r12,lo(data)(r12);
+        // [ld r12,0(r12)]; mtctr r12; bctr/bctrl
+        return IsIndirect(variationCode) ? 28 : 24;
+    }
+
+    virtual UINT GetSizeOfData(UINT refSize, UINT variationCode)
+    {
+        WRAPPER_NO_CONTRACT;
+        return sizeof(UINT64);
+    }
+
+    virtual UINT GetHotSpotOffset(UINT refSize, UINT variationCode)
+    {
+        WRAPPER_NO_CONTRACT;
+        return 0;
+    }
+
+    virtual BOOL CanReach(UINT refSize, UINT variationCode, BOOL fExternal, INT_PTR offset)
+    {
+        LIMITED_METHOD_CONTRACT;
+
+        // All targets are materialized through an adjacent literal.
+        return refSize == InstructionFormat::k64;
+    }
+
+    virtual VOID EmitInstruction(UINT  refSize,
+                                 int64_t fixedUpReference,
+                                 BYTE* pOutBufferRX,
+                                 BYTE* pOutBufferRW,
+                                 UINT  variationCode,
+                                 BYTE* pDataBuffer)
+    {
+        LIMITED_METHOD_CONTRACT;
+        _ASSERTE(refSize == InstructionFormat::k64);
+        _ASSERTE(((UINT_PTR)pDataBuffer & 7) == 0);
+
+        // Use LR as a temporary PC source and leave the final target in r12,
+        // matching ELFv2 global-entry expectations before mtctr/bctr.
+        constexpr int targetReg = 12;
+        BYTE* const   lrBase    = pOutBufferRW + sizeof(DWORD);
+        const int64_t dataOffs  = pDataBuffer - lrBase;
+
+        if ((dataOffs < INT32_MIN) || (dataOffs > INT32_MAX))
+        {
+            COMPlusThrow(kNotSupportedException);
+        }
+
+        const int hi = static_cast<int>((dataOffs + 0x8000) >> 16);
+        const int lo = static_cast<int16_t>(dataOffs);
+
+        Emit32(pOutBufferRW, 0x48000005u);                            // bl .+4
+        Emit32(pOutBufferRW, 0x7c0802a6u | (targetReg << 21));         // mflr r12
+        Emit32(pOutBufferRW, DForm(15, targetReg, targetReg, hi));     // addis r12,r12,ha(data)
+        Emit32(pOutBufferRW, DForm(58, targetReg, targetReg, lo));     // ld r12,lo(data)(r12)
+
+        if (IsIndirect(variationCode))
+        {
+            Emit32(pOutBufferRW, DForm(58, targetReg, targetReg, 0));  // ld r12,0(r12)
+        }
+
+        Emit32(pOutBufferRW, 0x7c0903a6u | (targetReg << 21));         // mtctr r12
+        Emit32(pOutBufferRW, IsCall(variationCode) ? 0x4e800421u       // bctrl
+                                                   : 0x4e800420u);     // bctr
+
+        if (!ClrSafeInt<int64_t>::addition(fixedUpReference, (int64_t)pOutBufferRX, fixedUpReference))
+        {
+            COMPlusThrowArithmetic();
+        }
+        *(int64_t*)pDataBuffer = fixedUpReference;
+    }
+};
+
+static BYTE gBranchIF[sizeof(BranchInstructionFormat)];
+
+#endif // !DACCESS_COMPILE
+
 void ClearRegDisplayArgumentAndScratchRegisters(REGDISPLAY* pRD)
 {
     pRD->volatileCurrContextPointers.R0  = NULL;
@@ -802,6 +932,7 @@ EXTERN_C void _Uppc64_init_remote()
 #ifndef DACCESS_COMPILE
 void StubLinkerCPU::Init()
 {
+    new (gBranchIF) BranchInstructionFormat();
 }
 
 static void Ppc64EmitLoad(StubLinkerCPU* sl, int rt, int ra, int offset)
@@ -968,7 +1099,21 @@ void StubLinkerCPU::EmitCallManagedMethod(MethodDesc* pMD, BOOL fTailCall)
 
 void StubLinkerCPU::EmitCallLabel(CodeLabel* target, BOOL fTailCall, BOOL fIndirect)
 {
-    PORTABILITY_ASSERT("StubLinkerCPU::EmitCallLabel is not implemented on PPC64LE");
+    STANDARD_VM_CONTRACT;
+
+    BranchInstructionFormat::VariationCodes variationCode = BranchInstructionFormat::VariationCodes::BIF_VAR_JUMP;
+    if (!fTailCall)
+    {
+        variationCode = static_cast<BranchInstructionFormat::VariationCodes>(
+            variationCode | BranchInstructionFormat::VariationCodes::BIF_VAR_CALL);
+    }
+    if (fIndirect)
+    {
+        variationCode = static_cast<BranchInstructionFormat::VariationCodes>(
+            variationCode | BranchInstructionFormat::VariationCodes::BIF_VAR_INDIRECT);
+    }
+
+    EmitLabelRef(target, reinterpret_cast<BranchInstructionFormat&>(gBranchIF), (UINT)variationCode);
 }
 
 VOID StubLinkerCPU::EmitComputedInstantiatingMethodStub(

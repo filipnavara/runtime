@@ -1691,8 +1691,10 @@ extern "C" PCODE JIT_PatchpointWorkerWorkerWithPolicy(TransitionBlock * pTransit
         // jirl r0, rN, 0 = 4 bytes
         osrMethodCode = ip + 4;
 #elif defined(TARGET_POWERPC64)
-        // bctr = 4 bytes
-        osrMethodCode = ip + 4;
+        // PPC64LE patchpoints call the helper via "mtctr; bctrl", and the link
+        // register points immediately after the bctrl. Skip the generated
+        // "mtctr; bctr" patchpoint tail.
+        osrMethodCode = ip + 8;
 #elif defined(TARGET_RISCV64)
         // jalr x0, xN, 0 = 4 bytes
         osrMethodCode = ip + 4;

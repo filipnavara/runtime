@@ -4023,10 +4023,42 @@ void CodeGen::genPopCalleeSavedRegisters(bool jmpEpilog)
     {
         genStackPointerAdjustment(totalFrameSize - deferredFrameSize, tempReg, nullptr, /* reportUnwindData */ true);
     }
+
+    // For OSR, also pop the Tier0 frame inherited by the OSR method.
+    if (m_compiler->opts.IsOSR())
+    {
+        const int tier0FrameSize = m_compiler->info.compPatchpointInfo->TotalFrameSize();
+        JITDUMP("Extra SP adjust for OSR to pop off Tier0 frame: %d bytes\n", tier0FrameSize);
+
+        genStackPointerAdjustment(tier0FrameSize, tempReg, nullptr, /* reportUnwindData */ true);
+    }
 }
 
 void CodeGen::genOSRHandleTier0CalleeSavedRegistersAndFrame()
 {
+    assert(m_compiler->compGeneratingProlog);
+    assert(m_compiler->opts.IsOSR());
+    assert(m_compiler->funCurrentFunc()->funKind == FuncKind::FUNC_ROOT);
+
+    PatchpointInfo* const patchpointInfo = m_compiler->info.compPatchpointInfo;
+    regMaskTP const       tier0CalleeSaves(patchpointInfo->CalleeSaveRegisters());
+
+    JITDUMP("--OSR--- tier0 has already saved ");
+    JITDUMPEXEC(dspRegMask(tier0CalleeSaves));
+    JITDUMP("\nEmitting restores\n");
+
+    // PPC64LE Tier0 frames save old FP at 0(FP), LR at 8(FP), and modified
+    // integer callee-saves after that. OSR methods inherit the Tier0 frame, so
+    // restore those saves from the inherited FP before reporting the phantom
+    // Tier0 frame allocation.
+    genRestoreCalleeSavedRegistersHelp(tier0CalleeSaves & ~RBM_FPBASE, REG_FPBASE,
+                                       PPC_FRAME_POINTER_SAVE_SIZE + PPC_LINK_REGISTER_SAVE_SIZE,
+                                       /* reportUnwindData */ false);
+    GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_R0, REG_FPBASE, PPC_FRAME_POINTER_SAVE_SIZE);
+    GetEmitter()->emitIns_R_R(INS_mtlr, EA_PTRSIZE, REG_R0, REG_R0);
+    GetEmitter()->emitIns_R_R_I(INS_ld, EA_PTRSIZE, REG_FPBASE, REG_FPBASE, 0);
+
+    m_compiler->unwindAllocStack(patchpointInfo->TotalFrameSize());
 }
 
 void CodeGen::genEstablishPpc64leTocForReversePInvoke()

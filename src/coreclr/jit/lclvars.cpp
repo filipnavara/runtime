@@ -4875,7 +4875,7 @@ void Compiler::lvaAssignVirtualFrameOffsetsToLocals()
     //
     if (opts.IsOSR())
     {
-#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+#if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
         originalFrameStkOffs = info.compPatchpointInfo->TotalFrameSize();
 #else
         originalFrameSize    = info.compPatchpointInfo->TotalFrameSize();

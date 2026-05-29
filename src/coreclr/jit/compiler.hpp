@@ -4935,9 +4935,7 @@ inline bool Compiler::compCanHavePatchpoints(const char** reason)
 {
     const char* whyNot = nullptr;
 
-#if defined(TARGET_POWERPC64)
-    whyNot = "OSR is not supported on PowerPC64";
-#elif defined(FEATURE_ON_STACK_REPLACEMENT)
+#if defined(FEATURE_ON_STACK_REPLACEMENT)
     if (compLocallocSeen)
     {
         whyNot = "OSR can't handle localloc";

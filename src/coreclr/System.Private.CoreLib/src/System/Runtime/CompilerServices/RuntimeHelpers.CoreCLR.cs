@@ -550,7 +550,8 @@ namespace System.Runtime.CompilerServices
 
             buffer->GCDesc = gcDesc;
 
-            new Span<byte>(buffer + 1, size - sizeof(TailCallArgBuffer)).Clear();
+            Debug.Assert(size >= sizeof(TailCallArgBuffer));
+            Unsafe.InitBlockUnaligned(buffer + 1, 0, (uint)(size - sizeof(TailCallArgBuffer)));
 
             // The buffer is now ready to be used.
             buffer->State = TAILCALLARGBUFFER_ACTIVE;

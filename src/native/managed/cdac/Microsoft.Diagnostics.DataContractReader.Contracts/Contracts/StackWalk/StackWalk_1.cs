@@ -142,7 +142,8 @@ internal partial class StackWalk_1 : IStackWalk
         IPlatformAgnosticContext context = IPlatformAgnosticContext.GetContextForPlatform(_target);
         uint contextFlags = context.AllContextFlags;
         FillContextFromThread(context, threadData, contextFlags);
-        StackWalkState state = IsManaged(context.InstructionPointer, out _) ? StackWalkState.SW_FRAMELESS : StackWalkState.SW_FRAME;
+        bool initialManaged = IsManaged(context.InstructionPointer, out _);
+        StackWalkState state = initialManaged ? StackWalkState.SW_FRAMELESS : StackWalkState.SW_FRAME;
         FrameIterator frameIterator = new(_target, threadData);
 
         // Skip the head InterpreterFrame when entering with a context already

@@ -544,7 +544,7 @@ public unsafe class DacDbiImplTests
 
     public static IEnumerable<object[]> TargetArchitectures()
     {
-        string[] architectures = ["x64", "arm64", "arm", "x86", "loongarch64", "riscv64"];
+        string[] architectures = ["x64", "arm64", "arm", "x86", "loongarch64", "riscv64", "ppc64le"];
         foreach (object[] stdArch in new MockTarget.StdArch())
         {
             foreach (string archName in architectures)

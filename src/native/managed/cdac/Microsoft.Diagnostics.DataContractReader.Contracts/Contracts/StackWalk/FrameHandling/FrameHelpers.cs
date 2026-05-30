@@ -369,6 +369,7 @@ internal sealed class FrameHelpers
             ContextHolder<ARM64Context> contextHolder => new ARM64FrameHandler(_target, contextHolder),
             ContextHolder<RISCV64Context> contextHolder => new RISCV64FrameHandler(_target, contextHolder),
             ContextHolder<LoongArch64Context> contextHolder => new LoongArch64FrameHandler(_target, contextHolder),
+            ContextHolder<PPC64LEContext> contextHolder => new PPC64LEFrameHandler(_target, contextHolder),
             _ => throw new InvalidOperationException("Unsupported context type"),
         };
     }
@@ -562,6 +563,7 @@ internal sealed class FrameHelpers
             RuntimeInfoArchitecture.X86 => "ecx",
             RuntimeInfoArchitecture.LoongArch64 => "a0",
             RuntimeInfoArchitecture.RiscV64 => "a0",
+            RuntimeInfoArchitecture.Ppc64le => "r3",
             var arch => throw new NotSupportedException(
                 $"Unsupported architecture for first argument register: {arch}"),
         };

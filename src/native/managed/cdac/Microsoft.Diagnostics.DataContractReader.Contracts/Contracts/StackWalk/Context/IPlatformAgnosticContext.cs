@@ -42,6 +42,7 @@ public interface IPlatformAgnosticContext
             RuntimeInfoArchitecture.Arm64 => new ContextHolder<ARM64Context>(),
             RuntimeInfoArchitecture.LoongArch64 => new ContextHolder<LoongArch64Context>(),
             RuntimeInfoArchitecture.RiscV64 => new ContextHolder<RISCV64Context>(),
+            RuntimeInfoArchitecture.Ppc64le => new ContextHolder<PPC64LEContext>(),
             RuntimeInfoArchitecture.Unknown => throw new InvalidOperationException($"Processor architecture is required for creating a platform specific context and is not provided by the target"),
             _ => throw new InvalidOperationException($"Unsupported architecture {runtimeInfo.GetTargetArchitecture()}"),
         };

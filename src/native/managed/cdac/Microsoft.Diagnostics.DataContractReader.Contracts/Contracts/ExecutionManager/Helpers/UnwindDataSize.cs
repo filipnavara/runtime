@@ -65,6 +65,7 @@ internal static class UnwindDataSize
 
             case RuntimeInfoArchitecture.LoongArch64:
             case RuntimeInfoArchitecture.RiscV64:
+            case RuntimeInfoArchitecture.Ppc64le:
             {
                 TargetPointer xdata = unwindInfo;
                 uint xdata0 = target.Read<uint>(xdata);

@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Microsoft.Diagnostics.DataContractReader.Contracts;
 using Microsoft.Diagnostics.DataContractReader.Legacy;
 using Xunit;
@@ -55,6 +56,11 @@ public unsafe class GetRegisterNameTests
         yield return [RuntimeInfoArchitecture.RiscV64, 0, "zero"];
         yield return [RuntimeInfoArchitecture.RiscV64, 1, "RA"];
         yield return [RuntimeInfoArchitecture.RiscV64, 2, "SP"];
+
+        // PPC64LE registers
+        yield return [RuntimeInfoArchitecture.Ppc64le, 0, "r0"];
+        yield return [RuntimeInfoArchitecture.Ppc64le, 1, "r1"];
+        yield return [RuntimeInfoArchitecture.Ppc64le, 31, "r31"];
     }
 
     [Theory]
@@ -86,6 +92,7 @@ public unsafe class GetRegisterNameTests
     [InlineData(RuntimeInfoArchitecture.Arm64, 0, "X0")]
     [InlineData(RuntimeInfoArchitecture.LoongArch64, 1, "RA")]
     [InlineData(RuntimeInfoArchitecture.RiscV64, 1, "RA")]
+    [InlineData(RuntimeInfoArchitecture.Ppc64le, 3, "r3")]
     public void GetRegisterName_CallerFrame_PrependsCaller(
         RuntimeInfoArchitecture targetArch,
         int regNum,
@@ -142,6 +149,7 @@ public unsafe class GetRegisterNameTests
     [InlineData(RuntimeInfoArchitecture.Arm64, 32)]
     [InlineData(RuntimeInfoArchitecture.LoongArch64, 32)]
     [InlineData(RuntimeInfoArchitecture.RiscV64, 32)]
+    [InlineData(RuntimeInfoArchitecture.Ppc64le, 32)]
     public void GetRegisterName_OutOfRange_ReturnsEUnexpected(
         RuntimeInfoArchitecture targetArch,
         int regNum)
@@ -194,5 +202,31 @@ public unsafe class GetRegisterNameTests
         }
 
         Assert.NotEqual(HResults.S_OK, hr);
+    }
+
+    [Fact]
+    public void CanUseLegacyDacForTargetArchitecture_RequiresHostArchitectureMatch()
+    {
+        RuntimeInfoArchitecture current = RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.X86 => RuntimeInfoArchitecture.X86,
+            Architecture.X64 => RuntimeInfoArchitecture.X64,
+            Architecture.Arm => RuntimeInfoArchitecture.Arm,
+            Architecture.Arm64 => RuntimeInfoArchitecture.Arm64,
+            Architecture.LoongArch64 => RuntimeInfoArchitecture.LoongArch64,
+            Architecture.Ppc64le => RuntimeInfoArchitecture.Ppc64le,
+            Architecture.RiscV64 => RuntimeInfoArchitecture.RiscV64,
+            _ => RuntimeInfoArchitecture.Unknown,
+        };
+
+        if (current != RuntimeInfoArchitecture.Unknown)
+        {
+            Assert.True(SOSDacImpl.CanUseLegacyDacForTargetArchitecture(current));
+        }
+
+        RuntimeInfoArchitecture mismatched = current == RuntimeInfoArchitecture.Ppc64le ?
+            RuntimeInfoArchitecture.X64 :
+            RuntimeInfoArchitecture.Ppc64le;
+        Assert.False(SOSDacImpl.CanUseLegacyDacForTargetArchitecture(mismatched));
     }
 }

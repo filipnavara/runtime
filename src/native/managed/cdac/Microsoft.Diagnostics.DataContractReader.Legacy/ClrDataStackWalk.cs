@@ -20,6 +20,8 @@ public sealed unsafe partial class ClrDataStackWalk : IXCLRDataStackWalk
     private readonly IXCLRDataStackWalk? _legacyImpl;
 
     private bool _currentFrameIsValid;
+    private bool _stackSizeSkippedValid;
+    private ulong _stackSizeSkipped;
     private readonly IEnumerator<IStackDataFrameHandle> _dataFrames;
 
     public ClrDataStackWalk(TargetPointer threadAddr, uint flags, Target target, IXCLRDataStackWalk? legacyImpl)
@@ -46,15 +48,20 @@ public sealed unsafe partial class ClrDataStackWalk : IXCLRDataStackWalk
             IStackWalk sw = _target.Contracts.StackWalk;
             IStackDataFrameHandle dataFrame = _dataFrames.Current;
             byte[] context = sw.GetRawContext(dataFrame);
-            if (context.Length > contextBufSize)
-                hr = HResults.E_INVALIDARG;
 
             if (contextSize is not null)
             {
                 *contextSize = (uint)context.Length;
             }
 
-            context.CopyTo(contextBuf);
+            if (context.Length > contextBufSize)
+            {
+                hr = HResults.E_INVALIDARG;
+            }
+            else if (context.Length > 0)
+            {
+                Array.Copy(context, 0, contextBuf, 0, context.Length);
+            }
         }
         else
         {
@@ -113,11 +120,60 @@ public sealed unsafe partial class ClrDataStackWalk : IXCLRDataStackWalk
         return hr;
     }
     int IXCLRDataStackWalk.GetFrameType(uint* simpleType, uint* detailedType)
-        => LegacyFallbackHelper.CanFallback() && _legacyImpl is not null ? _legacyImpl.GetFrameType(simpleType, detailedType) : HResults.E_NOTIMPL;
+    {
+        int hr = HResults.S_OK;
+        try
+        {
+            if (!_currentFrameIsValid)
+                throw new ArgumentException();
+
+            ClrDataFrame.GetFrameTypes(_target, _dataFrames.Current, simpleType, detailedType);
+        }
+        catch (System.Exception ex)
+        {
+            hr = ex.HResult;
+        }
+
+#if DEBUG
+        if (_legacyImpl is not null)
+        {
+            uint simpleTypeLocal = 0;
+            uint detailedTypeLocal = 0;
+            int hrLocal = _legacyImpl.GetFrameType(&simpleTypeLocal, &detailedTypeLocal);
+            Debug.ValidateHResult(hr, hrLocal, HResultValidationMode.AllowCdacSuccess);
+        }
+#endif
+
+        return hr;
+    }
     int IXCLRDataStackWalk.GetStackSizeSkipped(ulong* stackSizeSkipped)
-        => LegacyFallbackHelper.CanFallback() && _legacyImpl is not null ? _legacyImpl.GetStackSizeSkipped(stackSizeSkipped) : HResults.E_NOTIMPL;
+    {
+        if (LegacyFallbackHelper.CanFallback() && _legacyImpl is not null)
+        {
+            return _legacyImpl.GetStackSizeSkipped(stackSizeSkipped);
+        }
+
+        if (!_stackSizeSkippedValid)
+        {
+            return HResults.S_FALSE;
+        }
+
+        if (stackSizeSkipped is not null)
+        {
+            *stackSizeSkipped = _stackSizeSkipped;
+        }
+
+        return HResults.S_OK;
+    }
+
     int IXCLRDataStackWalk.Next()
     {
+        TargetPointer previousStackPointer = TargetPointer.Null;
+        if (_currentFrameIsValid)
+        {
+            previousStackPointer = GetStackPointer(_dataFrames.Current);
+        }
+
         int hr;
         try
         {
@@ -127,6 +183,27 @@ public sealed unsafe partial class ClrDataStackWalk : IXCLRDataStackWalk
         catch (System.Exception ex)
         {
             hr = ex.HResult;
+        }
+
+        if (hr == HResults.S_OK)
+        {
+            TargetPointer currentStackPointer = GetStackPointer(_dataFrames.Current);
+            if ((previousStackPointer != TargetPointer.Null) && (currentStackPointer != TargetPointer.Null) &&
+                (currentStackPointer.Value >= previousStackPointer.Value))
+            {
+                _stackSizeSkipped = currentStackPointer.Value - previousStackPointer.Value;
+                _stackSizeSkippedValid = true;
+            }
+            else
+            {
+                _stackSizeSkipped = 0;
+                _stackSizeSkippedValid = false;
+            }
+        }
+        else
+        {
+            _stackSizeSkipped = 0;
+            _stackSizeSkippedValid = false;
         }
 
         // Advance the legacy stack walk to keep it in sync with the cDAC walk.
@@ -143,6 +220,16 @@ public sealed unsafe partial class ClrDataStackWalk : IXCLRDataStackWalk
 
         return hr;
     }
+
+    private TargetPointer GetStackPointer(IStackDataFrameHandle frame)
+    {
+        IStackWalk sw = _target.Contracts.StackWalk;
+        byte[] contextBytes = sw.GetRawContext(frame);
+        IPlatformAgnosticContext context = IPlatformAgnosticContext.GetContextForPlatform(_target);
+        context.FillFromBuffer(contextBytes);
+        return context.StackPointer;
+    }
+
     int IXCLRDataStackWalk.Request(uint reqCode, uint inBufferSize, byte* inBuffer, uint outBufferSize, byte* outBuffer)
     {
         const uint DACSTACKPRIV_REQUEST_FRAME_DATA = 0xf0000000;
@@ -152,17 +239,25 @@ public sealed unsafe partial class ClrDataStackWalk : IXCLRDataStackWalk
         switch (reqCode)
         {
             case DACSTACKPRIV_REQUEST_FRAME_DATA:
-                if (outBufferSize < sizeof(ulong))
+                if ((inBufferSize != 0) || (inBuffer is not null) || (outBufferSize != sizeof(ulong)))
+                {
                     hr = HResults.E_INVALIDARG;
-
-                IStackWalk sw = _target.Contracts.StackWalk;
-                IStackDataFrameHandle frameData = _dataFrames.Current;
-                TargetPointer frameAddr = sw.GetFrameAddress(frameData);
-                *(ulong*)outBuffer = frameAddr.ToClrDataAddress(_target);
-                hr = HResults.S_OK;
+                }
+                else if (!_currentFrameIsValid)
+                {
+                    hr = HResults.E_INVALIDARG;
+                }
+                else
+                {
+                    IStackWalk sw = _target.Contracts.StackWalk;
+                    IStackDataFrameHandle frameData = _dataFrames.Current;
+                    TargetPointer frameAddr = sw.GetFrameAddress(frameData);
+                    *(ulong*)outBuffer = frameAddr.ToClrDataAddress(_target);
+                    hr = HResults.S_OK;
+                }
                 break;
             default:
-                hr = HResults.E_NOTIMPL;
+                hr = HResults.E_INVALIDARG;
                 break;
         }
 

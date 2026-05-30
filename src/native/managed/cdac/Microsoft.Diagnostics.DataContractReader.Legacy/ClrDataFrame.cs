@@ -9,6 +9,7 @@ using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
+using System.Text;
 using Microsoft.Diagnostics.DataContractReader.Contracts;
 using Microsoft.Diagnostics.DataContractReader.Contracts.StackWalkHelpers;
 
@@ -34,7 +35,29 @@ public sealed unsafe partial class ClrDataFrame : IXCLRDataFrame, IXCLRDataFrame
 
     // IXCLRDataFrame implementation
     int IXCLRDataFrame.GetFrameType(uint* simpleType, uint* detailedType)
-        => LegacyFallbackHelper.CanFallback() && _legacyImpl is not null ? _legacyImpl.GetFrameType(simpleType, detailedType) : HResults.E_NOTIMPL;
+    {
+        int hr = HResults.S_OK;
+        try
+        {
+            GetFrameTypes(_target, _dataFrame, simpleType, detailedType);
+        }
+        catch (System.Exception ex)
+        {
+            hr = ex.HResult;
+        }
+
+#if DEBUG
+        if (_legacyImpl is not null)
+        {
+            uint simpleTypeLocal = 0;
+            uint detailedTypeLocal = 0;
+            int hrLocal = _legacyImpl.GetFrameType(&simpleTypeLocal, &detailedTypeLocal);
+            Debug.ValidateHResult(hr, hrLocal, HResultValidationMode.AllowCdacSuccess);
+        }
+#endif
+
+        return hr;
+    }
 
     int IXCLRDataFrame.GetContext(
         uint contextFlags,
@@ -332,7 +355,65 @@ public sealed unsafe partial class ClrDataFrame : IXCLRDataFrame, IXCLRDataFrame
         uint bufLen,
         uint* nameLen,
         char* nameBuf)
-        => LegacyFallbackHelper.CanFallback() && _legacyImpl is not null ? _legacyImpl.GetCodeName(flags, bufLen, nameLen, nameBuf) : HResults.E_NOTIMPL;
+    {
+        int hr = HResults.S_OK;
+        try
+        {
+            string name;
+            IStackWalk stackWalk = _target.Contracts.StackWalk;
+            TargetPointer methodDesc = stackWalk.GetMethodDescPtr(_dataFrame);
+            if (methodDesc != TargetPointer.Null)
+            {
+                StringBuilder sb = new();
+                try
+                {
+                    TypeNameBuilder.AppendMethodInternal(
+                        _target,
+                        sb,
+                        _target.Contracts.RuntimeTypeSystem.GetMethodDescHandle(methodDesc),
+                        TypeNameFormat.FormatSignature |
+                        TypeNameFormat.FormatNamespace |
+                        TypeNameFormat.FormatFullInst);
+                    name = sb.ToString();
+                }
+                catch
+                {
+                    name = _target.Contracts.DacStreams.StringFromEEAddress(methodDesc) ?? "Unknown";
+                }
+            }
+            else
+            {
+                name = "Unknown";
+            }
+
+            OutputBufferHelpers.CopyStringToBuffer(nameBuf, bufLen, nameLen, name, out bool truncated);
+            if (truncated)
+            {
+                hr = HResults.S_FALSE;
+            }
+        }
+        catch (System.Exception ex)
+        {
+            hr = ex.HResult;
+        }
+
+#if DEBUG
+        if (_legacyImpl is not null)
+        {
+            uint nameLenLocal = 0;
+            char[] nameBufLocal = new char[bufLen > 0 ? bufLen : 1];
+            int hrLocal;
+            fixed (char* pNameBufLocal = nameBufLocal)
+            {
+                hrLocal = _legacyImpl.GetCodeName(flags, bufLen, &nameLenLocal, nameBuf is null ? null : pNameBufLocal);
+            }
+
+            Debug.ValidateHResult(hr, hrLocal, HResultValidationMode.AllowCdacSuccess);
+        }
+#endif
+
+        return hr;
+    }
 
     int IXCLRDataFrame.GetMethodInstance(DacComNullableByRef<IXCLRDataMethodInstance> method)
     {
@@ -971,9 +1052,42 @@ public sealed unsafe partial class ClrDataFrame : IXCLRDataFrame, IXCLRDataFrame
             RuntimeInfoArchitecture.X86 => 4,   // ESP
             RuntimeInfoArchitecture.Arm64 => 31, // SP
             RuntimeInfoArchitecture.Arm => 13,   // SP
+            RuntimeInfoArchitecture.LoongArch64 => 3, // SP
+            RuntimeInfoArchitecture.RiscV64 => 2,     // SP
+            RuntimeInfoArchitecture.Ppc64le => 1,     // R1/SP
             _ => -1,
         };
     }
 
     #endregion
+
+    internal static unsafe void GetFrameTypes(Target target, IStackDataFrameHandle dataFrame, uint* simpleType, uint* detailedType)
+    {
+        const uint CLRDATA_SIMPFRAME_UNRECOGNIZED = 0x1;
+        const uint CLRDATA_SIMPFRAME_MANAGED_METHOD = 0x2;
+        const uint CLRDATA_SIMPFRAME_RUNTIME_UNMANAGED_CODE = 0x8;
+        const uint CLRDATA_DETFRAME_UNRECOGNIZED = 0;
+
+        IStackWalk stackWalk = target.Contracts.StackWalk;
+        if (simpleType is not null)
+        {
+            if (stackWalk.GetMethodDescPtr(dataFrame) != TargetPointer.Null)
+            {
+                *simpleType = CLRDATA_SIMPFRAME_MANAGED_METHOD;
+            }
+            else if (stackWalk.GetFrameAddress(dataFrame) != TargetPointer.Null)
+            {
+                *simpleType = CLRDATA_SIMPFRAME_RUNTIME_UNMANAGED_CODE;
+            }
+            else
+            {
+                *simpleType = CLRDATA_SIMPFRAME_UNRECOGNIZED;
+            }
+        }
+
+        if (detailedType is not null)
+        {
+            *detailedType = CLRDATA_DETFRAME_UNRECOGNIZED;
+        }
+    }
 }

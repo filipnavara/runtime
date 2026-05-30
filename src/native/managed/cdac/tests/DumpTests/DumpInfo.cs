@@ -97,6 +97,7 @@ public sealed class DumpInfo
             System.Runtime.InteropServices.Architecture.Arm => "arm",
             System.Runtime.InteropServices.Architecture.RiscV64 => "riscv64",
             System.Runtime.InteropServices.Architecture.LoongArch64 => "loongarch64",
+            System.Runtime.InteropServices.Architecture.Ppc64le => "ppc64le",
             _ => "unknown",
         };
 

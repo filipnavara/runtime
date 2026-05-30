@@ -64,6 +64,7 @@ public static class CoreCLRContracts
                 RuntimeInfoArchitecture.Arm => new GCInfo_1<ARMGCInfoTraits>(t),
                 RuntimeInfoArchitecture.LoongArch64 => new GCInfo_1<LoongArch64GCInfoTraits>(t),
                 RuntimeInfoArchitecture.RiscV64 => new GCInfo_1<RISCV64GCInfoTraits>(t),
+                RuntimeInfoArchitecture.Ppc64le => new GCInfo_1<PPC64LEGCInfoTraits>(t),
                 _ => default(GCInfo),
             };
         });

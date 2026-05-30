@@ -73,8 +73,10 @@ public sealed unsafe partial class SOSDacImpl
         _objectMethodTable = new Lazy<TargetPointer>(
             () => _target.ReadPointer(_target.ReadGlobalPointer(Constants.Globals.ObjectMethodTable)));
 
-        // Get all the interfaces for delegating to the legacy DAC
-        if (legacyObj is not null)
+        // Get all the interfaces for delegating to the legacy DAC. The legacy DAC is architecture-specific;
+        // only use it when it matches the target architecture. Cross-architecture diagnostics must use cDAC
+        // without falling back to, or validating against, the host architecture's legacy DAC.
+        if ((legacyObj is not null) && CanUseLegacyDacForTargetArchitecture(_target.Contracts.RuntimeInfo.GetTargetArchitecture()))
         {
             _legacyImpl = legacyObj as ISOSDacInterface;
             _legacyImpl2 = legacyObj as ISOSDacInterface2;
@@ -98,6 +100,21 @@ public sealed unsafe partial class SOSDacImpl
 
             _legacyEnumMemory = legacyObj as ICLRDataEnumMemoryRegions;
         }
+    }
+
+    internal static bool CanUseLegacyDacForTargetArchitecture(RuntimeInfoArchitecture targetArchitecture)
+    {
+        return RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.X86 => targetArchitecture == RuntimeInfoArchitecture.X86,
+            Architecture.X64 => targetArchitecture == RuntimeInfoArchitecture.X64,
+            Architecture.Arm => targetArchitecture == RuntimeInfoArchitecture.Arm,
+            Architecture.Arm64 => targetArchitecture == RuntimeInfoArchitecture.Arm64,
+            Architecture.LoongArch64 => targetArchitecture == RuntimeInfoArchitecture.LoongArch64,
+            Architecture.Ppc64le => targetArchitecture == RuntimeInfoArchitecture.Ppc64le,
+            Architecture.RiscV64 => targetArchitecture == RuntimeInfoArchitecture.RiscV64,
+            _ => false,
+        };
     }
 
     #region ISOSDacInterface
@@ -3836,6 +3853,7 @@ public sealed unsafe partial class SOSDacImpl
                 RuntimeInfoArchitecture.X86 => s_x86Registers,
                 RuntimeInfoArchitecture.LoongArch64 => s_loongArch64Registers,
                 RuntimeInfoArchitecture.RiscV64 => s_riscV64Registers,
+                RuntimeInfoArchitecture.Ppc64le => s_ppc64leRegisters,
                 _ => throw new InvalidOperationException(),
             };
 
@@ -3934,6 +3952,18 @@ public sealed unsafe partial class SOSDacImpl
         "S4", "S5", "S6", "S7",
         "S8", "S9", "S10", "S11",
         "T3", "T4", "T5", "T6",
+    ];
+
+    private static readonly string[] s_ppc64leRegisters =
+    [
+        "r0", "r1", "r2", "r3",
+        "r4", "r5", "r6", "r7",
+        "r8", "r9", "r10", "r11",
+        "r12", "r13", "r14", "r15",
+        "r16", "r17", "r18", "r19",
+        "r20", "r21", "r22", "r23",
+        "r24", "r25", "r26", "r27",
+        "r28", "r29", "r30", "r31",
     ];
 
     int ISOSDacInterface.GetStackLimits(ClrDataAddress threadPtr, ClrDataAddress* lower, ClrDataAddress* upper, ClrDataAddress* fp)

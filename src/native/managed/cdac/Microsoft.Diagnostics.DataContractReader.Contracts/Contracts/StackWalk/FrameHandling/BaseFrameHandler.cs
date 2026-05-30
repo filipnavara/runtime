@@ -28,6 +28,7 @@ internal abstract class BaseFrameHandler(Target target, IPlatformAgnosticContext
         _context.InstructionPointer = inlinedCallFrame.CallerReturnAddress;
         _context.StackPointer = inlinedCallFrame.CallSiteSP;
         _context.FramePointer = inlinedCallFrame.CalleeSavedFP;
+        _context.RawContextFlags = _context.FullContextFlags;
     }
 
     public virtual void HandleSoftwareExceptionFrame(SoftwareExceptionFrame softwareExceptionFrame)
@@ -51,6 +52,7 @@ internal abstract class BaseFrameHandler(Target target, IPlatformAgnosticContext
 
         _context.InstructionPointer = transitionBlock.ReturnAddress;
         _context.StackPointer = framedMethodFrame.TransitionBlockPtr + transitionBlockSize;
+        _context.RawContextFlags = _context.FullContextFlags;
 
         Data.CalleeSavedRegisters calleeSavedRegisters = _target.ProcessedData.GetOrAdd<Data.CalleeSavedRegisters>(transitionBlock.CalleeSavedRegisters);
         UpdateFromRegisterDict(calleeSavedRegisters.Registers);

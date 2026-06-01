@@ -71,13 +71,7 @@ StackFrameIterator::StackFrameIterator(Thread * pThreadToWalk, PInvokeTransition
 
     if (pInitialTransitionFrame == INTERRUPTED_THREAD_MARKER)
     {
-        NATIVE_CONTEXT* pInterruptedContext = pThreadToWalk->GetInterruptedContext();
-        STRESS_LOG3(LF_STACKWALK, LL_INFO10000,
-            "----Init interrupted ctx---- [ GC ] ctx=%p IP=%pK SP=%p\n",
-            pInterruptedContext,
-            (void*)pInterruptedContext->GetIp(),
-            (void*)pInterruptedContext->GetSp());
-        InternalInit(pThreadToWalk, pInterruptedContext, GcStackWalkFlags | ActiveStackFrame);
+        InternalInit(pThreadToWalk, pThreadToWalk->GetInterruptedContext(), GcStackWalkFlags | ActiveStackFrame);
     }
     else if (pInitialTransitionFrame == TOP_OF_STACK_MARKER)
     {
@@ -2132,10 +2126,6 @@ UnwindOutOfCurrentManagedFrame:
         ASSERT(!m_pThread->IsHijacked());
 
         SetControlPC(dac_cast<PTR_VOID>(PCODEToPINSTR(m_RegDisplay.GetIP())));
-        if (m_ControlPC == NULL)
-        {
-            return;
-        }
 
         PTR_VOID collapsingTargetFrame = NULL;
 

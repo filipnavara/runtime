@@ -3652,7 +3652,7 @@ emitter::instrDesc* emitter::emitNewInstrCallInd(int              argCnt,
     // register (RDX) is a GCRef or ByRef pointer.
 
     if (!VarSetOps::IsEmpty(m_compiler, GCvars) || // any frame GCvars live
-        gcRefRegsInScratch ||                      // any register gc refs live in scratch regs
+        (gcRefRegsInScratch) ||                    // any register gc refs live in scratch regs
         (byrefRegs != 0) ||                        // any register byrefs live
 #ifdef TARGET_XARCH
         (disp < AM_DISP_MIN) ||        // displacement too negative

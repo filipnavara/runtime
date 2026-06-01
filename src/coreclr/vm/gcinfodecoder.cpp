@@ -2179,45 +2179,7 @@ template <typename GcInfoEncoding> void TGcInfoDecoder<GcInfoEncoding>::ReportRe
 
     gcFlags |= CHECK_APP_DOMAIN;
 
-#if defined(STRESS_LOG)
-    uintptr_t objRefValue = 0;
-    if (pObjRef != NULL)
-    {
-        objRefValue = *(uintptr_t*)pObjRef;
-    }
-
-#ifdef FEATURE_NATIVEAOT
-    void* reportIp = (void*)pRD->IP;
-#else
-    void* reportIp = (void*)pRD->ControlPC;
-#endif
-
-    STRESS_LOG5(LF_GCROOTS, LL_INFO1000,
-                "PPC64LE ReportRegister reg=%d slot=%p val=%p IP=%pK flags=%x\n",
-                regNum,
-                (void*)pObjRef,
-                (void*)objRefValue,
-                reportIp,
-                gcFlags);
-
     pCallBack(hCallBack, pObjRef, gcFlags DAC_ARG(DacSlotLocation(regNum, 0, false)));
-
-    objRefValue = 0;
-    if (pObjRef != NULL)
-    {
-        objRefValue = *(uintptr_t*)pObjRef;
-    }
-
-    STRESS_LOG5(LF_GCROOTS, LL_INFO1000,
-                "PPC64LE ReportRegisterAfter reg=%d slot=%p val=%p IP=%pK flags=%x\n",
-                regNum,
-                (void*)pObjRef,
-                (void*)objRefValue,
-                reportIp,
-                gcFlags);
-#else
-    pCallBack(hCallBack, pObjRef, gcFlags DAC_ARG(DacSlotLocation(regNum, 0, false)));
-#endif
 }
 
 #else // Unknown platform

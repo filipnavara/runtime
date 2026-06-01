@@ -591,7 +591,7 @@ EXTERN_C intptr_t* RhpGetThunkData()
 {
     return &tls_thunkData;
 }
-#endif // FEATURE_EMULATED_TLS
+#endif //FEATURE_EMULATED_TLS
 
 FCIMPL0(intptr_t, RhGetCurrentThunkContext)
 {

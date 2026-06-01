@@ -61,7 +61,7 @@ struct ArgLocDesc
     SystemVEightByteRegistersInfo m_eightByteInfo;
 #endif // UNIX_AMD64_ABI
 
-#if defined(FEATURE_HFA)
+#ifdef FEATURE_HFA
     static unsigned getHFAFieldSize(CorInfoHFAElemType  hfaType)
     {
         switch (hfaType)

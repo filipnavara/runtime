@@ -2006,7 +2006,7 @@ PCODE MethodDesc::GetSingleCallableAddrOfCodeForUnmanagedCallersOnly()
     CONTRACTL
     {
         THROWS;
-        GC_TRIGGERS;
+        GC_NOTRIGGER;
         MODE_ANY;
         PRECONDITION(HasUnmanagedCallersOnlyAttribute());
     }
@@ -2019,15 +2019,7 @@ PCODE MethodDesc::GetSingleCallableAddrOfCodeForUnmanagedCallersOnly()
     (void)PortableEntryPoint::ToPortableEntryPoint(entryPoint)->EnsureCodeForUnmanagedCallersOnly();
     entryPoint = (PCODE)PortableEntryPoint::GetActualCode(entryPoint);
 #else // !FEATURE_PORTABLE_ENTRYPOINTS
-#if defined(TARGET_POWERPC64)
-    entryPoint = GetNativeCode();
-    if (entryPoint == (PCODE)NULL)
-    {
-        entryPoint = PrepareInitialCode(CallerGCMode::Preemptive);
-    }
-#else
     entryPoint = GetSingleCallableAddrOfCode();
-#endif
 #endif // FEATURE_PORTABLE_ENTRYPOINTS
 
     return entryPoint;

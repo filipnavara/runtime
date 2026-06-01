@@ -3861,7 +3861,7 @@ public:
 // GTF_SPILL or GTF_SPILLED flag on a multi-reg node indicates that one or
 // more of its result regs are in that state.  The spill flags of each register
 // are stored here. We only need 2 bits per returned register,
-// so this is treated as a 2-bit array. No architecture needs more than 8 bits.
+// so this is treated as a 2-bit array.
 //
 #if defined(TARGET_POWERPC64)
 typedef unsigned short MultiRegSpillFlags;

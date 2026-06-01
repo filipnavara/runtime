@@ -30,11 +30,6 @@
 #include "volatile.h"
 #include "minipal/time.h"
 
-#if defined(TARGET_POWERPC64) && defined(TARGET_UNIX)
-#include <sys/stat.h>
-#include <sys/types.h>
-#endif
-
 #ifdef STRESS_LOG
 
 typedef DPTR(StressLog) PTR_StressLog;
@@ -301,91 +296,6 @@ bool StressLog::ReserveStressLogChunks (unsigned chunksToReserve)
 
     return msgs->chunkListLength >= (long)chunksToReserve;
 }
-
-#if defined(TARGET_POWERPC64) && defined(TARGET_UNIX)
-void StressLog::DumpToDirectory(const char* directory)
-{
-    if ((directory == NULL) || (*directory == '\0'))
-    {
-        return;
-    }
-
-    mkdir(directory, 0777);
-
-    char path[1024];
-    int written = snprintf(path, sizeof(path), "%s/stresslog-map.txt", directory);
-    if ((written < 0) || ((size_t)written >= sizeof(path)))
-    {
-        return;
-    }
-
-    FILE* map = fopen(path, "w");
-    if (map == NULL)
-    {
-        return;
-    }
-
-    fprintf(map, "stresslog=%p\n", (void*)&theLog);
-    fprintf(map, "moduleOffset=%p\n", (void*)theLog.moduleOffset);
-    fprintf(map, "facilities=%#x\n", theLog.facilitiesToLog);
-    fprintf(map, "level=%u\n", theLog.levelToLog);
-    fprintf(map, "maxPerThread=%u\n", theLog.MaxSizePerThread);
-    fprintf(map, "maxTotal=%u\n", theLog.MaxSizeTotal);
-    fprintf(map, "totalChunk=%d\n", theLog.totalChunk);
-    fprintf(map, "logs=%p\n", (void*)theLog.logs);
-
-    int threadIndex = 0;
-    for (ThreadStressLog* threadLog = theLog.logs; (threadLog != NULL) && (threadIndex < 1024);
-         threadLog = threadLog->next, threadIndex++)
-    {
-        fprintf(map, "\nthread[%d] addr=%p\n", threadIndex, (void*)threadLog);
-        fprintf(map, "  threadId=%#llx\n", (unsigned long long)threadLog->threadId);
-        fprintf(map, "  isDead=%u\n", threadLog->isDead ? 1 : 0);
-        fprintf(map, "  writeHasWrapped=%u\n", threadLog->writeHasWrapped ? 1 : 0);
-        fprintf(map, "  curPtr=%p\n", (void*)threadLog->curPtr);
-        fprintf(map, "  chunkListHead=%p\n", (void*)threadLog->chunkListHead);
-        fprintf(map, "  chunkListTail=%p\n", (void*)threadLog->chunkListTail);
-        fprintf(map, "  curWriteChunk=%p\n", (void*)threadLog->curWriteChunk);
-        fprintf(map, "  chunkListLength=%ld\n", threadLog->chunkListLength);
-        fprintf(map, "  pThread=%p\n", (void*)threadLog->pThread);
-
-        StressLogChunk* head = threadLog->chunkListHead;
-        StressLogChunk* chunk = head;
-        int chunkIndex = 0;
-        while ((chunk != NULL) && (chunkIndex < 4096))
-        {
-            written = snprintf(path, sizeof(path), "%s/thread-%02d-chunk-%04d-%p.bin", directory, threadIndex,
-                               chunkIndex, (void*)chunk);
-            if ((written < 0) || ((size_t)written >= sizeof(path)))
-            {
-                break;
-            }
-
-            FILE* chunkFile = fopen(path, "wb");
-            if (chunkFile == NULL)
-            {
-                fprintf(map, "  chunk[%d] addr=%p writeFailed=1\n", chunkIndex, (void*)chunk);
-                break;
-            }
-
-            fwrite(chunk, sizeof(StressLogChunk), 1, chunkFile);
-            fclose(chunkFile);
-
-            fprintf(map, "  chunk[%d] addr=%p prev=%p next=%p file=thread-%02d-chunk-%04d-%p.bin\n", chunkIndex,
-                    (void*)chunk, (void*)chunk->prev, (void*)chunk->next, threadIndex, chunkIndex, (void*)chunk);
-
-            chunkIndex++;
-            chunk = chunk->next;
-            if (chunk == head)
-            {
-                break;
-            }
-        }
-    }
-
-    fclose(map);
-}
-#endif
 
 /*********************************************************************************/
 /* fetch a buffer that can be used to write a stress message, it is thread safe */

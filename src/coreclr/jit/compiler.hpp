@@ -4935,7 +4935,7 @@ inline bool Compiler::compCanHavePatchpoints(const char** reason)
 {
     const char* whyNot = nullptr;
 
-#if defined(FEATURE_ON_STACK_REPLACEMENT)
+#ifdef FEATURE_ON_STACK_REPLACEMENT
     if (compLocallocSeen)
     {
         whyNot = "OSR can't handle localloc";

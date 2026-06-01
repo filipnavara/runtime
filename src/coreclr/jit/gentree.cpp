@@ -5598,7 +5598,7 @@ bool Compiler::gtMarkAddrMode(GenTree* addr, int* pCostEx, int* pCostSz, var_typ
         {
             if (!emitter::isValidSimm12(cns))
             {
-                // TODO-RISCV64-CQ: tune for this target.
+                // TODO-RISCV64-CQ: tune for RISCV64.
                 addrModeCostEx += 1;
                 addrModeCostSz += 4;
             }
@@ -17295,13 +17295,13 @@ GenTree* Compiler::gtFoldExprUnaryConstLng(GenTreeUnOp* tree, GenTreeIntConCommo
                 {
                     double dconVal;
 
-                    if (tree->IsUnsigned())
+                    if (tree->IsUnsigned() && (lconVal < 0))
                     {
                         dconVal = FloatingPointUtils::convertUInt64ToFloat(static_cast<uint64_t>(lconVal));
                     }
                     else
                     {
-                        dconVal = FloatingPointUtils::convertInt64ToFloat(lconVal);
+                        dconVal = static_cast<float>(lconVal);
                     }
                     return gtBashTreeToConstDbl(tree, dconVal);
                 }
@@ -20030,13 +20030,6 @@ ValueSize GenTreeIndir::ValueSize() const
 
 bool GenTreeIntConCommon::ImmedValNeedsReloc(Compiler* comp)
 {
-#if defined(TARGET_POWERPC64)
-    if (comp->IsAot() && IsIconHandle())
-    {
-        return true;
-    }
-#endif
-
     return comp->opts.compReloc && IsIconHandle();
 }
 

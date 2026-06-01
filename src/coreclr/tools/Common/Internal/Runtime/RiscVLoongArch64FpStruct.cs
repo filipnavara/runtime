@@ -20,6 +20,7 @@ namespace Internal.JitInterface
         PosIntFloat     = 3,
         PosSizeShift1st = 4, // 2 bits
         PosSizeShift2nd = 6, // 2 bits
+
         UseIntCallConv = 0, // struct is passed according to integer calling convention
 
         // The flags and bitfields
@@ -32,9 +33,9 @@ namespace Internal.JitInterface
         // Note: flags OnlyOne, BothFloat, FloatInt, and IntFloat are mutually exclusive
     }
 
-    // On RISC-V and LoongArch64 a struct with up to two non-empty fields, at least one of them floating-point,
-    // can be passed in registers according to hardware FP calling convention.
-    // FpStructInRegistersInfo represents passing information for such parameters.
+    // On RISC-V and LoongArch a struct with up to two non-empty fields, at least one of them floating-point,
+    // can be passed in registers according to hardware FP calling convention. FpStructInRegistersInfo represents
+    // passing information for such parameters.
     public struct FpStructInRegistersInfo
     {
         public FpStruct flags;
@@ -60,14 +61,6 @@ namespace Internal.JitInterface
             ENREGISTERED_PARAMTYPE_MAXSIZE = 16,
             TARGET_POINTER_SIZE = 8;
 
-        private static uint GetFpStructFieldSizeShift(uint size)
-        {
-            Debug.Assert(size >= 1 && size <= 8);
-            Debug.Assert((size & (size - 1)) == 0, "size needs to be a power of 2");
-            const int sizeShiftLUT = (0 << (1*2)) | (1 << (2*2)) | (2 << (4*2)) | (3 << (8*2));
-            return (uint)((sizeShiftLUT >> ((int)size * 2)) & 0b11);
-        }
-
         private static void SetFpStructInRegistersInfoField(ref FpStructInRegistersInfo info, int index,
             bool isFloating, uint size, uint offset)
         {
@@ -77,14 +70,15 @@ namespace Internal.JitInterface
 
             Debug.Assert(size >= 1 && size <= 8);
             Debug.Assert((size & (size - 1)) == 0, "size needs to be a power of 2");
-            uint sizeShift = GetFpStructFieldSizeShift(size);
+            const int sizeShiftLUT = (0 << (1*2)) | (1 << (2*2)) | (2 << (4*2)) | (3 << (8*2));
+            int sizeShift = (sizeShiftLUT >> ((int)size * 2)) & 0b11;
 
             // Use FloatInt and IntFloat as marker flags for 1st and 2nd field respectively being floating.
             // Fix to real flags (with OnlyOne and BothFloat) after flattening is complete.
             Debug.Assert((int)PosIntFloat == (int)PosFloatInt + 1, "FloatInt and IntFloat need to be adjacent");
             Debug.Assert((int)PosSizeShift2nd == (int)PosSizeShift1st + 2, "SizeShift1st and 2nd need to be adjacent");
             int floatFlag = Convert.ToInt32(isFloating) << ((int)PosFloatInt + index);
-            int sizeShiftMask = (int)sizeShift << ((int)PosSizeShift1st + 2 * index);
+            int sizeShiftMask = sizeShift << ((int)PosSizeShift1st + 2 * index);
 
             info.flags |= (FpStruct)(floatFlag | sizeShiftMask);
             (index == 0 ? ref info.offset1st : ref info.offset2nd) = offset;

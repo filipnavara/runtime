@@ -730,7 +730,7 @@ CONFIG_STRING(JitGuardedDevirtualizationRange, "JitGuardedDevirtualizationRange"
 CONFIG_INTEGER(JitRandomGuardedDevirtualization, "JitRandomGuardedDevirtualization", 0)
 
 // Enable insertion of patchpoints into Tier0 methods, switching to optimized where needed.
-#if defined(FEATURE_ON_STACK_REPLACEMENT)
+#ifdef FEATURE_ON_STACK_REPLACEMENT
 RELEASE_CONFIG_INTEGER(TC_OnStackReplacement, "TC_OnStackReplacement", 1)
 #else
 RELEASE_CONFIG_INTEGER(TC_OnStackReplacement, "TC_OnStackReplacement", 0)

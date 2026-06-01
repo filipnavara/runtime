@@ -45,7 +45,7 @@
 
 #elif defined(TARGET_64BIT)
 
-#if defined(FEATURE_TIERED_COMPILATION)
+#ifdef FEATURE_TIERED_COMPILATION
     // FEATURE_ON_STACK_REPLACEMENT is only needed for tiered compilation.
     #define FEATURE_ON_STACK_REPLACEMENT
 #endif // FEATURE_TIERED_COMPILATION

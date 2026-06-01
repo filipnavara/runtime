@@ -33,7 +33,6 @@ namespace ILCompiler
             if (!exportName.IsNull)
             {
                 exportName = _factory.NameMangler.NodeMangler.ExternMethod(exportName, method);
-
                 _factory.NodeAliases.Add(methodEntryPoint, (exportName, exportHidden));
             }
 

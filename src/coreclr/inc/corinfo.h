@@ -2030,9 +2030,7 @@ struct CORINFO_SWIFT_LOWERING
 
 #define MAX_FPSTRUCT_LOWERED_ELEMENTS 8
 
-// Lowering information on fields of a struct passed by hardware floating-point calling convention.
-// RISC-V and LoongArch currently use this for up to two non-empty fields. PPC64LE also uses it
-// for homogeneous floating-point aggregates of up to eight elements.
+// Lowering information on fields of a struct passed by hardware floating-point calling convention on RISC-V and LoongArch
 struct CORINFO_FPSTRUCT_LOWERING
 {
     // Whether the struct should be passed by integer calling convention (cannot be passed by FP calling convention).
@@ -3205,8 +3203,8 @@ public:
     // Classifies a swift structure into primitives or an implicit byref for ABI purposes.
     virtual void getSwiftLowering(CORINFO_CLASS_HANDLE structHnd, CORINFO_SWIFT_LOWERING* pLowering) = 0;
 
-    // Returns lowering info for fields of a RISC-V/LoongArch struct or PPC64LE homogeneous aggregate passed
-    // in registers according to hardware floating-point calling convention.
+    // Returns lowering info for fields of a RISC-V/LoongArch struct passed in registers according to
+    // hardware floating-point calling convention.
     virtual void getFpStructLowering(CORINFO_CLASS_HANDLE structHnd, CORINFO_FPSTRUCT_LOWERING* pLowering) = 0;
 
     // Returns the primitive type for passing/returning a Wasm struct by value,

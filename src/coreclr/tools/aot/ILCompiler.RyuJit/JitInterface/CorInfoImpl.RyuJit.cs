@@ -809,13 +809,9 @@ namespace Internal.JitInterface
 
             ISymbolNode entryPoint;
             if (mangledName != null)
-            {
                 entryPoint = _compilation.NodeFactory.ExternFunctionSymbol(new Utf8String(mangledName));
-            }
             else
-            {
                 entryPoint = _compilation.NodeFactory.MethodEntrypoint(methodDesc);
-            }
 
             return entryPoint;
         }

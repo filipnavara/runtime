@@ -9809,9 +9809,8 @@ void CEEInfo::getFpStructLowering(CORINFO_CLASS_HANDLE structHnd, CORINFO_FPSTRU
     if (info.flags != FpStruct::UseIntCallConv)
     {
         pLowering->byIntegerCallConv = false;
-
-        pLowering->offsets[0]         = info.offset1st;
-        pLowering->offsets[1]         = info.offset2nd;
+        pLowering->offsets[0] = info.offset1st;
+        pLowering->offsets[1] = info.offset2nd;
         pLowering->numLoweredElements = (info.flags & FpStruct::OnlyOne) ? 1ul : 2ul;
 
         if (info.flags & (FpStruct::BothFloat | FpStruct::FloatInt | FpStruct::OnlyOne))
@@ -13936,7 +13935,7 @@ BOOL TypeLayoutCheck(MethodTable * pMT, PCCOR_SIGNATURE pBlob, BOOL printDiff)
         }
     }
 
-#if defined(FEATURE_HFA)
+#ifdef FEATURE_HFA
     if (dwFlags & READYTORUN_LAYOUT_HFA)
     {
         uint32_t dwExpectedHFAType;

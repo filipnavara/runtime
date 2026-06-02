@@ -17301,7 +17301,7 @@ GenTree* Compiler::gtFoldExprUnaryConstLng(GenTreeUnOp* tree, GenTreeIntConCommo
                     }
                     else
                     {
-                        dconVal = static_cast<float>(lconVal);
+                        dconVal = FloatingPointUtils::convertInt64ToFloat(lconVal);
                     }
                     return gtBashTreeToConstDbl(tree, dconVal);
                 }

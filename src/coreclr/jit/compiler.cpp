@@ -862,16 +862,11 @@ var_types Compiler::getReturnTypeForStruct(CORINFO_CLASS_HANDLE     clsHnd,
         howToReturnStruct   = SPK_ByReference;
         useType             = TYP_UNKNOWN;
     }
-#elif defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
-#if defined(TARGET_POWERPC64)
-    const bool     isManagedCall           = callConv == CorInfoCallConvExtension::Managed;
-    const unsigned maxFpStructReturnBytes  = isManagedCall ? (TARGET_POINTER_SIZE * 2) : MAX_RET_MULTIREG_BYTES;
-#else
+#elif defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
     const unsigned maxFpStructReturnBytes = TARGET_POINTER_SIZE * 2;
-#endif
     if (structSize <= maxFpStructReturnBytes)
     {
-        const CORINFO_FPSTRUCT_LOWERING* lowering = GetFpStructLowering(clsHnd, callConv);
+        const CORINFO_FPSTRUCT_LOWERING* lowering = GetFpStructLowering(clsHnd);
         if (!lowering->byIntegerCallConv)
         {
             if (lowering->numLoweredElements == 1)
@@ -882,11 +877,7 @@ var_types Compiler::getReturnTypeForStruct(CORINFO_CLASS_HANDLE     clsHnd,
             }
             else
             {
-#if defined(TARGET_POWERPC64)
-                assert((lowering->numLoweredElements >= 2) && (lowering->numLoweredElements <= MAX_RET_REG_COUNT));
-#else
                 assert(lowering->numLoweredElements == 2);
-#endif
                 howToReturnStruct = SPK_ByValue;
                 useType           = TYP_STRUCT;
             }
@@ -962,6 +953,7 @@ var_types Compiler::getReturnTypeForStruct(CORINFO_CLASS_HANDLE     clsHnd,
         // or if we should return it using a return buffer register
         //
 #if defined(TARGET_POWERPC64)
+        const bool     isManagedCall          = callConv == CorInfoCallConvExtension::Managed;
         const unsigned maxMultiregReturnBytes = isManagedCall ? (TARGET_POINTER_SIZE * 2) : MAX_RET_MULTIREG_BYTES;
 #else
         const unsigned maxMultiregReturnBytes = MAX_RET_MULTIREG_BYTES;
@@ -7997,7 +7989,7 @@ void Compiler::GetStructTypeOffset(
     GetStructTypeOffset(structDesc, type0, type1, offset0, offset1);
 }
 
-#elif defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
+#elif defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
 //------------------------------------------------------------------------
 // GetFpStructLowering: Gets the information on passing of a struct according to hardware floating-point
 // calling convention, i.e. the types and offsets of struct fields lowered for passing.
@@ -8041,49 +8033,6 @@ const CORINFO_FPSTRUCT_LOWERING* Compiler::GetFpStructLowering(CORINFO_CLASS_HAN
         }
 #endif // DEBUG
     }
-    return lowering;
-}
-
-//------------------------------------------------------------------------
-// GetFpStructLowering: Gets the call-convention-adjusted information on passing
-// a struct according to hardware floating-point calling convention.
-//
-// Arguments:
-//      structHandle - type handle
-//      callConv     - call convention for the ABI classification
-//
-// Return value:
-//      Lowering info for the struct fields
-const CORINFO_FPSTRUCT_LOWERING* Compiler::GetFpStructLowering(CORINFO_CLASS_HANDLE     structHandle,
-                                                               CorInfoCallConvExtension callConv)
-{
-    const CORINFO_FPSTRUCT_LOWERING* lowering = GetFpStructLowering(structHandle);
-
-#if defined(TARGET_POWERPC64)
-    if ((callConv != CorInfoCallConvExtension::Managed) && !lowering->byIntegerCallConv)
-    {
-        bool hasFloat   = false;
-        bool hasInteger = false;
-        for (unsigned i = 0; i < lowering->numLoweredElements; i++)
-        {
-            const var_types loweredType = JITtype2varType(lowering->loweredElements[i]);
-            hasFloat |= varTypeIsFloating(loweredType);
-            hasInteger |= varTypeIsIntegralOrI(loweredType);
-        }
-
-        if (hasFloat && hasInteger)
-        {
-            // PPC64 ELFv2 only uses the FP aggregate convention for homogeneous
-            // floating-point aggregates. Mixed FP/integer aggregates use the
-            // integer aggregate convention.
-            CORINFO_FPSTRUCT_LOWERING* integerLowering = new (this, CMK_CallArgs) CORINFO_FPSTRUCT_LOWERING;
-            *integerLowering                            = *lowering;
-            integerLowering->byIntegerCallConv          = true;
-            return integerLowering;
-        }
-    }
-#endif
-
     return lowering;
 }
 

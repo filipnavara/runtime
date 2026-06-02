@@ -9770,9 +9770,9 @@ CorInfoTypeWithMod CEEInfo::getArgType (
     return result;
 }
 
-// Now the implementation is focused on architecture-specific aggregate lowering:
-// - RISC-V and LoongArch64 lower up to two flattened fields containing at least one FP field.
-// - PPC64LE lowers only homogeneous floating-point aggregates.
+// Now the implementation is only focused on the float and int fields info,
+// while a struct-arg has no more than two fields and total size is no larger than two-pointer-size.
+// These depends on the platform's ABI rules.
 //
 // The returned value's encoding details how a struct argument uses float and int registers:
 // see the struct `CORINFO_FPSTRUCT_LOWERING`.
@@ -9786,25 +9786,7 @@ void CEEInfo::getFpStructLowering(CORINFO_CLASS_HANDLE structHnd, CORINFO_FPSTRU
 
     JIT_TO_EE_TRANSITION();
 
-#if defined(TARGET_POWERPC64)
-    Ppc64leHomogeneousAggregateInfo hfaInfo = {};
-    if (MethodTable::GetPpc64leHomogeneousAggregateInfo(TypeHandle(structHnd), &hfaInfo))
-    {
-        pLowering->byIntegerCallConv  = false;
-        pLowering->numLoweredElements = hfaInfo.elementCount;
-        CorInfoType loweredType       = (hfaInfo.elementSize == sizeof(double)) ? CORINFO_TYPE_DOUBLE
-                                                                                : CORINFO_TYPE_FLOAT;
-        for (unsigned i = 0; i < hfaInfo.elementCount; i++)
-        {
-            pLowering->loweredElements[i] = loweredType;
-            pLowering->offsets[i]         = i * hfaInfo.elementSize;
-        }
-    }
-    else
-    {
-        pLowering->byIntegerCallConv = true;
-    }
-#elif defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
     FpStructInRegistersInfo info = MethodTable::GetFpStructInRegistersInfo(TypeHandle(structHnd));
     if (info.flags != FpStruct::UseIntCallConv)
     {
@@ -9836,7 +9818,7 @@ void CEEInfo::getFpStructLowering(CORINFO_CLASS_HANDLE structHnd, CORINFO_FPSTRU
     {
         pLowering->byIntegerCallConv = true;
     }
-#endif // TARGET_POWERPC64 / TARGET_RISCV64 / TARGET_LOONGARCH64
+#endif // TARGET_RISCV64 || TARGET_LOONGARCH64
 
     EE_TO_JIT_TRANSITION();
 }

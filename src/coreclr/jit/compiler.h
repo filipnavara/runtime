@@ -12550,13 +12550,11 @@ public:
     void GetStructTypeOffset(
         CORINFO_CLASS_HANDLE typeHnd, var_types* type0, var_types* type1, uint8_t* offset0, uint8_t* offset1);
 
-#elif defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
+#elif defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
     typedef JitHashTable<CORINFO_CLASS_HANDLE, JitPtrKeyFuncs<struct CORINFO_CLASS_STRUCT_>, CORINFO_FPSTRUCT_LOWERING*>
                                      FpStructLoweringMap;
     FpStructLoweringMap*             m_fpStructLoweringCache = nullptr;
     const CORINFO_FPSTRUCT_LOWERING* GetFpStructLowering(CORINFO_CLASS_HANDLE structHandle);
-    const CORINFO_FPSTRUCT_LOWERING* GetFpStructLowering(CORINFO_CLASS_HANDLE     structHandle,
-                                                         CorInfoCallConvExtension callConv);
 #endif // defined(UNIX_AMD64_ABI)
 
     bool fgTryMorphStructArg(CallArg* arg);

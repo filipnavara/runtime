@@ -61,9 +61,11 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
                                                   ClassLayout* structLayout,
                                                   WellKnownArg /*wellKnownParam*/)
 {
-    const CORINFO_FPSTRUCT_LOWERING* lowering = nullptr;
-
     const bool isManagedCall = m_info.CallConv == CorInfoCallConvExtension::Managed;
+
+    bool      isHfaStruct = false;
+    var_types hfaType     = TYP_UNDEF;
+    unsigned  hfaElemSize = 0;
 
     unsigned intFields  = 0;
     unsigned floatFields = 0;
@@ -80,19 +82,16 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
         }
         else if (!structLayout->IsBlockLayout())
         {
-            lowering = comp->GetFpStructLowering(structLayout->GetClassHandle(), m_info.CallConv);
-            if (!lowering->byIntegerCallConv)
+            CORINFO_CLASS_HANDLE classHandle = structLayout->GetClassHandle();
+            isHfaStruct                      = comp->IsHfa(classHandle);
+            if (isHfaStruct)
             {
-                assert((lowering->numLoweredElements >= 1) && (lowering->numLoweredElements <= MAX_MULTIREG_COUNT));
-                INDEBUG(unsigned debugIntFields = 0;)
-                for (size_t i = 0; i < lowering->numLoweredElements; ++i)
-                {
-                    var_types loweredType = JITtype2varType(lowering->loweredElements[i]);
-                    floatFields += (unsigned)varTypeIsFloating(loweredType);
-                    INDEBUG(debugIntFields += (unsigned)varTypeIsIntegralOrI(loweredType);)
-                }
-                intFields = static_cast<unsigned>(lowering->numLoweredElements) - floatFields;
-                assert(debugIntFields == intFields);
+                hfaType     = comp->GetHfaType(classHandle);
+                hfaElemSize = genTypeSize(hfaType);
+                floatFields = comp->GetHfaCount(classHandle);
+                assert(varTypeIsFloating(hfaType));
+                assert((floatFields >= 1) && (floatFields <= MAX_MULTIREG_COUNT));
+                assert(passedSize == (floatFields * hfaElemSize));
             }
         }
     }
@@ -158,17 +157,15 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
     {
         if ((floatFields == 1) && (intFields == 0))
         {
-            unsigned offset = 0;
-            if (lowering != nullptr)
+            unsigned size = passedSize;
+            if (isHfaStruct)
             {
-                assert(lowering->numLoweredElements == 1);
-                type       = JITtype2varType(lowering->loweredElements[0]);
-                passedSize = genTypeSize(type);
-                offset     = lowering->offsets[0];
+                type = hfaType;
+                size = hfaElemSize;
             }
             assert(varTypeIsFloating(type));
 
-            ABIPassingSegment seg = ABIPassingSegment::InRegister(m_floatRegs.Dequeue(), offset, passedSize);
+            ABIPassingSegment seg = ABIPassingSegment::InRegister(m_floatRegs.Dequeue(), 0, size);
             // PPC64 ELFv2 maps every fixed argument to an ordered parameter slot.
             // Floating-point values are passed in FPRs, but they still consume
             // the corresponding GPR/stack slot that determines where the
@@ -179,26 +176,23 @@ ABIPassingInformation Ppc64leClassifier::Classify(Compiler*    comp,
         else
         {
             assert(varTypeIsStruct(type));
-            assert(lowering != nullptr);
-            assert(!lowering->byIntegerCallConv);
-            assert((floatFields + intFields) == lowering->numLoweredElements);
-            assert(lowering->numLoweredElements <= MAX_MULTIREG_COUNT);
+            assert(isHfaStruct);
+            assert(intFields == 0);
+            assert(floatFields <= MAX_MULTIREG_COUNT);
 
-            ABIPassingInformation info(comp, lowering->numLoweredElements);
-            for (size_t i = 0; i < lowering->numLoweredElements; i++)
+            ABIPassingInformation info(comp, floatFields);
+            for (unsigned i = 0; i < floatFields; i++)
             {
-                var_types loweredType = JITtype2varType(lowering->loweredElements[i]);
-                assert(varTypeIsFloating(loweredType) || varTypeIsIntegralOrI(loweredType));
-                RegisterQueue& queue = varTypeIsFloating(loweredType) ? m_floatRegs : m_intRegs;
-                info.Segment(i) = ABIPassingSegment::InRegister(queue.Dequeue(), lowering->offsets[i],
-                                                                 genTypeSize(loweredType));
+                info.Segment(i) = ABIPassingSegment::InRegister(m_floatRegs.Dequeue(), i * hfaElemSize, hfaElemSize);
             }
-            if (intFields == 0)
-            {
-                consumeParameterSlots(roundUp(passedSize, TARGET_POINTER_SIZE) / TARGET_POINTER_SIZE);
-            }
+            consumeParameterSlots(roundUp(passedSize, TARGET_POINTER_SIZE) / TARGET_POINTER_SIZE);
             return info;
         }
+    }
+
+    if (isHfaStruct)
+    {
+        return ABIPassingInformation::FromSegmentByValue(comp, passOnStack(0, passedSize));
     }
 
     if (m_intRegs.Count() > 0)

@@ -2028,7 +2028,7 @@ struct CORINFO_SWIFT_LOWERING
     size_t numLoweredElements;
 };
 
-#define MAX_FPSTRUCT_LOWERED_ELEMENTS 8
+#define MAX_FPSTRUCT_LOWERED_ELEMENTS 2
 
 // Lowering information on fields of a struct passed by hardware floating-point calling convention on RISC-V and LoongArch
 struct CORINFO_FPSTRUCT_LOWERING

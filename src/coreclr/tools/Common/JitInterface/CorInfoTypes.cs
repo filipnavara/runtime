@@ -1691,13 +1691,13 @@ namespace Internal.JitInterface
         private byte _byIntegerCallConv;
         public bool byIntegerCallConv { get => _byIntegerCallConv != 0; set => _byIntegerCallConv = value ? (byte)1 : (byte)0; }
 
-        [InlineArray(8)]
+        [InlineArray(2)]
         private struct FpStructLoweredTypes
         {
             public CorInfoType type;
         }
 
-        [InlineArray(8)]
+        [InlineArray(2)]
         private struct LoweredOffsets
         {
             public uint offset;

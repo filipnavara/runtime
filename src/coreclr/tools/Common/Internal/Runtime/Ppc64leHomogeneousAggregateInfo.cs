@@ -9,7 +9,7 @@ namespace Internal.JitInterface
 {
     public readonly struct Ppc64leHomogeneousAggregateInfo
     {
-        private const int MaxLoweredElements = 8;
+        private const int MaxElements = 8;
 
         public const int PosElementCount = 9;
         public const uint HomogeneousAggregate = 1u << 8;
@@ -53,7 +53,7 @@ namespace Internal.JitInterface
                 return false;
 
             int elemCount = size / elemSize;
-            if (elemCount is < 1 or > MaxLoweredElements)
+            if (elemCount is < 1 or > MaxElements)
                 return false;
 
             info = new Ppc64leHomogeneousAggregateInfo((uint)elemSize, (uint)elemCount);

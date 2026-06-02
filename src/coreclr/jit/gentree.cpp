@@ -32481,14 +32481,14 @@ void ReturnTypeDesc::InitializeStructReturnType(Compiler*                comp,
             assert(returnType != TYP_STRUCT);
             m_regType[0] = returnType;
 
-#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
-            const CORINFO_FPSTRUCT_LOWERING* lowering = comp->GetFpStructLowering(retClsHnd, callConv);
+#if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
+            const CORINFO_FPSTRUCT_LOWERING* lowering = comp->GetFpStructLowering(retClsHnd);
             if (!lowering->byIntegerCallConv)
             {
                 assert(lowering->numLoweredElements == 1);
                 m_fieldOffset[0] = lowering->offsets[0];
             }
-#endif // defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64) || defined(TARGET_POWERPC64)
+#endif // defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
             break;
         }
 
@@ -32556,17 +32556,29 @@ void ReturnTypeDesc::InitializeStructReturnType(Compiler*                comp,
                 m_regType[i] = comp->getJitGCType(gcPtrs[i]);
             }
 
-#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64) || defined(TARGET_POWERPC64)
+#elif defined(TARGET_POWERPC64)
             assert(structSize > sizeof(float));
-            assert(structSize <= MAX_RET_MULTIREG_BYTES);
-            BYTE gcPtrs[MAX_RET_REG_COUNT] = {};
+            assert(structSize <= (2 * TARGET_POINTER_SIZE));
+            BYTE gcPtrs[2] = {TYPE_GC_NONE, TYPE_GC_NONE};
             comp->info.compCompHnd->getClassGClayout(retClsHnd, &gcPtrs[0]);
-            const CORINFO_FPSTRUCT_LOWERING* lowering = comp->GetFpStructLowering(retClsHnd, callConv);
+            for (unsigned i = 0; i < 2; ++i)
+            {
+                m_regType[i]     = comp->getJitGCType(gcPtrs[i]);
+                m_fieldOffset[i] = i * TARGET_POINTER_SIZE;
+            }
+
+#elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
+            assert(structSize > sizeof(float));
+            assert(structSize <= (2 * TARGET_POINTER_SIZE));
+            BYTE gcPtrs[2] = {TYPE_GC_NONE, TYPE_GC_NONE};
+            comp->info.compCompHnd->getClassGClayout(retClsHnd, &gcPtrs[0]);
+            const CORINFO_FPSTRUCT_LOWERING* lowering = comp->GetFpStructLowering(retClsHnd);
             if (!lowering->byIntegerCallConv)
             {
                 comp->compFloatingPointUsed = true;
-                assert((lowering->numLoweredElements >= 1) && (lowering->numLoweredElements <= MAX_RET_REG_COUNT));
-                for (unsigned i = 0; i < lowering->numLoweredElements; ++i)
+                assert(lowering->numLoweredElements == MAX_RET_REG_COUNT);
+                static_assert(MAX_RET_REG_COUNT == MAX_FPSTRUCT_LOWERED_ELEMENTS, "");
+                for (unsigned i = 0; i < MAX_RET_REG_COUNT; ++i)
                 {
                     m_regType[i]     = JITtype2varType(lowering->loweredElements[i]);
                     m_fieldOffset[i] = lowering->offsets[i];
@@ -32576,14 +32588,7 @@ void ReturnTypeDesc::InitializeStructReturnType(Compiler*                comp,
                         m_regType[i]  = comp->getJitGCType(gcPtrs[slot]);
                     }
                 }
-#ifdef DEBUG
-                bool hasFloatReg = false;
-                for (unsigned i = 0; i < lowering->numLoweredElements; i++)
-                {
-                    hasFloatReg |= varTypeIsFloating(m_regType[i]);
-                }
-                assert(hasFloatReg);
-#endif
+                assert(varTypeIsFloating(m_regType[0]) || varTypeIsFloating(m_regType[1]));
             }
             else
             {

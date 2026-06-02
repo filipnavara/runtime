@@ -853,6 +853,7 @@ namespace Ppc64leHomogeneousAggregate
 {
     enum Flags
     {
+        MaxElements     = 8,
         PosElementCount = 9, // 4 bits
 
         HomogeneousAggregate = 1 << 8,
@@ -881,8 +882,9 @@ struct Ppc64leHomogeneousAggregateInfo
 #endif // TARGET_POWERPC64
 
 #if defined(TARGET_RISCV64) || defined(TARGET_LOONGARCH64)
-// On RISC-V and LoongArch64 a struct with up to two non-empty fields, at least one of them floating-point,
-// can be passed in registers according to hardware FP calling convention.
+// On RISC-V and LoongArch a struct with up to two non-empty fields, at least one of them floating-point,
+// can be passed in registers according to hardware FP calling convention. FpStructInRegistersInfo represents
+// passing information for such parameters.
 struct FpStructInRegistersInfo
 {
     FpStruct::Flags flags;

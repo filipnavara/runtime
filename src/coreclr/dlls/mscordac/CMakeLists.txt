@@ -47,7 +47,11 @@ else(CLR_CMAKE_HOST_WIN32)
         endif()
 
         if (CLR_CMAKE_HOST_ARCH_POWERPC64)
-            set(JUMP_INSTRUCTION b)
+            # PPC64 ELFv2 calls to an interposable symbol need a call-site nop
+            # that the linker can use for TOC restoration. A plain tail branch
+            # to a different TOC domain is not valid, so generate forwarding
+            # wrappers using bl; nop; blr instead of branch aliases.
+            set(JUMP_INSTRUCTION bl)
         elseif (CLR_CMAKE_HOST_ARCH_ARM OR CLR_CMAKE_HOST_ARCH_ARM64 OR CLR_CMAKE_HOST_ARCH_LOONGARCH64)
             set(JUMP_INSTRUCTION b)
         elseif (CLR_CMAKE_HOST_ARCH_RISCV64)

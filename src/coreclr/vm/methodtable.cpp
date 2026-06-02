@@ -2763,7 +2763,7 @@ bool MethodTable::GetPpc64leHomogeneousAggregateInfo(TypeHandle th, Ppc64leHomog
     }
 
     const unsigned elemCount = size / elemSize;
-    if ((elemCount < 1) || (elemCount > MAX_FPSTRUCT_LOWERED_ELEMENTS))
+    if ((elemCount < 1) || (elemCount > Ppc64leHomogeneousAggregate::MaxElements))
     {
         return false;
     }

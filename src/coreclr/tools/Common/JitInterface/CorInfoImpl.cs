@@ -3656,26 +3656,7 @@ namespace Internal.JitInterface
             TypeDesc typeDesc = HandleToObject(structHnd);
             if (_compilation.TypeSystemContext.Target.Architecture == TargetArchitecture.Ppc64le)
             {
-                if (Ppc64leHomogeneousAggregateInfo.TryGet(typeDesc, out Ppc64leHomogeneousAggregateInfo hfaInfo))
-                {
-                    lowering.byIntegerCallConv = false;
-                    int elemCount = (int)hfaInfo.ElementCount;
-                    lowering.numLoweredElements = elemCount;
-
-                    CorInfoType loweredType = (hfaInfo.ElementSize == sizeof(double)) ?
-                        CorInfoType.CORINFO_TYPE_DOUBLE : CorInfoType.CORINFO_TYPE_FLOAT;
-
-                    for (int i = 0; i < elemCount; i++)
-                    {
-                        lowering.LoweredElements[i] = loweredType;
-                        lowering.Offsets[i] = (uint)(i * hfaInfo.ElementSize);
-                    }
-                }
-                else
-                {
-                    lowering.byIntegerCallConv = true;
-                }
-
+                lowering.byIntegerCallConv = true;
                 return;
             }
 

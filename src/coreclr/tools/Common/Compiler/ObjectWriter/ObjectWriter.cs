@@ -452,6 +452,7 @@ namespace ILCompiler.ObjectWriter
 
             Dictionary<ObjectNode, ObjectData> precomputedData = GetDataParallelism != 1 ? PrecomputeObjectData(nodes, logger) : null;
 
+            var phaseSw = Stopwatch.StartNew(); // PROFILE
             List<ISymbolRangeNode> symbolRangeNodes = [];
             List<BlockToRelocate> blocksToRelocate = [];
             List<ChecksumsToCalculate> checksumRelocations = [];
@@ -624,6 +625,7 @@ namespace ILCompiler.ObjectWriter
                 sectionWriter.EmitData(nodeContents.Data);
             }
 
+            if (logger.IsVerbose) logger.LogMessage($"  PROFILE emit loop: {phaseSw.Elapsed}"); phaseSw.Restart(); // PROFILE
             RecordFoldedSymbolDefinitions(_definedSymbols);
 
             foreach (ISymbolRangeNode range in symbolRangeNodes)
@@ -659,6 +661,7 @@ namespace ILCompiler.ObjectWriter
                 EmitSymbolRangeDefinition(rangeNodeName, startNodeName, endNodeName, endSymbol);
             }
 
+            if (logger.IsVerbose) logger.LogMessage($"  PROFILE symbol ranges etc: {phaseSw.Elapsed}"); phaseSw.Restart(); // PROFILE
             foreach (BlockToRelocate blockToRelocate in blocksToRelocate)
             {
                 ArrayBuilder<Relocation> checksumRelocationsBuilder = default;
@@ -698,6 +701,7 @@ namespace ILCompiler.ObjectWriter
 
             if (_options.HasFlag(ObjectWritingOptions.GenerateDebugInfo))
             {
+                if (logger.IsVerbose) logger.LogMessage($"  PROFILE relocs etc: {phaseSw.Elapsed}"); phaseSw.Restart(); // PROFILE
                 EmitDebugInfo(nodes, logger);
             }
 
@@ -710,7 +714,9 @@ namespace ILCompiler.ObjectWriter
                 relocSectionIndex++;
             }
 
+            if (logger.IsVerbose) logger.LogMessage($"  PROFILE debug info etc: {phaseSw.Elapsed}"); phaseSw.Restart(); // PROFILE
             EmitObjectFile(outputFileStream);
+            if (logger.IsVerbose) logger.LogMessage($"  PROFILE write file: {phaseSw.Elapsed}"); // PROFILE
 
             if (checksumRelocations.Count > 0)
             {

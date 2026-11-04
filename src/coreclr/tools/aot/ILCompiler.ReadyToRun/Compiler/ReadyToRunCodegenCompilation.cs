@@ -186,7 +186,12 @@ namespace ILCompiler
             public int ExpectedILProviderVersion { get; }
             private readonly CompilationModuleGroup _compilationModuleGroup;
 
+            // The cache is flushed when it grows above this count
+            public const int MaxCount = 1000;
+
             public ILCache(ReadyToRunILProvider provider, CompilationModuleGroup compilationModuleGroup)
+                // Size the table so that it doesn't need to expand before it's flushed
+                : base(initialCapacity: MaxCount + 1)
             {
                 ILProvider = provider;
                 ExpectedILProviderVersion = provider.Version;
@@ -896,7 +901,7 @@ namespace ILCompiler
 
             void ResetILCache()
             {
-                if (_methodILCache.Count > 1000 || _methodILCache.ILProvider.Version != _methodILCache.ExpectedILProviderVersion)
+                if (_methodILCache.Count > ILCache.MaxCount || _methodILCache.ILProvider.Version != _methodILCache.ExpectedILProviderVersion)
                     _methodILCache = new ILCache(_methodILCache.ILProvider, NodeFactory.CompilationModuleGroup);
             }
 

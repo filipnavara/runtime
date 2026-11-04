@@ -79,7 +79,7 @@ namespace ILCompiler
         public virtual MethodIL GetMethodIL(MethodDesc method)
         {
             // Flush the cache when it grows too big
-            if (_methodILCache.Count > 1000)
+            if (_methodILCache.Count > ILCache.MaxCount)
                 _methodILCache = new ILCache(_methodILCache.ILProvider);
 
             return _methodILCache.GetOrCreateValue(method).MethodIL;
@@ -561,7 +561,14 @@ namespace ILCompiler
         {
             public ILProvider ILProvider { get; }
 
+            // The cache is flushed when it grows above this count (see GetMethodIL)
+            public const int MaxCount = 1000;
+
             public ILCache(ILProvider provider)
+                // Size the table so that it doesn't need to expand before it's flushed. Expanding takes
+                // a lock and since the cache is flushed often, it would otherwise be expanded from the
+                // minimal size over and over again while all compilation threads contend on it.
+                : base(initialCapacity: MaxCount + 1)
             {
                 ILProvider = provider;
             }

@@ -49,7 +49,7 @@ namespace Internal.TypeSystem
         /// initial step, as this approach allows the TryGetValue logic to always
         /// succeed without needing any length or null checks.)
         /// </summary>
-        private volatile TValue[] _hashtable = new TValue[_initialSize];
+        private volatile TValue[] _hashtable;
 
         /// <summary>
         /// Tracks the hashtable being used by expansion. Used as a sentinel
@@ -77,7 +77,7 @@ namespace Internal.TypeSystem
         /// While this doesn't strictly need to be volatile, having threads read stale values
         /// triggers a lot of unneeded attempts to expand.
         /// </summary>
-        private volatile int _resizeCount = _initialSize * _fillPercentageBeforeResize / 100;
+        private volatile int _resizeCount;
 
         /// <summary>
         /// Get the underlying array for the hashtable at this time.
@@ -147,21 +147,25 @@ namespace Internal.TypeSystem
         /// to be a generally lock free api (unless an add is necessary)
         /// </summary>
         public LockFreeReaderHashtable()
+            : this(0)
         {
+        }
 
-#if DEBUG
-            // Ensure the initial value is a power of 2
-            bool foundAOne = false;
-            for (int i = 0; i < 32; i++)
-            {
-                int lastBit = _initialSize >> i;
-                if ((lastBit & 0x1) == 0x1)
-                {
-                    Debug.Assert(!foundAOne);
-                    foundAOne = true;
-                }
-            }
-#endif // DEBUG
+        /// <summary>
+        /// Create the LockFreeReaderHashtable with room for at least <paramref name="initialCapacity"/>
+        /// elements before the underlying array needs to be expanded.
+        /// </summary>
+        public LockFreeReaderHashtable(int initialCapacity)
+        {
+            // The size must be a power of 2
+            int size = _initialSize;
+            while (size * _fillPercentageBeforeResize / 100 < initialCapacity)
+                size = checked(size * 2);
+
+            Debug.Assert((size & (size - 1)) == 0);
+
+            _hashtable = new TValue[size];
+            _resizeCount = size * _fillPercentageBeforeResize / 100;
             _newHashTable = _hashtable;
         }
 

@@ -35,6 +35,9 @@ namespace ILCompiler.ObjectWriter
 
         public void ReserveString(Utf8String text)
         {
+            // The strings are NUL-terminated in the table (FlushReservedStrings also relies on this)
+            Debug.Assert(text.IsNull || !text.AsSpan().Contains((byte)0));
+
             if (!text.IsNull && _stringToOffset.TryAdd(text, uint.MaxValue))
             {
                 (_reservedStrings ??= new List<Utf8String>()).Add(text);
@@ -50,10 +53,10 @@ namespace ILCompiler.ObjectWriter
 
             Span<Utf8String> reservedStringsSpan = CollectionsMarshal.AsSpan(reservedStrings);
 
-            // Establish a deterministic order before the in-place suffix sort.
-            reservedStringsSpan.Sort();
-
-            // Sort strings so matching suffixes are adjacent.
+            // Sort strings so matching suffixes are adjacent. The reserved strings are unique and
+            // can't contain NUL characters, so they differ in some character when compared from the
+            // end and the multi-key sort orders them fully. The result doesn't depend on the order
+            // in which they were reserved.
             MultiKeySort(reservedStringsSpan, 0);
 
             // Add the strings to string table

@@ -32,6 +32,7 @@ namespace Internal.TypeSystem.Ecma
         private int _namespaceLength;
         private TypeDesc[] _genericParameters;
         private MetadataType _baseType;
+        private EcmaMethod[] _virtualMethods;
         private int _hashcode;
 
         internal EcmaType(EcmaModule module, TypeDefinitionHandle handle)
@@ -299,13 +300,25 @@ namespace Internal.TypeSystem.Ecma
 
         public override IEnumerable<EcmaMethod> GetVirtualMethods()
         {
+            // Virtual method resolution enumerates the virtual methods of each type in the hierarchy
+            // once per resolved slot. Cache them so that we don't have to walk all methods of the type
+            // (that can have many non-virtual ones) and resolve their handles over and over.
+            return _virtualMethods ?? InitializeVirtualMethods();
+        }
+
+        private EcmaMethod[] InitializeVirtualMethods()
+        {
             MetadataReader reader = _module.MetadataReader;
+            ArrayBuilder<EcmaMethod> virtualMethods = default;
             foreach (var handle in _typeDefinition.GetMethods())
             {
                 MethodDefinition methodDef = reader.GetMethodDefinition(handle);
                 if ((methodDef.Attributes & MethodAttributes.Virtual) != 0)
-                    yield return _module.GetMethod(handle, this);
+                    virtualMethods.Add(_module.GetMethod(handle, this));
             }
+
+            // Racing threads compute the same array of the same (cached) method objects.
+            return _virtualMethods = virtualMethods.ToArray();
         }
 
         /// <summary>

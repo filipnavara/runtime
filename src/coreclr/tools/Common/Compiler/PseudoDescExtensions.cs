@@ -15,19 +15,8 @@ namespace ILCompiler
             if (!accessor.IsSpecialName || accessor.GetTypicalMethodDefinition() is not EcmaMethod ecmaAccessor)
                 return null;
 
-            var type = ecmaAccessor.OwningType;
-            var reader = type.MetadataReader;
-            foreach (var propertyHandle in reader.GetTypeDefinition(type.Handle).GetProperties())
-            {
-                var accessors = reader.GetPropertyDefinition(propertyHandle).GetAccessors();
-                if (ecmaAccessor.Handle == accessors.Getter
-                    || ecmaAccessor.Handle == accessors.Setter)
-                {
-                    return new PropertyPseudoDesc(type, propertyHandle);
-                }
-            }
-
-            return null;
+            var property = ecmaAccessor.Module.GetPropertyForAccessor(ecmaAccessor.Handle);
+            return property.IsNil ? null : new PropertyPseudoDesc(ecmaAccessor.OwningType, property);
         }
 
         public static EventPseudoDesc GetEventForAccessor(this MethodDesc accessor)
@@ -35,20 +24,8 @@ namespace ILCompiler
             if (!accessor.IsSpecialName || accessor.GetTypicalMethodDefinition() is not EcmaMethod ecmaAccessor)
                 return null;
 
-            var type = ecmaAccessor.OwningType;
-            var reader = type.MetadataReader;
-            foreach (var eventHandle in reader.GetTypeDefinition(type.Handle).GetEvents())
-            {
-                var accessors = reader.GetEventDefinition(eventHandle).GetAccessors();
-                if (ecmaAccessor.Handle == accessors.Adder
-                    || ecmaAccessor.Handle == accessors.Remover
-                    || ecmaAccessor.Handle == accessors.Raiser)
-                {
-                    return new EventPseudoDesc(type, eventHandle);
-                }
-            }
-
-            return null;
+            var @event = ecmaAccessor.Module.GetEventForAccessor(ecmaAccessor.Handle);
+            return @event.IsNil ? null : new EventPseudoDesc(ecmaAccessor.OwningType, @event);
         }
     }
 }

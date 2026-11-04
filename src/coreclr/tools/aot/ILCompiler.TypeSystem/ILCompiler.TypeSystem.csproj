@@ -449,6 +449,9 @@
     <Compile Include="..\..\Common\TypeSystem\Ecma\EcmaMethod.Sorting.cs">
       <Link>Ecma\EcmaMethod.Sorting.cs</Link>
     </Compile>
+    <Compile Include="..\..\Common\TypeSystem\Ecma\EcmaModule.Accessors.cs">
+      <Link>Ecma\EcmaModule.Accessors.cs</Link>
+    </Compile>
     <Compile Include="..\..\Common\TypeSystem\Ecma\EcmaModule.Sorting.cs">
       <Link>Ecma\EcmaModule.Sorting.cs</Link>
     </Compile>

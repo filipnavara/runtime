@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection.Metadata;
@@ -63,6 +64,8 @@ namespace ILCompiler
 
         internal IReadOnlyDictionary<string, bool> FeatureSwitches { get; }
 
+        // Called for every method with code, so remember the answer for each module
+        private readonly ConcurrentDictionary<EcmaModule, bool> _modulesWithEmbeddedTrimmingDescriptor = new ConcurrentDictionary<EcmaModule, bool>();
         private readonly HashSet<ModuleDesc> _rootEntireAssembliesExaminedModules = new HashSet<ModuleDesc>();
 
         private readonly HashSet<string> _rootEntireAssembliesModules;
@@ -271,25 +274,33 @@ namespace ILCompiler
             {
                 dependencies.Add(factory.MethodEntrypoint(moduleCctor), "Module with a static constructor");
             }
-            if (module is EcmaModule ecmaModule)
+            if (module is EcmaModule ecmaModule
+                && _modulesWithEmbeddedTrimmingDescriptor.GetOrAdd(ecmaModule, static m => HasEmbeddedTrimmingDescriptor(m)))
             {
-                foreach (var resourceHandle in ecmaModule.MetadataReader.ManifestResources)
+                dependencies.Add(factory.EmbeddedTrimmingDescriptor(ecmaModule), "Embedded descriptor file");
+            }
+        }
+
+        private static bool HasEmbeddedTrimmingDescriptor(EcmaModule module)
+        {
+            MetadataReader reader = module.MetadataReader;
+            foreach (var resourceHandle in reader.ManifestResources)
+            {
+                ManifestResource resource = reader.GetManifestResource(resourceHandle);
+
+                // Don't try to process linked resources or resources in other assemblies
+                if (!resource.Implementation.IsNil)
                 {
-                    ManifestResource resource = ecmaModule.MetadataReader.GetManifestResource(resourceHandle);
+                    continue;
+                }
 
-                    // Don't try to process linked resources or resources in other assemblies
-                    if (!resource.Implementation.IsNil)
-                    {
-                        continue;
-                    }
-
-                    string resourceName = ecmaModule.MetadataReader.GetString(resource.Name);
-                    if (resourceName == "ILLink.Descriptors.xml")
-                    {
-                        dependencies.Add(factory.EmbeddedTrimmingDescriptor(ecmaModule), "Embedded descriptor file");
-                    }
+                if (reader.StringComparer.Equals(resource.Name, "ILLink.Descriptors.xml"))
+                {
+                    return true;
                 }
             }
+
+            return false;
         }
 
         protected override void GetMetadataDependenciesDueToReflectability(DependencySink dependencies, NodeFactory factory, TypeDesc type)

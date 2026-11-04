@@ -40,6 +40,21 @@ namespace ILCompiler.ObjectWriter
         // Debugging
         private UserDefinedTypeDescriptor _userDefinedTypeDescriptor;
 
+        // Reused for every method; object emission is single-threaded.
+        private readonly List<NativeSequencePoint> _nativeSequencePoints = new();
+
+        /// <summary>
+        /// Computes the native sequence points of <paramref name="debugNode"/>. Computing them is expensive
+        /// (it reads the PDB and builds an IL offset map), so callers should do it only once per method.
+        /// The returned list is reused by the next call.
+        /// </summary>
+        private protected List<NativeSequencePoint> GetNativeSequencePoints(INodeWithDebugInfo debugNode)
+        {
+            _nativeSequencePoints.Clear();
+            _nativeSequencePoints.AddRange(debugNode.GetNativeSequencePoints());
+            return _nativeSequencePoints;
+        }
+
         private protected abstract void EmitUnwindInfo(
             SectionWriter sectionWriter,
             INodeWithCodeInfo nodeWithCodeInfo,

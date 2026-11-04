@@ -269,13 +269,14 @@ namespace ILCompiler.ObjectWriter
                     debugNode.GetDebugVars().Select(debugVar => (debugVar, GetVarTypeIndex(debugNode.IsStateMachineMoveNextMethod, debugVar))),
                     clauses ?? []);
 
-                if (debugNode.GetNativeSequencePoints().Any())
+                List<NativeSequencePoint> sequencePoints = GetNativeSequencePoints(debugNode);
+                if (sequencePoints.Count > 0)
                 {
                     _dwarfBuilder.EmitLineInfo(
                         methodSymbol.SectionIndex,
                         section.SymbolName,
                         methodSymbol.Value,
-                        debugNode.GetNativeSequencePoints());
+                        sequencePoints);
                 }
             }
         }

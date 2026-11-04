@@ -221,13 +221,14 @@ namespace ILCompiler.ObjectWriter
                 debugNode.GetDebugVars().Select(debugVar => (debugVar, GetVarTypeIndex(debugNode.IsStateMachineMoveNextMethod, debugVar))),
                 clauses ?? Array.Empty<DebugEHClauseInfo>());
 
-            if (debugNode.GetNativeSequencePoints().Any())
+            List<NativeSequencePoint> sequencePoints = GetNativeSequencePoints(debugNode);
+            if (sequencePoints.Count > 0)
             {
                 debugSymbolsBuilder.EmitLineInfo(
                     _debugFileTableBuilder,
                     methodName,
                     methodSymbol.Size,
-                    debugNode.GetNativeSequencePoints());
+                    sequencePoints);
             }
         }
 
@@ -236,7 +237,8 @@ namespace ILCompiler.ObjectWriter
             SymbolDefinition methodSymbol,
             INodeWithDebugInfo debugNode)
         {
-            if (!debugNode.GetNativeSequencePoints().Any())
+            List<NativeSequencePoint> sequencePoints = GetNativeSequencePoints(debugNode);
+            if (sequencePoints.Count == 0)
                 return;
 
             CodeViewSymbolsBuilder debugSymbolsBuilder;
@@ -257,7 +259,7 @@ namespace ILCompiler.ObjectWriter
                 _debugFileTableBuilder,
                 methodName,
                 methodSymbol.Size,
-                debugNode.GetNativeSequencePoints());
+                sequencePoints);
         }
 
         private protected override void EmitDebugSections(IDictionary<Utf8String, SymbolDefinition> definedSymbols)

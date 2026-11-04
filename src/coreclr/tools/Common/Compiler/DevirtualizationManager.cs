@@ -251,7 +251,11 @@ namespace ILCompiler
         /// </summary>
         public virtual bool CanReferenceConstructedTypeOrCanonicalFormOfType(TypeDesc type) => true;
 
-        public virtual TypeDesc[] GetImplementingClasses(TypeDesc type) => null;
+        /// <summary>
+        /// Gets the classes that can be the exact type of an instance of <paramref name="type"/>, or null if
+        /// they're not known or if there's more than <paramref name="maxCount"/> of them.
+        /// </summary>
+        public virtual TypeDesc[] GetImplementingClasses(TypeDesc type, int maxCount) => null;
 
         public virtual bool CanHaveDynamicInterfaceImplementations(TypeDesc type) => true;
 #endif

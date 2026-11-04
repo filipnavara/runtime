@@ -232,9 +232,9 @@ namespace ILCompiler
             return NodeFactory.DevirtualizationManager.IsEffectivelySealed(type);
         }
 
-        public TypeDesc[] GetImplementingClasses(TypeDesc type)
+        public TypeDesc[] GetImplementingClasses(TypeDesc type, int maxCount)
         {
-            return NodeFactory.DevirtualizationManager.GetImplementingClasses(type);
+            return NodeFactory.DevirtualizationManager.GetImplementingClasses(type, maxCount);
         }
 
         public bool IsEffectivelySealed(MethodDesc method)

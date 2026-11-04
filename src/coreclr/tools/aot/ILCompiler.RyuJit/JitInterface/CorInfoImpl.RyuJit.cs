@@ -2318,7 +2318,7 @@ namespace Internal.JitInterface
                 return 1;
             }
 
-            TypeDesc[] implClasses = _compilation.GetImplementingClasses(type);
+            TypeDesc[] implClasses = _compilation.GetImplementingClasses(type, maxExactClasses);
             if (implClasses == null || implClasses.Length > maxExactClasses)
             {
                 return -1;

@@ -768,7 +768,7 @@ namespace ILCompiler
                 return _reflectionVisibleGenericDefinitionMethodTables.Contains(type);
             }
 
-            public override TypeDesc[] GetImplementingClasses(TypeDesc type)
+            public override TypeDesc[] GetImplementingClasses(TypeDesc type, int maxCount)
             {
                 if (_disqualifiedTypes.Contains(type))
                     return null;
@@ -782,16 +782,19 @@ namespace ILCompiler
 
                 if (_implementators.TryGetValue(type, out HashSet<TypeDesc> implementations))
                 {
-                    TypeDesc[] types;
+                    bool includeType = !type.IsInterface && type is not MetadataType { IsAbstract: true };
+                    int count = implementations.Count + (includeType ? 1 : 0);
+
+                    // Callers can't use more than maxCount classes. Don't allocate an array of
+                    // (potentially many thousands of) implementations just to throw it away.
+                    if (count > maxCount)
+                        return null;
+
+                    TypeDesc[] types = new TypeDesc[count];
                     int index = 0;
-                    if (!type.IsInterface && type is not MetadataType { IsAbstract: true })
+                    if (includeType)
                     {
-                        types = new TypeDesc[implementations.Count + 1];
                         types[index++] = type;
-                    }
-                    else
-                    {
-                        types = new TypeDesc[implementations.Count];
                     }
 
                     foreach (TypeDesc implementation in implementations)

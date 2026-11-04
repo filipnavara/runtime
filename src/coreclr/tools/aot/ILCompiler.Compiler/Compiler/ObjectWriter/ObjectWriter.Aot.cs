@@ -157,6 +157,12 @@ namespace ILCompiler.ObjectWriter
 
         partial void PrepareForUnwindInfo() => CreateEhSections();
 
+        partial void OnParallelGetDataRunStarting()
+            => _nodeFactory.MetadataManager.BeginParallelDehydration();
+
+        partial void OnParallelGetDataRunCompleted(List<ObjectNode> nodes, int start, int end)
+            => _nodeFactory.MetadataManager.RestoreDehydrationOrder(nodes, start, end);
+
         partial void EmitUnwindInfoForNode(ObjectNode node, Utf8String currentSymbolName, SectionWriter sectionWriter)
         {
             if (node is INodeWithCodeInfo nodeWithCodeInfo)

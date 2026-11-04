@@ -87,7 +87,7 @@ namespace ILCompiler
         private readonly HashSet<TypeDesc> _usedInterfaces = new HashSet<TypeDesc>();
 
         private readonly List<(DehydratableObjectNode Node, ObjectNode.ObjectData Data)> _dehydratableData = new List<(DehydratableObjectNode Node, ObjectNode.ObjectData data)>();
-        private bool _dehydratableDataSorted;
+        private int _parallelDehydrationStart;
 
         internal FlowAnnotations FlowAnnotations { get; }
 
@@ -118,7 +118,6 @@ namespace ILCompiler
             // May be called from multiple threads when object data is computed in parallel.
             lock (_dehydratableData)
             {
-                Debug.Assert(!_dehydratableDataSorted);
                 _dehydratableData.Add((node, hydratedData));
             }
 
@@ -128,20 +127,50 @@ namespace ILCompiler
                 hydratedData.DefinedSymbols);
         }
 
-        public IEnumerable<ObjectNode.ObjectData> GetDehydratableData()
+        internal void BeginParallelDehydration()
         {
-            // The dehydrated stream is rehydrated sequentially into the hydration target section,
-            // so it must be in emission order. PrepareForDehydration may have been called from
-            // multiple threads, so restore the emission (CompilerComparer) order here.
+            lock (_dehydratableData)
+                _parallelDehydrationStart = _dehydratableData.Count;
+        }
+
+        /// <summary>
+        /// Called after GetData was computed in parallel for nodes[start..end) (which are in emission order).
+        /// Restores emission order of the dehydratable data that was registered (in arbitrary order) by those nodes.
+        /// </summary>
+        internal void RestoreDehydrationOrder(List<ObjectNode> nodes, int start, int end)
+        {
             lock (_dehydratableData)
             {
-                if (!_dehydratableDataSorted)
+                int first = _parallelDehydrationStart;
+                int count = _dehydratableData.Count - first;
+                if (count > 1)
                 {
-                    var comparer = new CompilerComparer();
-                    _dehydratableData.Sort((x, y) => comparer.Compare(x.Node, y.Node));
-                    _dehydratableDataSorted = true;
+                    var map = new Dictionary<DehydratableObjectNode, ObjectNode.ObjectData>(count);
+                    for (int i = first; i < _dehydratableData.Count; i++)
+                        map.Add(_dehydratableData[i].Node, _dehydratableData[i].Data);
+
+                    int target = first;
+                    for (int i = start; i < end; i++)
+                    {
+                        if (nodes[i] is DehydratableObjectNode dehydratable && map.TryGetValue(dehydratable, out ObjectNode.ObjectData data))
+                            _dehydratableData[target++] = (dehydratable, data);
+                    }
+
+                    if (target != _dehydratableData.Count)
+                        throw new InvalidOperationException("Dehydratable data registered outside of the parallel run");
                 }
             }
+        }
+
+        public IEnumerable<ObjectNode.ObjectData> GetDehydratableData()
+        {
+#if DEBUG
+            // We're making an assumption that PrepareForDehydration was called in the emission order
+            // (or the order was restored by RestoreDehydrationOrder). Double check that here.
+            var comparer = new CompilerComparer();
+            for (int i = 1; i < _dehydratableData.Count; i++)
+                Debug.Assert(comparer.Compare(_dehydratableData[i - 1].Node, _dehydratableData[i].Node) < 0);
+#endif
 
             foreach (var entry in _dehydratableData)
                 yield return entry.Data;

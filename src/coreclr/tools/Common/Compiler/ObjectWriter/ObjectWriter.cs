@@ -385,7 +385,9 @@ namespace ILCompiler.ObjectWriter
                 if (ranParallel)
                 {
                     parallelNodes += runEnd - runStart;
+                    OnParallelGetDataRunStarting();
                     Parallel.For(runStart, runEnd, parallelOptions, i => results[i] = toEmit[i].GetData(_nodeFactory));
+                    OnParallelGetDataRunCompleted(toEmit, runStart, runEnd);
                 }
                 else
                 {
@@ -825,6 +827,10 @@ namespace ILCompiler.ObjectWriter
         partial void HandleControlFlowForRelocation(ISymbolNode relocTarget, Utf8String relocSymbolName);
 
         partial void PrepareForUnwindInfo();
+
+        partial void OnParallelGetDataRunStarting();
+
+        partial void OnParallelGetDataRunCompleted(List<ObjectNode> nodes, int start, int end);
 
         partial void EmitUnwindInfoForNode(ObjectNode node, Utf8String currentSymbolName, SectionWriter sectionWriter);
 

@@ -121,6 +121,42 @@ namespace ILCompiler.DependencyAnalysisFramework.Tests
             });
         }
 
+        [Fact]
+        public void TestDynamicRuleWithCategories()
+        {
+            TestOnGraphTypes((TestGraph testGraph, DependencyAnalyzerBase<TestGraph> analyzer) =>
+            {
+                testGraph.SetDynamicDependencyRule((string nodeA, string nodeB) =>
+                {
+                    if (nodeA.EndsWith("*") && nodeB.StartsWith("*"))
+                    {
+                        return new Tuple<string, string>(nodeA + nodeB, "DynamicRule");
+                    }
+                    return null;
+                });
+
+                // A* only searches category 1, B* searches all nodes.
+                testGraph.SetSearchedDynamicDependencyCategory("A*", 1);
+                testGraph.SetDynamicDependencyCategory("*C", 1);
+                testGraph.SetDynamicDependencyCategory("*D", 2);
+
+                testGraph.AddRoot("A*", "A* is root");
+                testGraph.AddRoot("B*", "B* is root");
+                testGraph.AddRoot("*C", "*C is root");
+                testGraph.AddRoot("*D", "*D is root");
+                testGraph.AddRoot("*E", "*E is root");
+                List<string> results = testGraph.AnalysisResults;
+
+                Assert.Contains("A**C", results);
+                Assert.DoesNotContain("A**D", results);
+                Assert.DoesNotContain("A**E", results);
+                Assert.Contains("B**C", results);
+                Assert.Contains("B**D", results);
+                Assert.Contains("B**E", results);
+                Assert.Equal(9, results.Count);
+            });
+        }
+
         private void BuildGraphUsingAllTypesOfRules(TestGraph testGraph, DependencyAnalyzerBase<TestGraph> analyzer)
         {
             testGraph.SetDynamicDependencyRule((string nodeA, string nodeB) =>

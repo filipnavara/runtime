@@ -58,6 +58,14 @@ namespace ILCompiler.DependencyAnalysisFramework.Tests
 
             public override bool InterestingForDynamicDependencyAnalysis => true;
 
+            public int Category { get; set; }
+
+            public int SearchedCategory { get; set; }
+
+            public override int DynamicDependencyCategory => Category;
+
+            public override int SearchedDynamicDependencyCategory => SearchedCategory;
+
             public override bool StaticDependenciesAreComputed => _dependencies != null;
 
             public override void AddStaticDependencies(DependencySink sink, TestGraph context)
@@ -133,6 +141,16 @@ namespace ILCompiler.DependencyAnalysisFramework.Tests
         public void SetDynamicDependencyRule(Func<string, string, Tuple<string, string>> dynamicDependencyComputer)
         {
             _dynamicDependencyComputer = dynamicDependencyComputer;
+        }
+
+        public void SetDynamicDependencyCategory(string nodeName, int category)
+        {
+            GetNode(nodeName).Category = category;
+        }
+
+        public void SetSearchedDynamicDependencyCategory(string nodeName, int category)
+        {
+            GetNode(nodeName).SearchedCategory = category;
         }
 
         public void AddRoot(string nodeNode, string reason)

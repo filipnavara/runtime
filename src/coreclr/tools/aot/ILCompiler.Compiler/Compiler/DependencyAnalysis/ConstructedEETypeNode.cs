@@ -25,6 +25,8 @@ namespace ILCompiler.DependencyAnalysis
 
         protected override bool IsReflectionVisible => true;
 
+        public override int DynamicDependencyCategory => GVMDependenciesNode.PotentialOverrideTypeCategory;
+
         protected override void ComputeNonRelocationBasedDependencies(DependencySink sink, NodeFactory factory)
         {
             base.ComputeNonRelocationBasedDependencies(sink, factory);

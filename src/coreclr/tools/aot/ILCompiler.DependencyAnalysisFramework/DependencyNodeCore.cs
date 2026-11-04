@@ -117,6 +117,20 @@ namespace ILCompiler.DependencyAnalysisFramework
             get;
         }
 
+        /// <summary>
+        /// Category of this node for dynamic dependency analysis. Only meaningful if the node
+        /// is <see cref="InterestingForDynamicDependencyAnalysis"/>. Nodes with a nonzero category
+        /// are also visible to nodes whose <see cref="SearchedDynamicDependencyCategory"/> matches.
+        /// </summary>
+        public virtual int DynamicDependencyCategory => 0;
+
+        /// <summary>
+        /// Category of nodes passed to <see cref="SearchDynamicDependencies"/>. If zero, the search
+        /// sees every node that is <see cref="InterestingForDynamicDependencyAnalysis"/>. Otherwise
+        /// it only sees the nodes whose <see cref="DynamicDependencyCategory"/> is the same.
+        /// </summary>
+        public virtual int SearchedDynamicDependencyCategory => 0;
+
         public abstract bool HasDynamicDependencies
         {
             get;

@@ -36,6 +36,7 @@ namespace ILCompiler.DependencyAnalysisFramework
         private List<DependencyNodeCore<DependencyContextType>> _rootNodes = new List<DependencyNodeCore<DependencyContextType>>();
         private Dictionary<int, List<DependencyNodeCore<DependencyContextType>>> _deferredStaticDependencies = new Dictionary<int, List<DependencyNodeCore<DependencyContextType>>>();
         private List<DependencyNodeCore<DependencyContextType>> _dynamicDependencyInterestingList = new List<DependencyNodeCore<DependencyContextType>>();
+        private Dictionary<int, List<DependencyNodeCore<DependencyContextType>>> _dynamicDependencyInterestingListByCategory = new Dictionary<int, List<DependencyNodeCore<DependencyContextType>>>();
         private List<DynamicDependencyNode> _markedNodesWithDynamicDependencies = new List<DynamicDependencyNode>();
         private bool _newDynamicDependenciesMayHaveAppeared;
         private readonly DependencyNodeCore<DependencyContextType>.DependencySink _dependencySink = new DependencyNodeCore<DependencyContextType>.DependencySink();
@@ -79,20 +80,25 @@ namespace ILCompiler.DependencyAnalysisFramework
         private struct DynamicDependencyNode
         {
             private DependencyNodeCore<DependencyContextType> _node;
+            private List<DependencyNodeCore<DependencyContextType>> _searchedNodes;
             private int _next;
 
-            public DynamicDependencyNode(DependencyNodeCore<DependencyContextType> node)
+            public DynamicDependencyNode(DependencyNodeCore<DependencyContextType> node, List<DependencyNodeCore<DependencyContextType>> searchedNodes)
             {
                 _node = node;
+                _searchedNodes = searchedNodes;
                 _next = 0;
             }
 
             public void MarkNewDynamicDependencies(DependencyAnalyzer<MarkStrategy, DependencyContextType> analyzer)
             {
+                if (_next == _searchedNodes.Count)
+                    return;
+
                 DependencyNodeCore<DependencyContextType>.DependencySink sink = analyzer._dependencySink;
-                _node.SearchDynamicDependencies(analyzer._dynamicDependencyInterestingList, _next, sink, analyzer._dependencyContext);
+                _node.SearchDynamicDependencies(_searchedNodes, _next, sink, analyzer._dependencyContext);
                 analyzer.CommitDependencies(sink, _node);
-                _next = analyzer._dynamicDependencyInterestingList.Count;
+                _next = _searchedNodes.Count;
             }
         }
 
@@ -253,6 +259,11 @@ namespace ILCompiler.DependencyAnalysisFramework
                     if (currentNode.InterestingForDynamicDependencyAnalysis)
                     {
                         _dynamicDependencyInterestingList.Add(currentNode);
+
+                        int category = currentNode.DynamicDependencyCategory;
+                        if (category != 0)
+                            GetDynamicDependencyInterestingList(category).Add(currentNode);
+
                         _newDynamicDependenciesMayHaveAppeared = true;
                     }
 
@@ -352,9 +363,24 @@ namespace ILCompiler.DependencyAnalysisFramework
         {
             if (node.HasDynamicDependencies)
             {
+                int category = node.SearchedDynamicDependencyCategory;
+                List<DependencyNodeCore<DependencyContextType>> searchedNodes = category == 0
+                    ? _dynamicDependencyInterestingList
+                    : GetDynamicDependencyInterestingList(category);
+
                 _newDynamicDependenciesMayHaveAppeared = true;
-                _markedNodesWithDynamicDependencies.Add(new DynamicDependencyNode(node));
+                _markedNodesWithDynamicDependencies.Add(new DynamicDependencyNode(node, searchedNodes));
             }
+        }
+
+        private List<DependencyNodeCore<DependencyContextType>> GetDynamicDependencyInterestingList(int category)
+        {
+            if (!_dynamicDependencyInterestingListByCategory.TryGetValue(category, out List<DependencyNodeCore<DependencyContextType>> list))
+            {
+                list = new List<DependencyNodeCore<DependencyContextType>>();
+                _dynamicDependencyInterestingListByCategory.Add(category, list);
+            }
+            return list;
         }
 
         private bool AddToMarkStack(DependencyNodeCore<DependencyContextType> node, string reason, DependencyNodeCore<DependencyContextType> reason1, DependencyNodeCore<DependencyContextType> reason2)

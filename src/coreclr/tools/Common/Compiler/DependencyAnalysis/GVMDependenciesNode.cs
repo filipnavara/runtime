@@ -37,8 +37,15 @@ namespace ILCompiler.DependencyAnalysis
             _method = method;
         }
 
+        /// <summary>
+        /// <see cref="DependencyNodeCore{DependencyContextType}.DynamicDependencyCategory"/> of the type nodes
+        /// that <see cref="SearchDynamicDependencies"/> looks at for potential overrides.
+        /// </summary>
+        internal const int PotentialOverrideTypeCategory = 1;
+
         public override bool HasConditionalStaticDependencies => false;
         public override bool InterestingForDynamicDependencyAnalysis => false;
+        public override int SearchedDynamicDependencyCategory => PotentialOverrideTypeCategory;
         public override bool StaticDependenciesAreComputed => true;
         protected override string GetName(NodeFactory factory) => "__GVMDependenciesNode_" + factory.NameMangler.GetMangledMethodName(_method);
 
@@ -88,11 +95,7 @@ namespace ILCompiler.DependencyAnalysis
                 DependencyNodeCore<NodeFactory> entry = markedNodes[i];
 
 #if !READYTORUN
-                // This method is often called with a long list of ScannedMethodNode
-                // or MethodCodeNode nodes. We are not interested in those. In order
-                // to make the type check as cheap as possible we check for specific
-                // *sealed* types instead of doing `entry is EETypeNode` which has
-                // to walk the whole class hierarchy for the non matching nodes.
+                // Only nodes in PotentialOverrideTypeCategory are passed in.
                 if (entry is not ConstructedEETypeNode typeNode)
                     continue;
 #else

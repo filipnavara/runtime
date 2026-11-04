@@ -436,6 +436,7 @@
     <Compile Include="Compiler\CompilerTypeSystemContext.InterfaceThunks.cs" />
     <Compile Include="Compiler\CompilerTypeSystemContext.Sorting.cs" />
     <Compile Include="Compiler\CompilerTypeSystemContext.DelegateInfo.cs" />
+    <Compile Include="Compiler\CompilerTypeSystemContext.RequiresAttributes.cs" />
     <Compile Include="Compiler\CompilerTypeSystemContext.DynamicInvoke.cs" />
     <Compile Include="Compiler\CompilerTypeSystemContext.GeneratedAssembly.cs" />
     <Compile Include="Compiler\CompilerTypeSystemContext.GeneratedAssembly.Sorting.cs" />

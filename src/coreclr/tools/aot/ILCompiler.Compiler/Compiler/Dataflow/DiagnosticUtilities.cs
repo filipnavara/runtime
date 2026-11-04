@@ -1,6 +1,7 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection.Metadata;
 using Internal.TypeSystem;
@@ -41,20 +42,24 @@ namespace ILCompiler.Dataflow
             {
                 case MethodDesc method:
                     var ecmaMethod = method.GetTypicalMethodDefinition() as EcmaMethod;
-                    if (ecmaMethod == null)
+                    if (ecmaMethod == null || !MayHaveRequiresAttribute(ecmaMethod.Module, ecmaMethod.Handle, requiresAttributeName))
                         return false;
                     decoded = ecmaMethod.GetDecodedCustomAttribute("System.Diagnostics.CodeAnalysis", requiresAttributeName);
                     break;
                 case MetadataType type:
                     var ecmaType = type.GetTypeDefinition() as EcmaType;
-                    if (ecmaType == null)
+                    if (ecmaType == null || !MayHaveRequiresAttribute(ecmaType.Module, ecmaType.Handle, requiresAttributeName))
                         return false;
                     decoded = ecmaType.GetDecodedCustomAttribute("System.Diagnostics.CodeAnalysis", requiresAttributeName);
                     break;
                 case PropertyPseudoDesc property:
+                    if (!MayHaveRequiresAttribute(property.OwningType.Module, property.Handle, requiresAttributeName))
+                        return false;
                     decoded = property.GetDecodedCustomAttribute("System.Diagnostics.CodeAnalysis", requiresAttributeName);
                     break;
                 case EventPseudoDesc @event:
+                    if (!MayHaveRequiresAttribute(@event.OwningType.Module, @event.Handle, requiresAttributeName))
+                        return false;
                     decoded = @event.GetDecodedCustomAttribute("System.Diagnostics.CodeAnalysis", requiresAttributeName);
                     break;
                 default:
@@ -67,6 +72,15 @@ namespace ILCompiler.Dataflow
 
             attribute = decoded.Value;
             return true;
+        }
+
+        private static bool MayHaveRequiresAttribute(EcmaModule module, EntityHandle entity, string requiresAttributeName)
+        {
+            // Looking up a custom attribute by name is expensive and most entities don't have any Requires* attribute.
+            // Rule those out with a set of entities that have one, built once per module.
+            return module.Context is not CompilerTypeSystemContext context
+                || !requiresAttributeName.StartsWith(CompilerTypeSystemContext.RequiresAttributeNamePrefix, StringComparison.Ordinal)
+                || context.MayHaveRequiresAttribute(module, entity);
         }
 
         internal static string GetRequiresAttributeMessage(CustomAttributeValue<TypeDesc> attribute)

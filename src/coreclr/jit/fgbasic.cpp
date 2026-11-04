@@ -403,6 +403,8 @@ void Compiler::fgRemoveEhfSuccessor(FlowEdge* succEdge)
 //    block     - the block in which a jump target will be replaced.
 //    newTarget - the new branch target of the block.
 //    oldTarget - the old branch target of the block.
+//    predInsertHint - optional in/out insertion hint for newTarget's pred list, passed to
+//      fgRedirectEdge. Useful when retargeting many blocks to newTarget in increasing bbID order.
 //
 // Notes:
 // 1. Only branches are changed: BBJ_ALWAYS, BBJ_COND, BBJ_SWITCH, etc.
@@ -411,7 +413,10 @@ void Compiler::fgRemoveEhfSuccessor(FlowEdge* succEdge)
 //    to reach 'oldTarget' (e.g., multiple arms of a switch), all of them are changed.
 // 3. The predecessor lists are updated.
 //
-void Compiler::fgReplaceJumpTarget(BasicBlock* block, BasicBlock* oldTarget, BasicBlock* newTarget)
+void Compiler::fgReplaceJumpTarget(BasicBlock* block,
+                                   BasicBlock* oldTarget,
+                                   BasicBlock* newTarget,
+                                   FlowEdge**  predInsertHint)
 {
     assert(block != nullptr);
     assert(fgPredsComputed);
@@ -426,18 +431,18 @@ void Compiler::fgReplaceJumpTarget(BasicBlock* block, BasicBlock* oldTarget, Bas
         case BBJ_EHFILTERRET:
         case BBJ_LEAVE: // This function can be called before import, so we still have BBJ_LEAVE
             assert(block->TargetIs(oldTarget));
-            fgRedirectEdge(block->TargetEdgeRef(), newTarget);
+            fgRedirectEdge(block->TargetEdgeRef(), newTarget, predInsertHint);
             break;
 
         case BBJ_COND:
             if (block->TrueTargetIs(oldTarget))
             {
-                fgRedirectEdge(block->TrueEdgeRef(), newTarget);
+                fgRedirectEdge(block->TrueEdgeRef(), newTarget, predInsertHint);
             }
             else
             {
                 assert(block->FalseTargetIs(oldTarget));
-                fgRedirectEdge(block->FalseEdgeRef(), newTarget);
+                fgRedirectEdge(block->FalseEdgeRef(), newTarget, predInsertHint);
             }
 
             if (block->TrueEdgeIs(block->GetFalseEdge()))
@@ -486,7 +491,7 @@ void Compiler::fgReplaceJumpTarget(BasicBlock* block, BasicBlock* oldTarget, Bas
                     assert(oldEdge == nullptr);
                     assert(newEdge == nullptr);
                     oldEdge = jumpTab[i];
-                    fgRedirectEdge(jumpTab[i], newTarget);
+                    fgRedirectEdge(jumpTab[i], newTarget, predInsertHint);
                     newEdge = jumpTab[i];
                     changed = true;
                 }

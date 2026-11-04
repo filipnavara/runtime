@@ -343,19 +343,31 @@ void Compiler::fgRemoveBlockAsPred(BasicBlock* block)
 // Arguments:
 //    blockPred -- The block we want to make a predecessor of newTarget (it could already be one).
 //    newTarget -- The block whose pred list we will search.
+//    hint      -- Optional edge currently in newTarget's pred list. If its source block sorts
+//                 before blockPred, the search starts after it rather than at the list head.
 //
 // Return Value:
 //    Returns a pointer to the next pointer of an edge in newTarget's pred list.
 //    A new edge from blockPred to newTarget can be inserted here
 //    without disrupting bbPreds' sorting invariant.
 //
-FlowEdge** Compiler::fgGetPredInsertPoint(BasicBlock* blockPred, BasicBlock* newTarget)
+FlowEdge** Compiler::fgGetPredInsertPoint(BasicBlock* blockPred, BasicBlock* newTarget, FlowEdge* hint)
 {
     assert(blockPred != nullptr);
     assert(newTarget != nullptr);
     assert(fgPredsComputed);
 
     FlowEdge** listp = &newTarget->bbPreds;
+
+    // The pred list is sorted by bbID, so the insertion point can't precede an edge
+    // from a block that sorts before blockPred.
+    //
+    if ((hint != nullptr) && (hint->getDestinationBlock() == newTarget) &&
+        (hint->getSourceBlock()->bbID < blockPred->bbID))
+    {
+        assert(fgGetPredForBlock(newTarget, hint->getSourceBlock()) == hint);
+        listp = hint->getNextPredEdgeRef();
+    }
 
     // Search pred list for insertion point
     //
@@ -375,8 +387,12 @@ FlowEdge** Compiler::fgGetPredInsertPoint(BasicBlock* blockPred, BasicBlock* new
 //    edge -- The edge to update. Note that this is a reference type
 //    to support automatic updates to BasicBlock members (bbTargetEdge et al).
 //    newTarget -- The new successor of the edge.
+//    predInsertHint -- Optional in/out insertion hint for newTarget's pred list (see
+//      fgGetPredInsertPoint). On return, it is set to the edge that now reaches newTarget.
+//      Callers redirecting many edges to the same block in increasing bbID order of their
+//      source blocks can pass the same hint to each call to avoid rescanning the pred list.
 //
-void Compiler::fgRedirectEdge(FlowEdge*& edge, BasicBlock* newTarget)
+void Compiler::fgRedirectEdge(FlowEdge*& edge, BasicBlock* newTarget, FlowEdge** predInsertHint)
 {
     assert(edge != nullptr);
     assert(newTarget != nullptr);
@@ -390,8 +406,9 @@ void Compiler::fgRedirectEdge(FlowEdge*& edge, BasicBlock* newTarget)
     const unsigned    dupCount = edge->getDupCount();
     fgRemoveAllRefPreds(edge->getDestinationBlock(), block);
 
-    FlowEdge** predListPtr = fgGetPredInsertPoint(block, newTarget);
-    FlowEdge*  predEdge    = *predListPtr;
+    FlowEdge** predListPtr =
+        fgGetPredInsertPoint(block, newTarget, (predInsertHint != nullptr) ? *predInsertHint : nullptr);
+    FlowEdge* predEdge = *predListPtr;
 
     if ((predEdge != nullptr) && (predEdge->getSourceBlock() == block))
     {
@@ -406,6 +423,11 @@ void Compiler::fgRedirectEdge(FlowEdge*& edge, BasicBlock* newTarget)
     }
 
     newTarget->bbRefs += dupCount;
+
+    if (predInsertHint != nullptr)
+    {
+        *predInsertHint = edge;
+    }
 
     // Pred list of target should still be ordered
     assert(newTarget->checkPredListOrder());

@@ -890,10 +890,14 @@ void Compiler::fgCompactBlock(BasicBlock* block)
         JITDUMP("Second block has %u other incoming edges\n", target->countOfInEdges());
         assert(block->isEmpty());
 
-        // Retarget all the other edges incident on target
+        // Retarget all the other edges incident on target.
+        // Target's preds are visited in increasing bbID order, so each redirected edge lands
+        // after the previous one in block's pred list. Pass an insertion hint so that each
+        // insertion doesn't rescan block's (growing) pred list from the start.
+        FlowEdge* predInsertHint = nullptr;
         for (BasicBlock* const predBlock : target->PredBlocksEditing())
         {
-            fgReplaceJumpTarget(predBlock, target, block);
+            fgReplaceJumpTarget(predBlock, target, block, &predInsertHint);
         }
     }
 

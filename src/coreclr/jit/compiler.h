@@ -6860,7 +6860,10 @@ public:
 
     void fgRemoveEhfSuccessor(FlowEdge* succEdge);
 
-    void fgReplaceJumpTarget(BasicBlock* block, BasicBlock* oldTarget, BasicBlock* newTarget);
+    void fgReplaceJumpTarget(BasicBlock* block,
+                             BasicBlock* oldTarget,
+                             BasicBlock* newTarget,
+                             FlowEdge**  predInsertHint = nullptr);
 
     void fgReplacePred(FlowEdge* edge, BasicBlock* const newPred);
 
@@ -6869,10 +6872,10 @@ public:
     FlowEdge* fgAddRefPred(BasicBlock* block, BasicBlock* blockPred, FlowEdge* oldEdge = nullptr);
 
 private:
-    FlowEdge** fgGetPredInsertPoint(BasicBlock* blockPred, BasicBlock* newTarget);
+    FlowEdge** fgGetPredInsertPoint(BasicBlock* blockPred, BasicBlock* newTarget, FlowEdge* hint = nullptr);
 
 public:
-    void fgRedirectEdge(FlowEdge*& edgeRef, BasicBlock* newTarget);
+    void fgRedirectEdge(FlowEdge*& edgeRef, BasicBlock* newTarget, FlowEdge** predInsertHint = nullptr);
 
     void fgFindBasicBlocks();
 

@@ -19,7 +19,7 @@ namespace ILCompiler.ObjectWriter
 {
     public abstract partial class ObjectWriter
     {
-        public static void EmitObject(string objectFilePath, IReadOnlyCollection<DependencyNode> nodes, NodeFactory factory, ObjectWritingOptions options, IObjectDumper dumper, Logger logger)
+        public static void EmitObject(string objectFilePath, IReadOnlyCollection<DependencyNode> nodes, NodeFactory factory, ObjectWritingOptions options, IObjectDumper dumper, Logger logger, int parallelism = 1)
         {
             var stopwatch = Stopwatch.StartNew();
 
@@ -28,6 +28,15 @@ namespace ILCompiler.ObjectWriter
                 factory.Target.OperatingSystem == TargetOS.Windows ? new CoffObjectWriter(factory, options) :
                 factory.Target.Architecture == TargetArchitecture.Wasm32 ? new WasmRelocatableObjectWriter(factory, options) :
                 new ElfObjectWriter(factory, options);
+
+            // Experimental kill switch for measurements.
+            // ILC_PARALLEL_GETDATA=0 -> legacy streaming path, =seq -> precompute sequentially.
+            string parallelGetData = Environment.GetEnvironmentVariable("ILC_PARALLEL_GETDATA");
+            if (parallelGetData == "0")
+                parallelism = 1;
+            else if (parallelGetData == "seq")
+                parallelism = 0;
+            objectWriter.GetDataParallelism = parallelism;
 
             using Stream outputFileStream = new FileStream(objectFilePath, FileMode.Create);
             objectWriter.EmitObject(outputFileStream, nodes, dumper, logger);

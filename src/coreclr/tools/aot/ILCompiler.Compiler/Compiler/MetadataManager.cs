@@ -79,14 +79,15 @@ namespace ILCompiler
             = new SortedSet<TypeGVMEntriesNode>(Comparer<TypeGVMEntriesNode>.Create((a, b) => TypeSystemComparer.Instance.Compare(a.AssociatedType, b.AssociatedType)));
         private readonly SortedSet<DefType> _typesWithDelegateMarshalling = new SortedSet<DefType>(TypeSystemComparer.Instance);
         private readonly SortedSet<DefType> _typesWithStructMarshalling = new SortedSet<DefType>(TypeSystemComparer.Instance);
-        private HashSet<NativeLayoutTemplateMethodSignatureVertexNode> _templateMethodEntries = new HashSet<NativeLayoutTemplateMethodSignatureVertexNode>();
+        private readonly HashSet<NativeLayoutTemplateMethodSignatureVertexNode> _templateMethodEntries = new HashSet<NativeLayoutTemplateMethodSignatureVertexNode>();
         private readonly SortedSet<TypeDesc> _typeTemplates = new SortedSet<TypeDesc>(TypeSystemComparer.Instance);
         private readonly SortedSet<MetadataType> _typesWithGenericStaticBaseInfo = new SortedSet<MetadataType>(TypeSystemComparer.Instance);
         private readonly SortedSet<MethodDesc> _genericMethodHashtableEntries = new SortedSet<MethodDesc>(TypeSystemComparer.Instance);
         private readonly SortedSet<MethodDesc> _exactMethodHashtableEntries = new SortedSet<MethodDesc>(TypeSystemComparer.Instance);
         private readonly HashSet<TypeDesc> _usedInterfaces = new HashSet<TypeDesc>();
 
-        private List<(DehydratableObjectNode Node, ObjectNode.ObjectData Data)> _dehydratableData = new List<(DehydratableObjectNode Node, ObjectNode.ObjectData data)>();
+        private readonly List<(DehydratableObjectNode Node, ObjectNode.ObjectData Data)> _dehydratableData = new List<(DehydratableObjectNode Node, ObjectNode.ObjectData data)>();
+        private bool _dehydratableDataSorted;
 
         internal FlowAnnotations FlowAnnotations { get; }
 
@@ -114,7 +115,12 @@ namespace ILCompiler
 
         internal ObjectNode.ObjectData PrepareForDehydration(DehydratableObjectNode node, ObjectNode.ObjectData hydratedData)
         {
-            _dehydratableData.Add((node, hydratedData));
+            // May be called from multiple threads when object data is computed in parallel.
+            lock (_dehydratableData)
+            {
+                Debug.Assert(!_dehydratableDataSorted);
+                _dehydratableData.Add((node, hydratedData));
+            }
 
             return new ObjectNode.ObjectData(new byte[hydratedData.Data.Length],
                 Array.Empty<Relocation>(),
@@ -124,13 +130,18 @@ namespace ILCompiler
 
         public IEnumerable<ObjectNode.ObjectData> GetDehydratableData()
         {
-#if DEBUG
-            // We're making an assumption that PrepareForDehydration was called in the emission order.
-            // Double check that here.
-            var comparer = new CompilerComparer();
-            for (int i = 1; i < _dehydratableData.Count; i++)
-                Debug.Assert(comparer.Compare(_dehydratableData[i - 1].Node, _dehydratableData[i].Node) < 0);
-#endif
+            // The dehydrated stream is rehydrated sequentially into the hydration target section,
+            // so it must be in emission order. PrepareForDehydration may have been called from
+            // multiple threads, so restore the emission (CompilerComparer) order here.
+            lock (_dehydratableData)
+            {
+                if (!_dehydratableDataSorted)
+                {
+                    var comparer = new CompilerComparer();
+                    _dehydratableData.Sort((x, y) => comparer.Compare(x.Node, y.Node));
+                    _dehydratableDataSorted = true;
+                }
+            }
 
             foreach (var entry in _dehydratableData)
                 yield return entry.Data;

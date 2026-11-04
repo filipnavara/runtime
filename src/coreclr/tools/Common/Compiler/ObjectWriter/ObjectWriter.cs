@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Xml.Linq;
 using ILCompiler.DependencyAnalysis;
 using ILCompiler.DependencyAnalysis.Wasm;
@@ -325,6 +326,96 @@ namespace ILCompiler.ObjectWriter
             return undefinedSymbolSet;
         }
 
+        /// <summary>
+        /// Degree of parallelism used for <see cref="ObjectNode.GetData"/> calls. 1 means fully sequential,
+        /// -1 means use all available processors.
+        /// </summary>
+        public int GetDataParallelism { get; set; } = 1;
+
+        private bool ShouldEmitObjectNode(DependencyNode depNode, out ObjectNode node)
+        {
+            node = depNode as ObjectNode;
+            if (node is null || depNode is ISymbolRangeNode)
+                return false;
+
+            if (node.ShouldSkipEmittingObjectNode(_nodeFactory))
+                return false;
+
+            if (node is ISymbolNode symbolNode &&
+                _nodeFactory.ObjectInterner.GetDeduplicatedSymbol(_nodeFactory, symbolNode) != symbolNode)
+                return false;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Computes <see cref="ObjectNode.GetData"/> for all nodes that will be emitted, in parallel.
+        /// Nodes are processed in runs of identical <see cref="SortableDependencyNode.ClassCode"/>; runs are
+        /// processed sequentially in emission order so that summary nodes (hash tables, dehydrated data, etc.)
+        /// observe side effects of all nodes that precede them, exactly as in the sequential case.
+        /// </summary>
+        private Dictionary<ObjectNode, ObjectData> PrecomputeObjectData(IReadOnlyCollection<DependencyNode> nodes, Logger logger)
+        {
+            const int MinParallelRunLength = 64;
+
+            var stopwatch = Stopwatch.StartNew();
+
+            List<ObjectNode> toEmit = new List<ObjectNode>(nodes.Count);
+            foreach (DependencyNode depNode in nodes)
+            {
+                if (ShouldEmitObjectNode(depNode, out ObjectNode node))
+                    toEmit.Add(node);
+            }
+
+            var results = new ObjectData[toEmit.Count];
+            var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = GetDataParallelism == 0 ? -1 : GetDataParallelism };
+            int parallelNodes = 0;
+            var profile = logger.IsVerbose && Environment.GetEnvironmentVariable("ILC_GETDATA_PROFILE") == "1" ? new List<(string Name, int Count, bool Parallel, TimeSpan Time)>() : null;
+
+            int runStart = 0;
+            while (runStart < toEmit.Count)
+            {
+                int classCode = toEmit[runStart].ClassCode;
+                int runEnd = runStart + 1;
+                while (runEnd < toEmit.Count && toEmit[runEnd].ClassCode == classCode)
+                    runEnd++;
+
+                long runStartTicks = Stopwatch.GetTimestamp();
+                bool ranParallel = GetDataParallelism != 0 && runEnd - runStart >= MinParallelRunLength;
+                if (ranParallel)
+                {
+                    parallelNodes += runEnd - runStart;
+                    Parallel.For(runStart, runEnd, parallelOptions, i => results[i] = toEmit[i].GetData(_nodeFactory));
+                }
+                else
+                {
+                    for (int i = runStart; i < runEnd; i++)
+                        results[i] = toEmit[i].GetData(_nodeFactory);
+                }
+
+                if (profile is not null)
+                    profile.Add((toEmit[runStart].GetType().Name, runEnd - runStart, ranParallel, Stopwatch.GetElapsedTime(runStartTicks)));
+
+                runStart = runEnd;
+            }
+
+            if (profile is not null)
+            {
+                profile.Sort((a, b) => b.Time.CompareTo(a.Time));
+                foreach (var p in profile.Take(20))
+                    logger.LogMessage($"  GetData run {p.Name} x{p.Count} {(p.Parallel ? "parallel" : "sequential")}: {p.Time.TotalMilliseconds:F1} ms");
+            }
+
+            var map = new Dictionary<ObjectNode, ObjectData>(toEmit.Count);
+            for (int i = 0; i < toEmit.Count; i++)
+                map.Add(toEmit[i], results[i]);
+
+            if (logger.IsVerbose)
+                logger.LogMessage($"Computed data for {toEmit.Count} object nodes ({parallelNodes} in parallel) in {stopwatch.Elapsed}");
+
+            return map;
+        }
+
         public virtual void EmitObject(Stream outputFileStream, IReadOnlyCollection<DependencyNode> nodes, IObjectDumper dumper, Logger logger)
         {
             // Pre-create some of the sections
@@ -356,6 +447,8 @@ namespace ILCompiler.ObjectWriter
 
                 progressReporter = new ProgressReporter(logger, count);
             }
+
+            Dictionary<ObjectNode, ObjectData> precomputedData = GetDataParallelism != 1 ? PrecomputeObjectData(nodes, logger) : null;
 
             List<ISymbolRangeNode> symbolRangeNodes = [];
             List<BlockToRelocate> blocksToRelocate = [];
@@ -397,7 +490,7 @@ namespace ILCompiler.ObjectWriter
                     }
                 }
 
-                ObjectData nodeContents = node.GetData(_nodeFactory);
+                ObjectData nodeContents = precomputedData is not null ? precomputedData[node] : node.GetData(_nodeFactory);
 
                 dumper?.DumpObjectNode(_nodeFactory, node, nodeContents);
 

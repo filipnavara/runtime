@@ -52,11 +52,17 @@ namespace ILCompiler.DependencyAnalysis
             SymbolAndDelta key = new SymbolAndDelta(symbol, delta, relocType);
 
             uint index;
-            if (!_insertedSymbolsDictionary.TryGetValue(key, out index))
+            // May be called from multiple threads when object data is computed in parallel.
+            // Index assignment is only deterministic if callers of the same table are not
+            // computed concurrently (i.e. are of distinct ClassCode).
+            lock (_insertedSymbolsDictionary)
             {
-                index = (uint)_insertedSymbols.Count;
-                _insertedSymbolsDictionary[key] = index;
-                _insertedSymbols.Add(key);
+                if (!_insertedSymbolsDictionary.TryGetValue(key, out index))
+                {
+                    index = (uint)_insertedSymbols.Count;
+                    _insertedSymbolsDictionary[key] = index;
+                    _insertedSymbols.Add(key);
+                }
             }
 
             return index;

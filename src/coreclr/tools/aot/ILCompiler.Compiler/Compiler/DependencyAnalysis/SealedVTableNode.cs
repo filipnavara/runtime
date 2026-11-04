@@ -110,7 +110,9 @@ namespace ILCompiler.DependencyAnalysis
             if (relocsOnly && !declTypeVTable.HasKnownVirtualMethodUse)
                 return false;
 
-            _sealedVTableEntries = new List<SealedVTableEntry>();
+            // Build into a local and only publish once complete so that concurrent readers
+            // (e.g. parallel object data emission) never observe a partially built list.
+            var sealedVTableEntries = new List<SealedVTableEntry>();
 
             // Interfaces don't have any instance virtual slots with the exception of interfaces that provide
             // IDynamicInterfaceCastable implementation.
@@ -141,7 +143,7 @@ namespace ILCompiler.DependencyAnalysis
                     else
                         node = factory.MethodEntrypoint(implMethod.GetCanonMethodTarget(CanonicalFormKind.Specific), unboxingStub: !implMethod.Signature.IsStatic && declType.IsValueType);
 
-                    _sealedVTableEntries.Add(SealedVTableEntry.FromVirtualMethod(implMethod, node));
+                    sealedVTableEntries.Add(SealedVTableEntry.FromVirtualMethod(implMethod, node));
                 }
             }
 
@@ -201,7 +203,7 @@ namespace ILCompiler.DependencyAnalysis
                                 else
                                     node = factory.MethodEntrypoint(targetMethod.GetCanonMethodTarget(CanonicalFormKind.Specific), unboxingStub: !targetMethod.Signature.IsStatic && declType.IsValueType);
 
-                                _sealedVTableEntries.Add(SealedVTableEntry.FromVirtualMethod(targetMethod, node));
+                                sealedVTableEntries.Add(SealedVTableEntry.FromVirtualMethod(targetMethod, node));
                             }
                         }
                     }
@@ -236,12 +238,13 @@ namespace ILCompiler.DependencyAnalysis
                             else
                                 node = factory.MethodEntrypoint(canonImplMethod, unboxingStub: implMethod.OwningType.IsValueType && !implMethod.Signature.IsStatic);
 
-                            _sealedVTableEntries.Add(SealedVTableEntry.FromDefaultInterfaceMethod(implMethod, providingInterfaceDefinitionType, node));
+                            sealedVTableEntries.Add(SealedVTableEntry.FromDefaultInterfaceMethod(implMethod, providingInterfaceDefinitionType, node));
                         }
                     }
                 }
             }
 
+            _sealedVTableEntries = sealedVTableEntries;
             return true;
         }
 

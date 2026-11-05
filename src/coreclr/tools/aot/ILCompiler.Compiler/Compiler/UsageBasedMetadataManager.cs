@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection.Metadata;
@@ -63,7 +64,7 @@ namespace ILCompiler
 
         internal IReadOnlyDictionary<string, bool> FeatureSwitches { get; }
 
-        private readonly HashSet<ModuleDesc> _rootEntireAssembliesExaminedModules = new HashSet<ModuleDesc>();
+        private readonly ConcurrentDictionary<ModuleDesc, ReflectableModuleNode> _reflectableModules = new ConcurrentDictionary<ModuleDesc, ReflectableModuleNode>();
 
         private readonly HashSet<string> _rootEntireAssembliesModules;
         private readonly HashSet<string> _trimmedAssemblies;
@@ -325,47 +326,74 @@ namespace ILCompiler
                 }
             }
 
-            MetadataType mdType = type as MetadataType;
-            ModuleDesc module = mdType?.Module;
-            if (module != null && !_rootEntireAssembliesExaminedModules.Contains(module))
+            if ((type as MetadataType)?.Module is ModuleDesc module)
             {
-                // If the owning assembly needs to be fully compiled, do that.
-                _rootEntireAssembliesExaminedModules.Add(module);
+                // Whether the owning assembly needs to be fully compiled is determined once per module by
+                // a separate node. That keeps this independent of which type of the module is seen first.
+                dependencies.Add(_reflectableModules.GetOrAdd(module, static (m, manager) => new ReflectableModuleNode(manager, m), this), "Reflectable type in module");
+            }
+        }
 
-                string assemblyName = module.Assembly.GetName().Name;
+        private void AddDependenciesDueToReflectableModule(DependencySink dependencies, NodeFactory factory, ModuleDesc module)
+        {
+            string assemblyName = module.Assembly.GetName().Name;
 
-                bool fullyRoot;
-                string reason;
+            bool fullyRoot;
+            string reason;
 
-                if (_rootEntireAssembliesModules.Contains(assemblyName))
-                {
-                    // If the assembly was specified as a root on the command line, root it
-                    fullyRoot = true;
-                    reason = "Rooted from command line";
-                }
-                else if (_trimmedAssemblies.Contains(assemblyName) || IsTrimmableAssembly(module))
-                {
-                    // If the assembly was specified as trimmed on the command line, do not root
-                    // If the assembly is marked trimmable via an attribute, do not root
-                    fullyRoot = false;
-                    reason = null;
-                }
-                else
-                {
-                    // If rooting default assemblies was requested, root
-                    fullyRoot = (_generationOptions & UsageBasedMetadataGenerationOptions.RootDefaultAssemblies) != 0;
-                    reason = "Partial trimming and assembly not trimmable";
-                }
+            if (_rootEntireAssembliesModules.Contains(assemblyName))
+            {
+                // If the assembly was specified as a root on the command line, root it
+                fullyRoot = true;
+                reason = "Rooted from command line";
+            }
+            else if (_trimmedAssemblies.Contains(assemblyName) || IsTrimmableAssembly(module))
+            {
+                // If the assembly was specified as trimmed on the command line, do not root
+                // If the assembly is marked trimmable via an attribute, do not root
+                fullyRoot = false;
+                reason = null;
+            }
+            else
+            {
+                // If rooting default assemblies was requested, root
+                fullyRoot = (_generationOptions & UsageBasedMetadataGenerationOptions.RootDefaultAssemblies) != 0;
+                reason = "Partial trimming and assembly not trimmable";
+            }
 
-                if (fullyRoot)
+            if (fullyRoot)
+            {
+                var rootProvider = new RootingServiceProvider(factory, dependencies.Add);
+                foreach (TypeDesc t in module.GetAllTypes())
                 {
-                    var rootProvider = new RootingServiceProvider(factory, dependencies.Add);
-                    foreach (TypeDesc t in mdType.Module.GetAllTypes())
-                    {
-                        RootingHelpers.TryRootType(rootProvider, t, rootBaseTypes: false, reason);
-                    }
+                    RootingHelpers.TryRootType(rootProvider, t, rootBaseTypes: false, reason);
                 }
             }
+        }
+
+        /// <summary>
+        /// Represents a module with a reflectable type. Roots the whole module if needed.
+        /// </summary>
+        private sealed class ReflectableModuleNode : DependencyNodeCore<NodeFactory>
+        {
+            private readonly UsageBasedMetadataManager _manager;
+            private readonly ModuleDesc _module;
+
+            public ReflectableModuleNode(UsageBasedMetadataManager manager, ModuleDesc module)
+            {
+                _manager = manager;
+                _module = module;
+            }
+
+            public override bool InterestingForDynamicDependencyAnalysis => false;
+            public override bool HasDynamicDependencies => false;
+            public override bool HasConditionalStaticDependencies => false;
+            public override bool StaticDependenciesAreComputed => true;
+
+            public override void AddStaticDependencies(DependencySink sink, NodeFactory factory)
+                => _manager.AddDependenciesDueToReflectableModule(sink, factory, _module);
+
+            protected override string GetName(NodeFactory factory) => "Reflectable module " + _module.ToString();
         }
 
         private static bool IsTrimmableAssembly(ModuleDesc assembly)

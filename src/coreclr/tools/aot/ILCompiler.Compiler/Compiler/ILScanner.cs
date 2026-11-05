@@ -798,6 +798,10 @@ namespace ILCompiler
                     {
                         types[index++] = implementation;
                     }
+
+                    // The set is filled in the order the scanner marked the types. Sort it so that
+                    // the order (which the JIT uses for guarded devirtualization) doesn't depend on that.
+                    Array.Sort(types, TypeSystemComparer.Instance);
                     return types;
                 }
                 return null;

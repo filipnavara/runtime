@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 using ILCompiler.DependencyAnalysisFramework;
 
@@ -84,6 +85,29 @@ namespace ILCompiler.DependencyAnalysisFramework.Tests
                 Assert.Contains("B", results);
                 Assert.Contains("C", results);
                 Assert.True(results.Count == 3);
+            });
+        }
+
+        [Fact]
+        public void TestPrecomputedStaticDependencies()
+        {
+            TestOnGraphTypes((TestGraph testGraph, DependencyAnalyzerBase<TestGraph> analyzer) =>
+            {
+                testGraph.AddStaticRule("A", "B", "A depends on B");
+                testGraph.AddConditionalRule("A", "C", "D", "A depends on D if C");
+                testGraph.AddStaticRule("B", "E", "B depends on E");
+                testGraph.AddConditionalRule("B", "F", "G", "B depends on G if F");
+                testGraph.SetPrecomputesStaticDependencies("A");
+                testGraph.SetPrecomputesStaticDependencies("B");
+                testGraph.AddRoot("A", "A is root");
+                testGraph.AddRoot("C", "C is root");
+                List<string> results = testGraph.AnalysisResults;
+
+                Assert.Equal(new[] { "A", "B", "C", "D", "E" }, results.OrderBy(r => r));
+
+                // The analyzer uses the precomputed dependencies instead of computing them again.
+                Assert.Equal(1, testGraph.GetNode("A").AddStaticDependenciesCount);
+                Assert.Equal(1, testGraph.GetNode("B").AddStaticDependenciesCount);
             });
         }
 

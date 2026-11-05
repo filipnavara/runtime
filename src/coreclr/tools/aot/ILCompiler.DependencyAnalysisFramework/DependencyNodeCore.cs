@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace ILCompiler.DependencyAnalysisFramework
 {
@@ -138,6 +139,53 @@ namespace ILCompiler.DependencyAnalysisFramework
 
         public virtual void AddConditionalDependencies(DependencySink sink, DependencyContextType context)
         {
+        }
+
+        // Static dependencies computed by PrecomputeStaticDependencies until they're committed to the graph,
+        // s_committedDependencies afterwards.
+        private DependencySink? _precomputedDependencies;
+        private static readonly DependencySink s_committedDependencies = new DependencySink();
+
+        /// <summary>
+        /// If true, the dependency analyzer doesn't compute the static (and conditional static) dependencies
+        /// of this node while marking. It passes the node to the routine that computes deferred dependencies
+        /// instead, which must call <see cref="PrecomputeStaticDependencies"/>. Since that may run in parallel
+        /// with other nodes, the dependency computation of the node must be thread safe and only depend on
+        /// state that doesn't change while it runs.
+        /// </summary>
+        public virtual bool PrecomputesStaticDependencies => false;
+
+        /// <summary>
+        /// Computes the static and conditional static dependencies of a node that
+        /// <see cref="PrecomputesStaticDependencies"/>, to be added to the graph later.
+        /// </summary>
+        public void PrecomputeStaticDependencies(DependencyContextType context)
+        {
+            Debug.Assert(PrecomputesStaticDependencies && StaticDependenciesAreComputed && _precomputedDependencies == null);
+
+            var sink = new DependencySink();
+            AddStaticDependencies(sink, context);
+            if (HasConditionalStaticDependencies)
+            {
+                AddConditionalDependencies(sink, context);
+            }
+            _precomputedDependencies = sink;
+        }
+
+        internal bool StaticDependenciesReady
+            => StaticDependenciesAreComputed && (_precomputedDependencies != null || !PrecomputesStaticDependencies);
+
+        /// <summary>
+        /// Returns the dependencies from <see cref="PrecomputeStaticDependencies"/>, or null if there are none.
+        /// </summary>
+        internal DependencySink? TakePrecomputedDependencies()
+        {
+            DependencySink? sink = _precomputedDependencies;
+            if (sink == null || sink == s_committedDependencies)
+                return null;
+
+            _precomputedDependencies = s_committedDependencies;
+            return sink;
         }
 
         public virtual void SearchDynamicDependencies(List<DependencyNodeCore<DependencyContextType>> markedNodes, int firstNode, DependencySink sink, DependencyContextType context)

@@ -134,13 +134,13 @@ namespace ILCompiler
             // Determine the list of method we actually need to compile
             var methodsToCompile = new List<MethodCodeNode>();
             var canonicalMethodsToCompile = new HashSet<MethodDesc>();
-            var dataflowNodes = new List<DataflowAnalyzedMethodNode>();
+            var otherNodes = new List<DependencyNodeCore<NodeFactory>>();
 
             foreach (DependencyNodeCore<NodeFactory> dependency in obj)
             {
-                if (dependency is DataflowAnalyzedMethodNode dataflowNode)
+                if (dependency is DataflowAnalyzedMethodNode || dependency.PrecomputesStaticDependencies)
                 {
-                    dataflowNodes.Add(dataflowNode);
+                    otherNodes.Add(dependency);
                     continue;
                 }
 
@@ -165,9 +165,15 @@ namespace ILCompiler
             }
 
             Parallel.ForEach(
-                dataflowNodes,
+                otherNodes,
                 new ParallelOptions { MaxDegreeOfParallelism = _parallelism },
-                dataflowNode => dataflowNode.ComputeDependencies(_nodeFactory));
+                node =>
+                {
+                    if (node is DataflowAnalyzedMethodNode dataflowNode)
+                        dataflowNode.ComputeDependencies(_nodeFactory);
+                    else
+                        node.PrecomputeStaticDependencies(_nodeFactory);
+                });
 
             if (_parallelism == 1)
             {

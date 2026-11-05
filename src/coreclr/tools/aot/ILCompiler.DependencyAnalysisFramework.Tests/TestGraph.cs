@@ -60,8 +60,15 @@ namespace ILCompiler.DependencyAnalysisFramework.Tests
 
             public override bool StaticDependenciesAreComputed => _dependencies != null;
 
+            public bool Precomputes { get; set; }
+
+            public override bool PrecomputesStaticDependencies => Precomputes;
+
+            public int AddStaticDependenciesCount { get; private set; }
+
             public override void AddStaticDependencies(DependencySink sink, TestGraph context)
             {
+                AddStaticDependenciesCount++;
                 foreach (DependencyListEntry dependency in _dependencies)
                 {
                     sink.Add(dependency);
@@ -184,7 +191,15 @@ namespace ILCompiler.DependencyAnalysisFramework.Tests
                 }
 
                 node.SetStaticDependencies(staticList, conditionalStaticList);
+
+                if (node.PrecomputesStaticDependencies)
+                    node.PrecomputeStaticDependencies(this);
             }
+        }
+
+        public void SetPrecomputesStaticDependencies(string nodeName)
+        {
+            GetNode(nodeName).Precomputes = true;
         }
 
         public List<string> AnalysisResults

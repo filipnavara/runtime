@@ -55,13 +55,13 @@ namespace ILCompiler
             // Determine the list of method we actually need to scan
             var methodsToCompile = new List<ScannedMethodNode>();
             var canonicalMethodsToCompile = new HashSet<MethodDesc>();
-            var dataflowNodes = new List<DataflowAnalyzedMethodNode>();
+            var otherNodes = new List<DependencyNodeCore<NodeFactory>>();
 
             foreach (DependencyNodeCore<NodeFactory> dependency in obj)
             {
-                if (dependency is DataflowAnalyzedMethodNode dataflowNode)
+                if (dependency is DataflowAnalyzedMethodNode || dependency.PrecomputesStaticDependencies)
                 {
-                    dataflowNodes.Add(dataflowNode);
+                    otherNodes.Add(dependency);
                     continue;
                 }
 
@@ -87,25 +87,33 @@ namespace ILCompiler
 
             if (_parallelism == 1)
             {
-                foreach (DataflowAnalyzedMethodNode dataflowNode in dataflowNodes)
-                    dataflowNode.ComputeDependencies(_nodeFactory);
+                foreach (DependencyNodeCore<NodeFactory> node in otherNodes)
+                    ComputeOtherNodeDependencies(node);
 
                 CompileSingleThreaded(methodsToCompile);
             }
             else
             {
-                CompileMultiThreaded(methodsToCompile, dataflowNodes);
+                CompileMultiThreaded(methodsToCompile, otherNodes);
             }
         }
 
-        private void CompileMultiThreaded(List<ScannedMethodNode> methodsToCompile, List<DataflowAnalyzedMethodNode> dataflowNodes)
+        private void ComputeOtherNodeDependencies(DependencyNodeCore<NodeFactory> node)
+        {
+            if (node is DataflowAnalyzedMethodNode dataflowNode)
+                dataflowNode.ComputeDependencies(_nodeFactory);
+            else
+                node.PrecomputeStaticDependencies(_nodeFactory);
+        }
+
+        private void CompileMultiThreaded(List<ScannedMethodNode> methodsToCompile, List<DependencyNodeCore<NodeFactory>> otherNodes)
         {
             if (Logger.IsVerbose)
             {
                 Logger.LogMessage($"Scanning {methodsToCompile.Count} methods...");
             }
 
-            if (dataflowNodes.Count == 0)
+            if (otherNodes.Count == 0)
             {
                 Parallel.ForEach(
                     methodsToCompile,
@@ -114,10 +122,10 @@ namespace ILCompiler
                 return;
             }
 
-            // Dataflow analysis is independent of scanning, so run both in the same parallel loop.
-            // Dataflow nodes go first since they tend to be more expensive.
-            var work = new List<DependencyNodeCore<NodeFactory>>(dataflowNodes.Count + methodsToCompile.Count);
-            work.AddRange(dataflowNodes);
+            // Dependencies of the other nodes (dataflow analysis, precomputed static dependencies) are
+            // independent of scanning, so compute them in the same parallel loop.
+            var work = new List<DependencyNodeCore<NodeFactory>>(otherNodes.Count + methodsToCompile.Count);
+            work.AddRange(otherNodes);
             work.AddRange(methodsToCompile);
 
             Parallel.ForEach(
@@ -128,7 +136,7 @@ namespace ILCompiler
                     if (node is ScannedMethodNode methodNode)
                         CompileSingleMethod(methodNode);
                     else
-                        ((DataflowAnalyzedMethodNode)node).ComputeDependencies(_nodeFactory);
+                        ComputeOtherNodeDependencies(node);
                 });
         }
 

@@ -178,6 +178,13 @@ namespace ILCompiler.DependencyAnalysisFramework
         // Internal details
         private void AddStaticDependencies(DependencyNodeCore<DependencyContextType> node)
         {
+            DependencyNodeCore<DependencyContextType>.DependencySink precomputed = node.TakePrecomputedDependencies();
+            if (precomputed != null)
+            {
+                CommitDependencies(precomputed, node);
+                return;
+            }
+
             DependencyNodeCore<DependencyContextType>.DependencySink sink = _dependencySink;
             node.AddStaticDependencies(sink, _dependencyContext);
 
@@ -224,7 +231,7 @@ namespace ILCompiler.DependencyAnalysisFramework
         /// <returns>False if the computation was deferred.</returns>
         private bool GetStaticDependencies(DependencyNodeCore<DependencyContextType> node)
         {
-            if (node.StaticDependenciesAreComputed)
+            if (node.StaticDependenciesReady)
             {
                 AddStaticDependencies(node);
                 return true;
@@ -320,7 +327,7 @@ namespace ILCompiler.DependencyAnalysisFramework
                         ComputeDependencies(deferredDependenciesInCurrentPhase);
                         foreach (DependencyNodeCore<DependencyContextType> node in deferredDependenciesInCurrentPhase)
                         {
-                            Debug.Assert(node.StaticDependenciesAreComputed);
+                            Debug.Assert(node.StaticDependenciesReady);
                             AddStaticDependencies(node);
 
                             // Whether the node has dynamic dependencies may only be known once

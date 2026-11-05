@@ -230,6 +230,10 @@ namespace ILCompiler.DependencyAnalysis
 
         public override bool StaticDependenciesAreComputed => true;
 
+        // Computing the dependencies of a type is expensive (it builds the MethodTable data to find the relocs)
+        // and only depends on state that doesn't change while the dependency analyzer computes deferred dependencies.
+        public override bool PrecomputesStaticDependencies => true;
+
         public virtual void AppendMangledName(NameMangler nameMangler, Utf8StringBuilder sb)
         {
             sb.Append(nameMangler.NodeMangler.MethodTable(_type));

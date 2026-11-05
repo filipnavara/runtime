@@ -134,9 +134,16 @@ namespace ILCompiler
             // Determine the list of method we actually need to compile
             var methodsToCompile = new List<MethodCodeNode>();
             var canonicalMethodsToCompile = new HashSet<MethodDesc>();
+            var dataflowNodes = new List<DataflowAnalyzedMethodNode>();
 
             foreach (DependencyNodeCore<NodeFactory> dependency in obj)
             {
+                if (dependency is DataflowAnalyzedMethodNode dataflowNode)
+                {
+                    dataflowNodes.Add(dataflowNode);
+                    continue;
+                }
+
                 var methodCodeNodeNeedingCode = dependency as MethodCodeNode;
                 if (methodCodeNodeNeedingCode == null)
                 {
@@ -156,6 +163,11 @@ namespace ILCompiler
 
                 methodsToCompile.Add(methodCodeNodeNeedingCode);
             }
+
+            Parallel.ForEach(
+                dataflowNodes,
+                new ParallelOptions { MaxDegreeOfParallelism = _parallelism },
+                dataflowNode => dataflowNode.ComputeDependencies(_nodeFactory));
 
             if (_parallelism == 1)
             {

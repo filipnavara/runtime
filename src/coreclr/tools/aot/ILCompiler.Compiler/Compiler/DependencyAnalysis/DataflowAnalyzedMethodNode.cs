@@ -19,6 +19,7 @@ namespace ILCompiler.DependencyAnalysis
     public class DataflowAnalyzedMethodNode : DependencyNodeCore<NodeFactory>
     {
         private readonly MethodIL _methodIL;
+        private DependencyList _dependencies;
         private List<(MethodDesc OwningMethod, INodeWithRuntimeDeterminedDependencies Dependency)> _runtimeDependencies;
 
         public DataflowAnalyzedMethodNode(MethodIL methodIL)
@@ -28,22 +29,34 @@ namespace ILCompiler.DependencyAnalysis
             _methodIL = methodIL;
         }
 
-        public override void AddStaticDependencies(DependencySink sink, NodeFactory factory)
+        /// <summary>
+        /// Runs the dataflow analysis. Called by the compilation for a batch of these nodes in parallel
+        /// since <see cref="StaticDependenciesAreComputed"/> is false until then.
+        /// </summary>
+        public void ComputeDependencies(NodeFactory factory)
         {
             var mdManager = (UsageBasedMetadataManager)factory.MetadataManager;
             try
             {
-                foreach (DependencyListEntry dependency in Dataflow.ReflectionMethodBodyScanner.ScanAndProcessReturnValue(factory, mdManager.FlowAnnotations, mdManager.Logger, _methodIL, out _runtimeDependencies))
-                {
-                    sink.Add(dependency);
-                }
+                _dependencies = Dataflow.ReflectionMethodBodyScanner.ScanAndProcessReturnValue(factory, mdManager.FlowAnnotations, mdManager.Logger, _methodIL, out _runtimeDependencies);
             }
             catch (TypeSystemException)
             {
                 // Something wrong with the input - missing references, etc.
                 // The method body likely won't compile either, so we don't care.
+                _dependencies = new DependencyList();
                 _runtimeDependencies = new List<(MethodDesc, INodeWithRuntimeDeterminedDependencies)>();
             }
+        }
+
+        public override void AddStaticDependencies(DependencySink sink, NodeFactory factory)
+        {
+            Debug.Assert(_dependencies != null);
+            foreach (DependencyListEntry dependency in _dependencies)
+            {
+                sink.Add(dependency);
+            }
+            _dependencies = null;
         }
 
         public override void SearchDynamicDependencies(List<DependencyNodeCore<NodeFactory>> markedNodes, int firstNode, DependencySink sink, NodeFactory factory)
@@ -83,7 +96,7 @@ namespace ILCompiler.DependencyAnalysis
         public override bool InterestingForDynamicDependencyAnalysis => false;
         public override bool HasDynamicDependencies => _runtimeDependencies.Count > 0;
         public override bool HasConditionalStaticDependencies => false;
-        public override bool StaticDependenciesAreComputed => true;
+        public override bool StaticDependenciesAreComputed => _runtimeDependencies != null;
         public override void AddConditionalDependencies(DependencySink sink, NodeFactory context) { }
     }
 }

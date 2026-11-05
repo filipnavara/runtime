@@ -218,11 +218,16 @@ namespace ILCompiler.DependencyAnalysisFramework
 
         private int _currentDependencyPhase;
 
-        private void GetStaticDependencies(DependencyNodeCore<DependencyContextType> node)
+        /// <summary>
+        /// Adds the static dependencies of the node, or defers their computation.
+        /// </summary>
+        /// <returns>False if the computation was deferred.</returns>
+        private bool GetStaticDependencies(DependencyNodeCore<DependencyContextType> node)
         {
             if (node.StaticDependenciesAreComputed)
             {
                 AddStaticDependencies(node);
+                return true;
             }
             else
             {
@@ -233,6 +238,7 @@ namespace ILCompiler.DependencyAnalysisFramework
                     _deferredStaticDependencies.Add(dependencyPhase, deferredPerPhaseDependencies);
                 }
                 deferredPerPhaseDependencies.Add(node);
+                return false;
             }
         }
 
@@ -256,10 +262,10 @@ namespace ILCompiler.DependencyAnalysisFramework
                         _newDynamicDependenciesMayHaveAppeared = true;
                     }
 
-                    // Add all static dependencies to the mark stack
-                    GetStaticDependencies(currentNode);
-
-                    RegisterDynamicDependencies(currentNode);
+                    // Add all static dependencies to the mark stack. Dynamic dependencies of nodes
+                    // with deferred static dependencies are registered once those are computed.
+                    if (GetStaticDependencies(currentNode))
+                        RegisterDynamicDependencies(currentNode);
 
                     // If this new node satisfies any stored conditional dependencies,
                     // add them to the mark stack
@@ -316,12 +322,16 @@ namespace ILCompiler.DependencyAnalysisFramework
                         {
                             Debug.Assert(node.StaticDependenciesAreComputed);
                             AddStaticDependencies(node);
+
+                            // Whether the node has dynamic dependencies may only be known once
+                            // its static dependencies are computed.
+                            RegisterDynamicDependencies(node);
                         }
 
                         deferredDependenciesInCurrentPhase.Clear();
                     }
 
-                    if (_markStack.Count == 0)
+                    if (_markStack.Count == 0 && !_newDynamicDependenciesMayHaveAppeared)
                     {
                         // Time to move to next deferred dependency phase.
 
@@ -337,7 +347,7 @@ namespace ILCompiler.DependencyAnalysisFramework
                         // 3. Notify that new dependency phase has been entered
                         ComputingDependencyPhaseChange?.Invoke(_currentDependencyPhase);
                     }
-                } while ((_markStack.Count != 0) || (_deferredStaticDependencies.Count != 0));
+                } while ((_markStack.Count != 0) || (_deferredStaticDependencies.Count != 0) || _newDynamicDependenciesMayHaveAppeared);
 
                 if (_resultSorter != null)
                     _markedNodes.MergeSortAllowDuplicates(_resultSorter);
